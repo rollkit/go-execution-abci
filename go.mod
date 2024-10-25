@@ -1,4 +1,4 @@
-module github.com/rollkit/template-da-repo
+module github.com/LastL2/go-execution-abci
 
 go 1.22.7
 

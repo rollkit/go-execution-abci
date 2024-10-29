@@ -1,14 +1,14 @@
-module github.com/LastL2/go-execution-abci
+module github.com/rollkit/go-execution-abci
 
 go 1.22.7
 
 toolchain go1.22.8
 
-replace github.com/LastL2/go-execution => github.com/LastL2/go-execution v0.0.0-20241025044830-6028e95ddb3a
+replace github.com/rollkit/go-execution => github.com/lastdotnet/go-execution v0.0.0-20241029045146-b7513b533b24
 
 require (
-	github.com/LastL2/go-execution v0.0.0-00010101000000-000000000000
 	github.com/cometbft/cometbft v0.38.13
+	github.com/rollkit/go-execution v0.0.0-00010101000000-000000000000
 	github.com/rollkit/rollkit v0.13.8-0.20241021170619-fc65faf646a7
 )
 

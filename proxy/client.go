@@ -13,7 +13,7 @@ import (
 	"github.com/cometbft/cometbft/proxy"
 	cmtypes "github.com/cometbft/cometbft/types"
 	execution "github.com/rollkit/go-execution"
-	proxyJsonrpc "github.com/rollkit/go-execution/proxy/jsonrpc"
+	proxy_grpc "github.com/rollkit/go-execution/proxy/grpc"
 	"github.com/rollkit/rollkit/mempool"
 	"github.com/rollkit/rollkit/state"
 	"github.com/rollkit/rollkit/store"
@@ -33,7 +33,7 @@ var _ execution.Execute = (*ProxyClient)(nil)
 
 // ProxyClient implements the Execute interface in go-execution
 type ProxyClient struct {
-	client *proxyJsonrpc.Client
+	client *proxy_grpc.Client
 	// abci specific
 	proxyApp        proxy.AppConnConsensus
 	eventBus        *cmtypes.EventBus
@@ -51,7 +51,7 @@ type ProxyClient struct {
 	store         store.Store
 }
 
-func NewClient(client *proxyJsonrpc.Client, proxyApp proxy.AppConnConsensus, eventBus *cmtypes.EventBus, genesis *cmtypes.GenesisDoc, maxBytes uint64, proposerAddress []byte, chainID string, mempool mempool.Mempool, mempoolReaper *mempool.CListMempoolReaper, logger log.Logger, metrics *state.Metrics, state *types.State, store store.Store) *ProxyClient {
+func NewClient(client *proxy_grpc.Client, proxyApp proxy.AppConnConsensus, eventBus *cmtypes.EventBus, genesis *cmtypes.GenesisDoc, maxBytes uint64, proposerAddress []byte, chainID string, mempool mempool.Mempool, mempoolReaper *mempool.CListMempoolReaper, logger log.Logger, metrics *state.Metrics, state *types.State, store store.Store) *ProxyClient {
 	return &ProxyClient{
 		client:          client,
 		proxyApp:        proxyApp,

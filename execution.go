@@ -12,7 +12,9 @@ import (
 	cmproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	"github.com/cometbft/cometbft/proxy"
 	cmtypes "github.com/cometbft/cometbft/types"
+	execution "github.com/rollkit/go-execution"
 	proxy_grpc "github.com/rollkit/go-execution/proxy/grpc"
+	execution_types "github.com/rollkit/go-execution/types"
 	"github.com/rollkit/rollkit/mempool"
 	"github.com/rollkit/rollkit/state"
 	"github.com/rollkit/rollkit/store"
@@ -46,6 +48,9 @@ type ABCIExecutionClient struct {
 	state         *types.State
 	store         store.Store
 }
+
+// Ensure ABCIExecutionClient implements the execution.Execute interface
+var _ execution.Executor = (*ABCIExecutionClient)(nil)
 
 // NewABCIExecutionClient creates a new ABCIExecutionClient
 func NewABCIExecutionClient(
@@ -145,7 +150,7 @@ func (c *ABCIExecutionClient) initChain(genesis *cmtypes.GenesisDoc) (*abci.Resp
 }
 
 // GetTxs retrieves all available transactions from the mempool.
-func (c *ABCIExecutionClient) GetTxs() ([]types.Tx, error) {
+func (c *ABCIExecutionClient) GetTxs() ([]execution_types.Tx, error) {
 	state, err := c.store.GetState(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current state: %w", err)
@@ -162,17 +167,17 @@ func (c *ABCIExecutionClient) GetTxs() ([]types.Tx, error) {
 
 	cmTxs := c.mempool.ReapMaxTxs(int(maxBytes))
 
-	rollkitTxs := make([]types.Tx, len(cmTxs))
+	txs := make([]execution_types.Tx, len(cmTxs))
 	for i, tx := range cmTxs {
-		rollkitTxs[i] = types.Tx(tx)
+		txs[i] = execution_types.Tx(tx)
 	}
 
-	return rollkitTxs, nil
+	return txs, nil
 }
 
 // ExecuteTxs executes the given transactions and returns the new state root and gas used.
 func (c *ABCIExecutionClient) ExecuteTxs(
-	txs []types.Tx,
+	txs []execution_types.Tx,
 	blockHeight uint64,
 	timestamp time.Time,
 	prevStateRoot types.Hash,
@@ -181,10 +186,10 @@ func (c *ABCIExecutionClient) ExecuteTxs(
 
 	state, err := c.store.GetState(ctx)
 	if err != nil {
-		return types.Hash{}, 0, fmt.Errorf("failed to get current state: %w", err)
+		return types.Hash{}, 0, wrapStateError(err, "get current state")
 	}
 
-	cmTxs := fromRollkitTxs(txs)
+	cmTxs := fromExecutionTxs(txs)
 
 	var lastSignature *types.Signature
 	var lastHeaderHash types.Hash
@@ -197,18 +202,18 @@ func (c *ABCIExecutionClient) ExecuteTxs(
 	} else {
 		lastSignature, err = c.store.GetSignature(ctx, blockHeight-1)
 		if err != nil {
-			return types.Hash{}, 0, fmt.Errorf("error while loading last commit: %w", err)
+			return types.Hash{}, 0, wrapBlockError(blockHeight-1, err, "load last commit")
 		}
 
 		lastHeader, _, err := c.store.GetBlockData(ctx, blockHeight-1)
 		if err != nil {
-			return types.Hash{}, 0, fmt.Errorf("error while loading last block: %w", err)
+			return types.Hash{}, 0, wrapBlockError(blockHeight-1, err, "load last block")
 		}
 		lastHeaderHash = lastHeader.Hash()
 
 		extCommit, err := c.store.GetExtendedCommit(ctx, blockHeight-1)
 		if err != nil {
-			return types.Hash{}, 0, fmt.Errorf("failed to load extended commit for height %d: %w", blockHeight-1, err)
+			return types.Hash{}, 0, wrapBlockError(blockHeight-1, err, "load extended commit")
 		}
 		if extCommit != nil {
 			lastExtendedCommit = *extCommit
@@ -225,25 +230,25 @@ func (c *ABCIExecutionClient) ExecuteTxs(
 		timestamp,
 	)
 	if err != nil {
-		return types.Hash{}, 0, fmt.Errorf("failed to create block: %w", err)
+		return types.Hash{}, 0, wrapBlockError(blockHeight, err, "create block")
 	}
 
 	isValid, err := c.ProcessProposal(header, data, state)
 	if err != nil {
-		return types.Hash{}, 0, fmt.Errorf("failed to process proposal: %w", err)
+		return types.Hash{}, 0, wrapBlockError(blockHeight, err, "process proposal")
 	}
 	if !isValid {
-		return types.Hash{}, 0, fmt.Errorf("proposal was not valid")
+		return types.Hash{}, 0, fmt.Errorf("proposal at height %d was not valid", blockHeight)
 	}
 
 	newState, resp, err := c.ApplyBlock(ctx, state, header, data)
 	if err != nil {
-		return types.Hash{}, 0, fmt.Errorf("failed to apply block: %w", err)
+		return types.Hash{}, 0, wrapBlockError(blockHeight, err, "apply block")
 	}
 
 	appHash, _, err := c.Commit(ctx, newState, header, data, resp)
 	if err != nil {
-		return types.Hash{}, 0, fmt.Errorf("failed to commit: %w", err)
+		return types.Hash{}, 0, wrapBlockError(blockHeight, err, "commit block")
 	}
 
 	return types.Hash(appHash), uint64(newState.ConsensusParams.Block.MaxBytes), nil
@@ -255,12 +260,12 @@ func (c *ABCIExecutionClient) SetFinal(blockHeight uint64) error {
 
 	header, data, err := c.store.GetBlockData(ctx, blockHeight)
 	if err != nil {
-		return fmt.Errorf("failed to get block data for height %d: %w", blockHeight, err)
+		return wrapBlockError(blockHeight, err, "get block data")
 	}
 
 	state, err := c.store.GetState(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get current state: %w", err)
+		return wrapStateError(err, "get current state")
 	}
 
 	resp, err := c.proxyApp.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{
@@ -272,12 +277,12 @@ func (c *ABCIExecutionClient) SetFinal(blockHeight uint64) error {
 		NextValidatorsHash: state.Validators.Hash(),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to finalize block at height %d: %w", blockHeight, err)
+		return wrapBlockError(blockHeight, err, "finalize block")
 	}
 
 	state.AppHash = resp.AppHash
 	if err := c.store.UpdateState(ctx, state); err != nil {
-		return fmt.Errorf("failed to update state after finalizing block %d: %w", blockHeight, err)
+		return wrapBlockError(blockHeight, err, "update state after finalizing block")
 	}
 
 	c.logger.Info("Block finalized", "height", blockHeight, "hash", header.Hash())
@@ -469,32 +474,28 @@ func (c *ABCIExecutionClient) Commit(ctx context.Context, state types.State, hea
 }
 
 // updateConsensusParams updates the consensus parameters based on the provided updates.
-func (c *ABCIExecutionClient) updateConsensusParams(height uint64, params cmtypes.ConsensusParams, consensusParamUpdates *cmproto.ConsensusParams) (cmproto.ConsensusParams, uint64, error) {
-	nextParams := params.Update(consensusParamUpdates)
+func (c *ABCIExecutionClient) updateConsensusParams(
+	height uint64,
+	currentParams cmtypes.ConsensusParams,
+	updates *cmproto.ConsensusParams,
+) (cmproto.ConsensusParams, uint64, error) {
+	if updates == nil {
+		return currentParams.ToProto(), currentParams.Version.App, nil
+	}
+
+	nextParams := currentParams.Update(updates)
 	if err := types.ConsensusParamsValidateBasic(nextParams); err != nil {
 		return cmproto.ConsensusParams{}, 0, fmt.Errorf("validating new consensus params: %w", err)
 	}
-	if err := nextParams.ValidateUpdate(consensusParamUpdates, int64(height)); err != nil {
+
+	if err := nextParams.ValidateUpdate(updates, int64(height)); err != nil {
 		return cmproto.ConsensusParams{}, 0, fmt.Errorf("updating consensus params: %w", err)
 	}
+
 	return nextParams.ToProto(), nextParams.Version.App, nil
 }
 
-// I'll continue with the remaining helper methods in the next message...
-
-func (c *ABCIExecutionClient) updateState(state types.State, header *types.SignedHeader, data *types.Data, finalizeBlockResponse *abci.ResponseFinalizeBlock, validatorUpdates []*cmtypes.Validator) (types.State, error) {
-	height := header.Height()
-	if finalizeBlockResponse.ConsensusParamUpdates != nil {
-		nextParamsProto, appVersion, err := c.updateConsensusParams(height, types.ConsensusParamsFromProto(state.ConsensusParams), finalizeBlockResponse.ConsensusParamUpdates)
-		if err != nil {
-			return types.State{}, err
-		}
-		// Change results from this height but only applies to the next height.
-		state.LastHeightConsensusParamsChanged = height + 1
-		state.Version.Consensus.App = appVersion
-		state.ConsensusParams = nextParamsProto
-	}
-
+func (c *ABCIExecutionClient) updateValidatorSet(state types.State, height uint64, validatorUpdates []*cmtypes.Validator) (*cmtypes.ValidatorSet, int64, error) {
 	nValSet := state.NextValidators.Copy()
 	lastHeightValSetChanged := state.LastHeightValidatorsChanged
 
@@ -502,42 +503,94 @@ func (c *ABCIExecutionClient) updateState(state types.State, header *types.Signe
 		err := nValSet.UpdateWithChangeSet(validatorUpdates)
 		if err != nil {
 			if err.Error() != ErrEmptyValSetGenerated.Error() {
-				return state, err
+				return nil, 0, fmt.Errorf("failed to update validator set: %w", err)
 			}
 			nValSet = &cmtypes.ValidatorSet{
 				Validators: make([]*cmtypes.Validator, 0),
 				Proposer:   nil,
 			}
 		}
-		// Change results from this height but only applies to the next next height.
-		lastHeightValSetChanged = int64(header.Header.Height() + 1 + 1)
+
+		lastHeightValSetChanged = int64(height + 1 + 1)
 
 		if len(nValSet.Validators) > 0 {
 			nValSet.IncrementProposerPriority(1)
 		}
 	}
 
-	s := types.State{
+	return nValSet, lastHeightValSetChanged, nil
+}
+
+func (c *ABCIExecutionClient) createNewState(
+	state types.State,
+	header *types.SignedHeader,
+	resp *abci.ResponseFinalizeBlock,
+	nValSet *cmtypes.ValidatorSet,
+	lastHeightValSetChanged int64,
+	nextParams cmproto.ConsensusParams,
+	nextParamsHeight uint64,
+) types.State {
+	newState := types.State{
 		Version:         state.Version,
 		ChainID:         state.ChainID,
 		InitialHeight:   state.InitialHeight,
-		LastBlockHeight: height,
+		LastBlockHeight: header.Height(),
 		LastBlockTime:   header.Time(),
 		LastBlockID: cmtypes.BlockID{
 			Hash: cmbytes.HexBytes(header.Hash()),
-			// for now, we don't care about part set headers
 		},
-		ConsensusParams:                  state.ConsensusParams,
-		LastHeightConsensusParamsChanged: state.LastHeightConsensusParamsChanged,
-		AppHash:                          finalizeBlockResponse.AppHash,
+		ConsensusParams:                  nextParams,
+		LastHeightConsensusParamsChanged: nextParamsHeight,
+		AppHash:                          resp.AppHash,
 		Validators:                       state.NextValidators.Copy(),
 		NextValidators:                   nValSet,
 		LastHeightValidatorsChanged:      lastHeightValSetChanged,
 		LastValidators:                   state.Validators.Copy(),
 	}
-	copy(s.LastResultsHash[:], cmtypes.NewResults(finalizeBlockResponse.TxResults).Hash())
 
-	return s, nil
+	copy(newState.LastResultsHash[:], cmtypes.NewResults(resp.TxResults).Hash())
+	return newState
+}
+
+// Update the main updateState function to use these helpers
+func (c *ABCIExecutionClient) updateState(
+	state types.State,
+	header *types.SignedHeader,
+	_ *types.Data,
+	finalizeBlockResponse *abci.ResponseFinalizeBlock,
+	validatorUpdates []*cmtypes.Validator,
+) (types.State, error) {
+	height := header.Height()
+	nextParams, appVersion, err := c.updateConsensusParams(
+		height,
+		types.ConsensusParamsFromProto(state.ConsensusParams),
+		finalizeBlockResponse.ConsensusParamUpdates,
+	)
+	if err != nil {
+		return types.State{}, fmt.Errorf("failed to update consensus params: %w", err)
+	}
+
+	nValSet, lastHeightValSetChanged, err := c.updateValidatorSet(state, height, validatorUpdates)
+	if err != nil {
+		return types.State{}, fmt.Errorf("failed to update validator set: %w", err)
+	}
+
+	nextParamsHeight := height + 1
+	if finalizeBlockResponse.ConsensusParamUpdates != nil {
+		state.Version.Consensus.App = appVersion
+	}
+
+	newState := c.createNewState(
+		state,
+		header,
+		finalizeBlockResponse,
+		nValSet,
+		lastHeightValSetChanged,
+		nextParams,
+		nextParamsHeight,
+	)
+
+	return newState, nil
 }
 
 func (c *ABCIExecutionClient) commit(ctx context.Context, state types.State, header *types.SignedHeader, data *types.Data, resp *abci.ResponseFinalizeBlock) ([]byte, uint64, error) {
@@ -556,9 +609,10 @@ func (c *ABCIExecutionClient) commit(ctx context.Context, state types.State, hea
 
 	maxBytes := state.ConsensusParams.Block.MaxBytes
 	maxGas := state.ConsensusParams.Block.MaxGas
-	cTxs := fromRollkitTxs(data.Txs)
-	c.mempoolReaper.UpdateCommitedTxs(cTxs)
-	err = c.mempool.Update(header.Height(), cTxs, resp.TxResults, mempool.PreCheckMaxBytes(maxBytes), mempool.PostCheckMaxGas(maxGas))
+	execTxs := fromRollkitTxs(data.Txs)
+	cmTxs := fromExecutionTxs(execTxs)
+	c.mempoolReaper.UpdateCommitedTxs(cmTxs)
+	err = c.mempool.Update(header.Height(), cmTxs, resp.TxResults, mempool.PreCheckMaxBytes(maxBytes), mempool.PostCheckMaxGas(maxGas))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -569,30 +623,27 @@ func (c *ABCIExecutionClient) commit(ctx context.Context, state types.State, hea
 // Validate validates the state and the block for the executor
 func (c *ABCIExecutionClient) Validate(state types.State, header *types.SignedHeader, data *types.Data) error {
 	if err := header.ValidateBasic(); err != nil {
-		return err
-	}
-	if err := data.ValidateBasic(); err != nil {
-		return err
-	}
-	if err := types.Validate(header, data); err != nil {
-		return err
-	}
-	if header.Version.App != state.Version.Consensus.App ||
-		header.Version.Block != state.Version.Consensus.Block {
-		return errors.New("block version mismatch")
-	}
-	if state.LastBlockHeight <= 0 && header.Height() != state.InitialHeight {
-		return errors.New("initial block height mismatch")
-	}
-	if state.LastBlockHeight > 0 && header.Height() != state.LastBlockHeight+1 {
-		return errors.New("block height mismatch")
-	}
-	if !bytes.Equal(header.AppHash[:], state.AppHash[:]) {
-		return errors.New("AppHash mismatch")
+		return fmt.Errorf("invalid header: %w", err)
 	}
 
-	if !bytes.Equal(header.LastResultsHash[:], state.LastResultsHash[:]) {
-		return errors.New("LastResultsHash mismatch")
+	if err := data.ValidateBasic(); err != nil {
+		return fmt.Errorf("invalid data: %w", err)
+	}
+
+	if err := types.Validate(header, data); err != nil {
+		return fmt.Errorf("invalid block: %w", err)
+	}
+
+	if err := c.validateVersions(state, header); err != nil {
+		return err
+	}
+
+	if err := c.validateHeight(state, header); err != nil {
+		return err
+	}
+
+	if err := c.validateHashes(state, header); err != nil {
+		return err
 	}
 
 	return nil
@@ -605,6 +656,7 @@ func (c *ABCIExecutionClient) execute(ctx context.Context, state types.State, he
 		return nil, ctx.Err()
 	default:
 	}
+
 	abciHeader, err := abciconv.ToABCIHeaderPB(&header.Header)
 	if err != nil {
 		return nil, err
@@ -644,7 +696,6 @@ func (c *ABCIExecutionClient) execute(ctx context.Context, state types.State, he
 		"block_app_hash", fmt.Sprintf("%X", finalizeBlockResponse.AppHash),
 	)
 
-	// Assert that the application correctly returned tx results for each of the transactions provided in the block
 	if len(abciBlock.Data.Txs) != len(finalizeBlockResponse.TxResults) {
 		return nil, fmt.Errorf("expected tx results length to match size of transactions in block. Expected %d, got %d", len(data.Txs), len(finalizeBlockResponse.TxResults))
 	}
@@ -654,79 +705,220 @@ func (c *ABCIExecutionClient) execute(ctx context.Context, state types.State, he
 	return finalizeBlockResponse, nil
 }
 
-func (c *ABCIExecutionClient) publishEvents(resp *abci.ResponseFinalizeBlock, header *types.SignedHeader, data *types.Data, state types.State) {
+func (c *ABCIExecutionClient) publishEvents(resp *abci.ResponseFinalizeBlock, header *types.SignedHeader, data *types.Data, _ types.State) {
 	if c.eventBus == nil {
 		return
 	}
 
+	if err := c.publishBlockEvent(header, data, resp); err != nil {
+		c.logger.Error("failed publishing block event", "err", err)
+	}
+
+	if err := c.publishBlockHeaderEvent(header, data); err != nil {
+		c.logger.Error("failed publishing block header event", "err", err)
+	}
+
+	if err := c.publishBlockEventsData(header, data, resp); err != nil {
+		c.logger.Error("failed publishing block events", "err", err)
+	}
+
 	abciBlock, err := abciconv.ToABCIBlock(header, data)
 	if err != nil {
+		c.logger.Error("failed to convert block for evidence check", "err", err)
 		return
 	}
 
-	if err := c.eventBus.PublishEventNewBlock(cmtypes.EventDataNewBlock{
-		Block: abciBlock,
-		BlockID: cmtypes.BlockID{
-			Hash: cmbytes.HexBytes(header.Hash()),
-			// for now, we don't care about part set headers
-		},
-		ResultFinalizeBlock: *resp,
-	}); err != nil {
-		c.logger.Error("failed publishing new block", "err", err)
-	}
-
-	if err := c.eventBus.PublishEventNewBlockHeader(cmtypes.EventDataNewBlockHeader{
-		Header: abciBlock.Header,
-	}); err != nil {
-		c.logger.Error("failed publishing new block header", "err", err)
-	}
-
-	if err := c.eventBus.PublishEventNewBlockEvents(cmtypes.EventDataNewBlockEvents{
-		Height: abciBlock.Height,
-		Events: resp.Events,
-		NumTxs: int64(len(abciBlock.Txs)),
-	}); err != nil {
-		c.logger.Error("failed publishing new block events", "err", err)
-	}
-
-	if len(abciBlock.Evidence.Evidence) != 0 {
-		for _, ev := range abciBlock.Evidence.Evidence {
-			if err := c.eventBus.PublishEventNewEvidence(cmtypes.EventDataNewEvidence{
-				Evidence: ev,
-				Height:   int64(header.Header.Height()),
-			}); err != nil {
-				c.logger.Error("failed publishing new evidence", "err", err)
-			}
+	if len(abciBlock.Evidence.Evidence) > 0 {
+		if err := c.publishEvidenceEvents(header, data); err != nil {
+			c.logger.Error("failed publishing evidence events", "err", err)
 		}
 	}
 
+	if err := c.publishTxEvents(header, data, resp); err != nil {
+		c.logger.Error("failed publishing tx events", "err", err)
+	}
+}
+
+func (c *ABCIExecutionClient) publishBlockEvent(header *types.SignedHeader, data *types.Data, resp *abci.ResponseFinalizeBlock) error {
+	if c.eventBus == nil {
+		return nil
+	}
+
+	abciBlock, err := abciconv.ToABCIBlock(header, data)
+	if err != nil {
+		return fmt.Errorf("failed to convert block: %w", err)
+	}
+
+	return c.eventBus.PublishEventNewBlock(cmtypes.EventDataNewBlock{
+		Block: abciBlock,
+		BlockID: cmtypes.BlockID{
+			Hash: cmbytes.HexBytes(header.Hash()),
+		},
+		ResultFinalizeBlock: *resp,
+	})
+}
+
+func (c *ABCIExecutionClient) publishBlockHeaderEvent(header *types.SignedHeader, data *types.Data) error {
+	if c.eventBus == nil {
+		return nil
+	}
+
+	abciBlock, err := abciconv.ToABCIBlock(header, data)
+	if err != nil {
+		return fmt.Errorf("failed to convert block header: %w", err)
+	}
+
+	return c.eventBus.PublishEventNewBlockHeader(cmtypes.EventDataNewBlockHeader{
+		Header: abciBlock.Header,
+	})
+}
+
+func (c *ABCIExecutionClient) publishBlockEventsData(header *types.SignedHeader, data *types.Data, resp *abci.ResponseFinalizeBlock) error {
+	if c.eventBus == nil {
+		return nil
+	}
+
+	abciBlock, err := abciconv.ToABCIBlock(header, data)
+	if err != nil {
+		return fmt.Errorf("failed to convert block events: %w", err)
+	}
+
+	return c.eventBus.PublishEventNewBlockEvents(cmtypes.EventDataNewBlockEvents{
+		Height: abciBlock.Height,
+		Events: resp.Events,
+		NumTxs: int64(len(abciBlock.Txs)),
+	})
+}
+
+func (c *ABCIExecutionClient) publishEvidenceEvents(header *types.SignedHeader, data *types.Data) error {
+	if c.eventBus == nil {
+		return nil
+	}
+
+	abciBlock, err := abciconv.ToABCIBlock(header, data)
+	if err != nil {
+		return fmt.Errorf("failed to convert block for evidence: %w", err)
+	}
+
+	for _, ev := range abciBlock.Evidence.Evidence {
+		if err := c.eventBus.PublishEventNewEvidence(cmtypes.EventDataNewEvidence{
+			Evidence: ev,
+			Height:   int64(header.Header.Height()),
+		}); err != nil {
+			return fmt.Errorf("failed to publish evidence: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (c *ABCIExecutionClient) publishTxEvents(header *types.SignedHeader, data *types.Data, resp *abci.ResponseFinalizeBlock) error {
+	if c.eventBus == nil {
+		return nil
+	}
+
+	abciBlock, err := abciconv.ToABCIBlock(header, data)
+	if err != nil {
+		return fmt.Errorf("failed to convert block for tx events: %w", err)
+	}
+
 	for i, tx := range abciBlock.Data.Txs {
-		err := c.eventBus.PublishEventTx(cmtypes.EventDataTx{
+		if err := c.eventBus.PublishEventTx(cmtypes.EventDataTx{
 			TxResult: abci.TxResult{
 				Height: abciBlock.Height,
 				Index:  uint32(i),
 				Tx:     tx,
 				Result: *(resp.TxResults[i]),
 			},
-		})
-		if err != nil {
-			c.logger.Error("failed publishing event TX", "err", err)
+		}); err != nil {
+			return fmt.Errorf("failed to publish tx event at index %d: %w", i, err)
 		}
 	}
+
+	return nil
 }
 
 func toRollkitTxs(txs cmtypes.Txs) types.Txs {
+	if len(txs) == 0 {
+		return nil
+	}
+
 	rollkitTxs := make(types.Txs, len(txs))
-	for i := range txs {
-		rollkitTxs[i] = []byte(txs[i])
+	for i, tx := range txs {
+		rollkitTxs[i] = types.Tx(tx)
 	}
 	return rollkitTxs
 }
 
-func fromRollkitTxs(rollkitTxs types.Txs) cmtypes.Txs {
-	txs := make(cmtypes.Txs, len(rollkitTxs))
-	for i := range rollkitTxs {
-		txs[i] = []byte(rollkitTxs[i])
+func fromRollkitTxs(txs types.Txs) []execution_types.Tx {
+	if len(txs) == 0 {
+		return nil
 	}
-	return txs
+
+	execTxs := make([]execution_types.Tx, len(txs))
+	for i, tx := range txs {
+		execTxs[i] = execution_types.Tx(tx)
+	}
+	return execTxs
+}
+
+func fromExecutionTxs(txs []execution_types.Tx) cmtypes.Txs {
+	if len(txs) == 0 {
+		return nil
+	}
+
+	cmTxs := make(cmtypes.Txs, len(txs))
+	for i, tx := range txs {
+		cmTxs[i] = cmtypes.Tx(tx)
+	}
+	return cmTxs
+}
+
+func wrapBlockError(height uint64, err error, msg string) error {
+	return fmt.Errorf("failed to %s at height %d: %w", msg, height, err)
+}
+
+func wrapStateError(err error, msg string) error {
+	return fmt.Errorf("failed to %s: %w", msg, err)
+}
+
+// Add these validation helper functions
+func (c *ABCIExecutionClient) validateVersions(state types.State, header *types.SignedHeader) error {
+	if header.Version.App != state.Version.Consensus.App ||
+		header.Version.Block != state.Version.Consensus.Block {
+		return fmt.Errorf("block version mismatch: got app=%d,block=%d want app=%d,block=%d",
+			header.Version.App, header.Version.Block,
+			state.Version.Consensus.App, state.Version.Consensus.Block)
+	}
+	return nil
+}
+
+func (c *ABCIExecutionClient) validateHeight(state types.State, header *types.SignedHeader) error {
+	if state.LastBlockHeight <= 0 {
+		if header.Height() != state.InitialHeight {
+			return fmt.Errorf("initial block height mismatch: got %d, want %d",
+				header.Height(), state.InitialHeight)
+		}
+		return nil
+	}
+
+	expectedHeight := state.LastBlockHeight + 1
+	if header.Height() != expectedHeight {
+		return fmt.Errorf("block height mismatch: got %d, want %d",
+			header.Height(), expectedHeight)
+	}
+	return nil
+}
+
+func (c *ABCIExecutionClient) validateHashes(state types.State, header *types.SignedHeader) error {
+	if !bytes.Equal(header.AppHash[:], state.AppHash[:]) {
+		return fmt.Errorf("AppHash mismatch: got %X, want %X",
+			header.AppHash, state.AppHash)
+	}
+
+	if !bytes.Equal(header.LastResultsHash[:], state.LastResultsHash[:]) {
+		return fmt.Errorf("LastResultsHash mismatch: got %X, want %X",
+			header.LastResultsHash, state.LastResultsHash)
+	}
+	return nil
 }

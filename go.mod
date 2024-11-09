@@ -4,7 +4,7 @@ go 1.22.7
 
 toolchain go1.22.8
 
-replace github.com/rollkit/go-execution => github.com/lastdotnet/go-execution v0.0.0-20241106160445-7810bc1e5d3c
+replace github.com/rollkit/go-execution => github.com/lastdotnet/go-execution v0.0.0-20241107213138-d1712b8c4d58
 
 require (
 	github.com/cometbft/cometbft v0.38.13
@@ -15,7 +15,7 @@ require (
 require (
 	github.com/DataDog/zstd v1.4.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/celestiaorg/go-header v0.6.2 // indirect
+	github.com/celestiaorg/go-header v0.6.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cockroachdb/errors v1.11.3 // indirect
 	github.com/cockroachdb/fifo v0.0.0-20240606204812-0bbfbd93a7ce // indirect

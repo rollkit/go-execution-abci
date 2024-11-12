@@ -4,7 +4,7 @@ go 1.22.7
 
 toolchain go1.22.8
 
-replace github.com/rollkit/go-execution => github.com/lastdotnet/go-execution v0.0.0-20241107213138-d1712b8c4d58
+replace github.com/rollkit/go-execution => github.com/lastdotnet/go-execution v0.0.0-20241108025553-291f75953069
 
 require (
 	github.com/cometbft/cometbft v0.38.13

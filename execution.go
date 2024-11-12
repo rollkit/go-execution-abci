@@ -87,6 +87,7 @@ func NewABCIExecutionClient(
 
 // InitChain initializes the blockchain with genesis information.
 func (c *ABCIExecutionClient) InitChain(
+	ctx context.Context,
 	genesisTime time.Time,
 	initialHeight uint64,
 	chainID string,
@@ -150,8 +151,8 @@ func (c *ABCIExecutionClient) initChain(genesis *cmtypes.GenesisDoc) (*abci.Resp
 }
 
 // GetTxs retrieves all available transactions from the mempool.
-func (c *ABCIExecutionClient) GetTxs() ([]execution_types.Tx, error) {
-	state, err := c.store.GetState(context.Background())
+func (c *ABCIExecutionClient) GetTxs(ctx context.Context) ([]execution_types.Tx, error) {
+	state, err := c.store.GetState(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current state: %w", err)
 	}
@@ -177,13 +178,12 @@ func (c *ABCIExecutionClient) GetTxs() ([]execution_types.Tx, error) {
 
 // ExecuteTxs executes the given transactions and returns the new state root and gas used.
 func (c *ABCIExecutionClient) ExecuteTxs(
+	ctx context.Context,
 	txs []execution_types.Tx,
 	blockHeight uint64,
 	timestamp time.Time,
 	prevStateRoot types.Hash,
 ) (types.Hash, uint64, error) {
-	ctx := context.Background()
-
 	state, err := c.store.GetState(ctx)
 	if err != nil {
 		return types.Hash{}, 0, wrapStateError(err, "get current state")
@@ -255,9 +255,7 @@ func (c *ABCIExecutionClient) ExecuteTxs(
 }
 
 // SetFinal marks a block at the given height as final.
-func (c *ABCIExecutionClient) SetFinal(blockHeight uint64) error {
-	ctx := context.Background()
-
+func (c *ABCIExecutionClient) SetFinal(ctx context.Context, blockHeight uint64) error {
 	header, data, err := c.store.GetBlockData(ctx, blockHeight)
 	if err != nil {
 		return wrapBlockError(blockHeight, err, "get block data")

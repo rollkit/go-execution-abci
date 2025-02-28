@@ -11,6 +11,7 @@ import (
 	cmtypes "github.com/cometbft/cometbft/types"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	"github.com/rollkit/go-execution"
+	"github.com/rollkit/go-execution-abci/mempool"
 	"github.com/rollkit/go-execution/types"
 	"github.com/rollkit/rollkit/store"
 )
@@ -21,8 +22,9 @@ var genesis *cmtypes.GenesisDoc
 
 // Adapter is a struct that will contain an ABCI Application, and will implement the go-execution interface
 type Adapter struct {
-	app   servertypes.ABCI
-	store store.Store
+	app     servertypes.ABCI
+	store   store.Store
+	mempool mempool.Mempool
 
 	state atomic.Pointer[State]
 }
@@ -143,9 +145,15 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs []types.Tx, blockHeight ui
 func (a *Adapter) GetTxs(ctx context.Context) ([]types.Tx, error) {
 	s := a.state.Load()
 
+	reapedTxs := a.mempool.ReapMaxBytesMaxGas(int64(s.ConsensusParams.Block.MaxBytes), -1)
+	txsBytes := make([][]byte, len(reapedTxs))
+	for i, tx := range reapedTxs {
+		txsBytes[i] = tx
+	}
+
 	resp, err := a.app.PrepareProposal(&abci.RequestPrepareProposal{
 		MaxTxBytes:         int64(s.ConsensusParams.Block.MaxBytes),
-		Txs:                [][]byte{}, // no txs are passed from Rollkit to the ABCI app
+		Txs:                txsBytes,
 		LocalLastCommit:    abci.ExtendedCommitInfo{},
 		Misbehavior:        []abci.Misbehavior{},
 		Height:             int64(a.store.Height() + 1),

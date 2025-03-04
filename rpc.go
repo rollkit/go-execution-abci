@@ -15,11 +15,9 @@ import (
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"github.com/cometbft/cometbft/state/indexer"
 	blockidxnull "github.com/cometbft/cometbft/state/indexer/block/null"
-	cmtypes "github.com/cometbft/cometbft/types"
 
 	"github.com/cometbft/cometbft/state/txindex"
 	"github.com/cometbft/cometbft/state/txindex/null"
-	"github.com/cometbft/cometbft/types"
 	cmttypes "github.com/cometbft/cometbft/types"
 	"github.com/rollkit/go-execution-abci/mempool"
 
@@ -222,7 +220,7 @@ func (r *RPCServer) BlockSearch(ctx context.Context, query string, pagePtr *int,
 		}
 		apiResults = append(apiResults, &coretypes.ResultBlock{
 			Block: block,
-			BlockID: cmtypes.BlockID{
+			BlockID: cmttypes.BlockID{
 				Hash: block.Hash(),
 			},
 		})
@@ -462,7 +460,7 @@ func (r *RPCServer) TxSearch(ctx context.Context, query string, prove bool, page
 	for i := skipCount; i < skipCount+pageSize; i++ {
 		r := results[i]
 
-		var proof types.TxProof
+		var proof cmttypes.TxProof
 		if prove {
 			// TODO: implement proofs?
 			// block := env.BlockStore.LoadBlock(r.Height)
@@ -472,7 +470,7 @@ func (r *RPCServer) TxSearch(ctx context.Context, query string, prove bool, page
 		}
 
 		apiResults = append(apiResults, &coretypes.ResultTx{
-			Hash:     types.Tx(r.Tx).Hash(),
+			Hash:     cmttypes.Tx(r.Tx).Hash(),
 			Height:   r.Height,
 			Index:    r.Index,
 			TxResult: r.Result,

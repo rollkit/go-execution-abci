@@ -10,10 +10,14 @@ import (
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtypes "github.com/cometbft/cometbft/types"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/rollkit/go-execution"
 	"github.com/rollkit/go-execution-abci/mempool"
+	"github.com/rollkit/go-execution-abci/p2p"
 	"github.com/rollkit/go-execution/types"
 	"github.com/rollkit/rollkit/store"
+	"github.com/rollkit/rollkit/third_party/log"
 )
 
 var _ execution.Executor = &Adapter{}
@@ -22,17 +26,42 @@ var genesis *cmtypes.GenesisDoc
 
 // Adapter is a struct that will contain an ABCI Application, and will implement the go-execution interface
 type Adapter struct {
-	app     servertypes.ABCI
-	store   store.Store
-	mempool mempool.Mempool
+	app        servertypes.ABCI
+	store      store.Store
+	mempool    mempool.Mempool
+	txGossiper *p2p.Gossiper
+	logger     log.Logger
 
-	state atomic.Pointer[State]
+	state atomic.Pointer[State] // TODO: this should store data on disk
 }
 
 // NewABCIExecutor creates a new Adapter instance that implements the go-execution.Executor interface.
 // The Adapter wraps the provided ABCI application and delegates execution-related operations to it.
-func NewABCIExecutor(app servertypes.ABCI, store store.Store) execution.Executor {
-	return &Adapter{app: app, store: store}
+func NewABCIExecutor(
+	app servertypes.ABCI,
+	store store.Store,
+	ps *pubsub.PubSub,
+	host host.Host,
+	logger log.Logger,
+) execution.Executor {
+	a := &Adapter{app: app, store: store, logger: logger}
+	err := a.setupGossiping(context.Background(), ps, host)
+	if err != nil {
+		panic(err)
+	}
+
+	return a
+}
+
+func (a *Adapter) setupGossiping(ctx context.Context, ps *pubsub.PubSub, host host.Host) error {
+	var err error
+	a.txGossiper, err = p2p.NewGossiper(host, ps, "TODO:-chainid+tx", a.logger)
+	if err != nil {
+		return err
+	}
+	go a.txGossiper.ProcessMessages(ctx)
+
+	return nil
 }
 
 // InitChain implements execution.Executor.

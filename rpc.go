@@ -13,6 +13,10 @@ import (
 	"github.com/cometbft/cometbft/p2p"
 	rpcclient "github.com/cometbft/cometbft/rpc/client"
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
+	"github.com/cometbft/cometbft/state/indexer"
+	blockidxnull "github.com/cometbft/cometbft/state/indexer/block/null"
+	cmtypes "github.com/cometbft/cometbft/types"
+
 	"github.com/cometbft/cometbft/state/txindex"
 	"github.com/cometbft/cometbft/state/txindex/null"
 	"github.com/cometbft/cometbft/types"
@@ -32,8 +36,9 @@ const (
 )
 
 type RPCServer struct {
-	adapter   *Adapter
-	txIndexer txindex.TxIndexer
+	adapter      *Adapter
+	txIndexer    txindex.TxIndexer
+	blockIndexer indexer.BlockIndexer
 }
 
 var _ client.CometRPC = &RPCServer{}
@@ -81,27 +86,185 @@ func (r *RPCServer) ABCIQueryWithOptions(ctx context.Context, path string, data 
 
 // Block implements client.CometRPC.
 func (r *RPCServer) Block(ctx context.Context, height *int64) (*coretypes.ResultBlock, error) {
-	panic("unimplemented")
+	var heightValue uint64
+
+	switch {
+	// block tag = included
+	case height != nil && *height == -1:
+		// heightValue = r.adapter.store.GetDAIncludedHeight()
+		// TODO: implement
+		return nil, errors.New("DA included height not implemented")
+	default:
+		heightValue = r.normalizeHeight(height)
+	}
+	header, data, err := r.adapter.store.GetBlockData(ctx, heightValue)
+	if err != nil {
+		return nil, err
+	}
+
+	hash := header.Hash()
+	abciBlock, err := ToABCIBlock(header, data)
+	if err != nil {
+		return nil, err
+	}
+	return &coretypes.ResultBlock{
+		BlockID: cmttypes.BlockID{
+			Hash: cmtbytes.HexBytes(hash),
+			PartSetHeader: cmttypes.PartSetHeader{
+				Total: 0,
+				Hash:  nil,
+			},
+		},
+		Block: abciBlock,
+	}, nil
 }
 
 // BlockByHash implements client.CometRPC.
 func (r *RPCServer) BlockByHash(ctx context.Context, hash []byte) (*coretypes.ResultBlock, error) {
-	panic("unimplemented")
+	header, data, err := r.adapter.store.GetBlockByHash(ctx, hash)
+	if err != nil {
+		return nil, err
+	}
+
+	abciBlock, err := ToABCIBlock(header, data)
+	if err != nil {
+		return nil, err
+	}
+	return &coretypes.ResultBlock{
+		BlockID: cmttypes.BlockID{
+			Hash: cmtbytes.HexBytes(hash),
+			PartSetHeader: cmttypes.PartSetHeader{
+				Total: 0,
+				Hash:  nil,
+			},
+		},
+		Block: abciBlock,
+	}, nil
 }
 
 // BlockResults implements client.CometRPC.
 func (r *RPCServer) BlockResults(ctx context.Context, height *int64) (*coretypes.ResultBlockResults, error) {
-	panic("unimplemented")
+	var h uint64
+	if height == nil {
+		h = r.adapter.store.Height()
+	} else {
+		h = uint64(*height)
+	}
+	header, _, err := r.adapter.store.GetBlockData(ctx, h)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := r.adapter.store.GetBlockResponses(ctx, h)
+	if err != nil {
+		return nil, err
+	}
+
+	return &coretypes.ResultBlockResults{
+		Height:                int64(h), //nolint:gosec
+		TxsResults:            resp.TxResults,
+		FinalizeBlockEvents:   resp.Events,
+		ValidatorUpdates:      resp.ValidatorUpdates,
+		ConsensusParamUpdates: resp.ConsensusParamUpdates,
+		AppHash:               header.Header.AppHash,
+	}, nil
 }
 
 // BlockSearch implements client.CometRPC.
-func (r *RPCServer) BlockSearch(ctx context.Context, query string, page *int, perPage *int, orderBy string) (*coretypes.ResultBlockSearch, error) {
-	panic("unimplemented")
+func (r *RPCServer) BlockSearch(ctx context.Context, query string, pagePtr *int, perPagePtr *int, orderBy string) (*coretypes.ResultBlockSearch, error) {
+	// skip if block indexing is disabled
+	if _, ok := r.blockIndexer.(*blockidxnull.BlockerIndexer); ok {
+		return nil, errors.New("block indexing is disabled")
+	}
+
+	q, err := cmtquery.New(query)
+	if err != nil {
+		return nil, err
+	}
+
+	results, err := r.blockIndexer.Search(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+
+	// sort results (must be done before pagination)
+	switch orderBy {
+	case "desc", "":
+		sort.Slice(results, func(i, j int) bool { return results[i] > results[j] })
+
+	case "asc":
+		sort.Slice(results, func(i, j int) bool { return results[i] < results[j] })
+
+	default:
+		return nil, errors.New("expected order_by to be either `asc` or `desc` or empty")
+	}
+
+	// paginate results
+	totalCount := len(results)
+	perPage := validatePerPage(perPagePtr)
+
+	page, err := validatePage(pagePtr, perPage, totalCount)
+	if err != nil {
+		return nil, err
+	}
+
+	skipCount := validateSkipCount(page, perPage)
+	pageSize := cmtmath.MinInt(perPage, totalCount-skipCount)
+
+	apiResults := make([]*coretypes.ResultBlock, 0, pageSize)
+	for i := skipCount; i < skipCount+pageSize; i++ {
+		header, data, err := r.adapter.store.GetBlockData(ctx, uint64(results[i]))
+		if err != nil {
+			return nil, err
+		}
+		block, err := ToABCIBlock(header, data)
+		if err != nil {
+			return nil, err
+		}
+		apiResults = append(apiResults, &coretypes.ResultBlock{
+			Block: block,
+			BlockID: cmtypes.BlockID{
+				Hash: block.Hash(),
+			},
+		})
+	}
+
+	return &coretypes.ResultBlockSearch{Blocks: apiResults, TotalCount: totalCount}, nil
 }
 
 // BlockchainInfo implements client.CometRPC.
 func (r *RPCServer) BlockchainInfo(ctx context.Context, minHeight int64, maxHeight int64) (*coretypes.ResultBlockchainInfo, error) {
-	panic("unimplemented")
+	const limit int64 = 20
+
+	// Currently blocks are not pruned and are synced linearly so the base height is 0
+	minHeight, maxHeight, err := filterMinMax(
+		0,
+		int64(r.adapter.store.Height()), //nolint:gosec
+		minHeight,
+		maxHeight,
+		limit)
+	if err != nil {
+		return nil, err
+	}
+
+	blocks := make([]*cmttypes.BlockMeta, 0, maxHeight-minHeight+1)
+	for height := maxHeight; height >= minHeight; height-- {
+		header, data, err := r.adapter.store.GetBlockData(ctx, uint64(height))
+		if err != nil {
+			return nil, err
+		}
+		if header != nil && data != nil {
+			cmblockmeta, err := ToABCIBlockMeta(header, data)
+			if err != nil {
+				return nil, err
+			}
+			blocks = append(blocks, cmblockmeta)
+		}
+	}
+
+	return &coretypes.ResultBlockchainInfo{
+		LastHeight: int64(r.adapter.store.Height()), //nolint:gosec
+		BlockMetas: blocks,
+	}, nil
 }
 
 // BroadcastTxAsync implements client.CometRPC.
@@ -123,19 +286,66 @@ func (r *RPCServer) BroadcastTxCommit(ctx context.Context, tx cmttypes.Tx) (*cor
 
 // BroadcastTxSync implements client.CometRPC.
 func (r *RPCServer) BroadcastTxSync(ctx context.Context, tx cmttypes.Tx) (*coretypes.ResultBroadcastTx, error) {
-	err := r.adapter.mempool.CheckTx(tx, nil, mempool.TxInfo{})
+	resCh := make(chan *abci.ResponseCheckTx, 1)
+	err := r.adapter.mempool.CheckTx(tx, func(res *abci.ResponseCheckTx) {
+		select {
+		case <-ctx.Done():
+			return
+		case resCh <- res:
+		}
+	}, mempool.TxInfo{})
 	if err != nil {
 		return nil, err
 	}
+	res := <-resCh
+
+	// gossip the transaction if it's in the mempool.
+	// Note: we have to do this here because, unlike the tendermint mempool reactor, there
+	// is no routine that gossips transactions after they enter the pool
+	if res.Code == abci.CodeTypeOK {
+		// TODO: implement gossiping
+		// err = r.adapter.p2pClient.GossipTx(ctx, tx)
+		if err != nil {
+			// the transaction must be removed from the mempool if it cannot be gossiped.
+			// if this does not occur, then the user will not be able to try again using
+			// this node, as the CheckTx call above will return an error indicating that
+			// the tx is already in the mempool
+			_ = r.adapter.mempool.RemoveTxByKey(tx.Key())
+			return nil, fmt.Errorf("failed to gossip tx: %w", err)
+		}
+	}
+
 	return &coretypes.ResultBroadcastTx{
-		Code: abci.CodeTypeOK,
-		Hash: tx.Hash(),
+		Code:      res.Code,
+		Data:      res.Data,
+		Log:       res.Log,
+		Codespace: res.Codespace,
+		Hash:      tx.Hash(),
 	}, nil
 }
 
 // Commit implements client.CometRPC.
 func (r *RPCServer) Commit(ctx context.Context, height *int64) (*coretypes.ResultCommit, error) {
-	panic("unimplemented")
+	heightValue := r.normalizeHeight(height)
+	header, data, err := r.adapter.store.GetBlockData(ctx, heightValue)
+	if err != nil {
+		return nil, err
+	}
+
+	// we should have a single validator
+	if len(header.Validators.Validators) == 0 {
+		return nil, errors.New("empty validator set found in block")
+	}
+
+	val := header.Validators.Validators[0].Address
+	commit := GetABCICommit(heightValue, header.Hash(), val, header.Time(), header.Signature)
+
+	block, err := ToABCIBlock(header, data)
+	if err != nil {
+		return nil, err
+	}
+
+	return coretypes.NewResultCommit(&block.Header, commit, true), nil
 }
 
 // Status implements client.CometRPC.
@@ -164,31 +374,37 @@ func (r *RPCServer) Status(ctx context.Context) (*coretypes.ResultStatus, error)
 
 // Tx implements client.CometRPC.
 func (r *RPCServer) Tx(ctx context.Context, hash []byte, prove bool) (*coretypes.ResultTx, error) {
-	// TODO: implement once the indexer is implemented
-	panic("unimplemented")
-	// // Query the app for the transaction
-	// res, err := r.adapter.app.Query(&abci.RequestQuery{
-	// 	Path: "/tx",
-	// 	Data: hash,
-	// })
-	// if err != nil {
-	// 	return nil, err
-	// }
+	res, err := r.txIndexer.Get(hash)
+	if err != nil {
+		return nil, err
+	}
 
-	// if res.Code != abci.CodeTypeOK {
-	// 	return nil, fmt.Errorf("failed to get tx: %s", res.Log)
-	// }
+	if res == nil {
+		return nil, fmt.Errorf("tx (%X) not found", hash)
+	}
 
-	// // Return empty result if no tx found
-	// if len(res.Value) == 0 {
-	// 	return nil, fmt.Errorf("tx not found")
-	// }
+	height := res.Height
+	index := res.Index
 
-	// return &coretypes.ResultTx{
-	// 	Hash:     hash,
-	// 	Height:   res.Height,
-	// 	Response: *&abci.ExecTxResult{Data: res.Value},
-	// }, nil
+	var proof cmttypes.TxProof
+	if prove {
+		_, data, _ := r.adapter.store.GetBlockData(ctx, uint64(height))
+		blockProof := data.Txs.Proof(int(index)) // XXX: overflow on 32-bit machines
+		proof = cmttypes.TxProof{
+			RootHash: blockProof.RootHash,
+			Data:     cmttypes.Tx(blockProof.Data),
+			Proof:    blockProof.Proof,
+		}
+	}
+
+	return &coretypes.ResultTx{
+		Hash:     hash,
+		Height:   height,
+		Index:    index,
+		TxResult: res.Result,
+		Tx:       res.Tx,
+		Proof:    proof,
+	}, nil
 }
 
 // TxSearch implements client.CometRPC.
@@ -248,7 +464,7 @@ func (r *RPCServer) TxSearch(ctx context.Context, query string, prove bool, page
 
 		var proof types.TxProof
 		if prove {
-			// TODO: implement proofs
+			// TODO: implement proofs?
 			// block := env.BlockStore.LoadBlock(r.Height)
 			// if block != nil {
 			// 	proof = block.Data.Txs.Proof(int(r.Index))
@@ -285,7 +501,7 @@ func (r *RPCServer) Validators(ctx context.Context, height *int64, page *int, pe
 		if start >= totalCount {
 			return &coretypes.ResultValidators{
 				BlockHeight: int64(r.adapter.store.Height()),
-				Validators:  []*types.Validator{},
+				Validators:  []*cmttypes.Validator{},
 				Total:       totalCount,
 			}, nil
 		}
@@ -343,4 +559,15 @@ func validatePage(pagePtr *int, perPage, totalCount int) (int, error) {
 	}
 
 	return page, nil
+}
+
+func (r *RPCServer) normalizeHeight(height *int64) uint64 {
+	var heightValue uint64
+	if height == nil {
+		heightValue = r.adapter.store.Height()
+	} else {
+		heightValue = uint64(*height)
+	}
+
+	return heightValue
 }

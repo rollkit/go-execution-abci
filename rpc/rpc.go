@@ -1,4 +1,4 @@
-package goexecutionabci
+package rpc
 
 import (
 	"context"
@@ -19,6 +19,7 @@ import (
 	"github.com/cometbft/cometbft/state/txindex"
 	"github.com/cometbft/cometbft/state/txindex/null"
 	cmttypes "github.com/cometbft/cometbft/types"
+	"github.com/rollkit/go-execution-abci/adapter"
 	"github.com/rollkit/go-execution-abci/mempool"
 
 	"github.com/cosmos/cosmos-sdk/client"
@@ -34,16 +35,20 @@ const (
 )
 
 type RPCServer struct {
-	adapter      *Adapter
+	adapter      *adapter.Adapter
 	txIndexer    txindex.TxIndexer
 	blockIndexer indexer.BlockIndexer
 }
 
 var _ client.CometRPC = &RPCServer{}
 
+func NewRPCServer(adapter *adapter.Adapter, txIndexer txindex.TxIndexer, blockIndexer indexer.BlockIndexer) *RPCServer {
+	return &RPCServer{adapter: adapter, txIndexer: txIndexer, blockIndexer: blockIndexer}
+}
+
 // ABCIInfo implements client.CometRPC.
 func (r *RPCServer) ABCIInfo(context.Context) (*coretypes.ResultABCIInfo, error) {
-	info, err := r.adapter.app.Info(&abci.RequestInfo{})
+	info, err := r.adapter.App.Info(&abci.RequestInfo{})
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +59,7 @@ func (r *RPCServer) ABCIInfo(context.Context) (*coretypes.ResultABCIInfo, error)
 
 // ABCIQuery implements client.CometRPC.
 func (r *RPCServer) ABCIQuery(ctx context.Context, path string, data cmtbytes.HexBytes) (*coretypes.ResultABCIQuery, error) {
-	resp, err := r.adapter.app.Query(ctx, &abci.RequestQuery{
+	resp, err := r.adapter.App.Query(ctx, &abci.RequestQuery{
 		Data: data,
 		Path: path,
 	})
@@ -68,7 +73,7 @@ func (r *RPCServer) ABCIQuery(ctx context.Context, path string, data cmtbytes.He
 
 // ABCIQueryWithOptions implements client.CometRPC.
 func (r *RPCServer) ABCIQueryWithOptions(ctx context.Context, path string, data cmtbytes.HexBytes, opts rpcclient.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
-	resp, err := r.adapter.app.Query(ctx, &abci.RequestQuery{
+	resp, err := r.adapter.App.Query(ctx, &abci.RequestQuery{
 		Data:   data,
 		Path:   path,
 		Height: opts.Height,
@@ -95,7 +100,7 @@ func (r *RPCServer) Block(ctx context.Context, height *int64) (*coretypes.Result
 	default:
 		heightValue = r.normalizeHeight(height)
 	}
-	header, data, err := r.adapter.store.GetBlockData(ctx, heightValue)
+	header, data, err := r.adapter.Store.GetBlockData(ctx, heightValue)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +124,7 @@ func (r *RPCServer) Block(ctx context.Context, height *int64) (*coretypes.Result
 
 // BlockByHash implements client.CometRPC.
 func (r *RPCServer) BlockByHash(ctx context.Context, hash []byte) (*coretypes.ResultBlock, error) {
-	header, data, err := r.adapter.store.GetBlockByHash(ctx, hash)
+	header, data, err := r.adapter.Store.GetBlockByHash(ctx, hash)
 	if err != nil {
 		return nil, err
 	}
@@ -144,15 +149,15 @@ func (r *RPCServer) BlockByHash(ctx context.Context, hash []byte) (*coretypes.Re
 func (r *RPCServer) BlockResults(ctx context.Context, height *int64) (*coretypes.ResultBlockResults, error) {
 	var h uint64
 	if height == nil {
-		h = r.adapter.store.Height()
+		h = r.adapter.Store.Height()
 	} else {
 		h = uint64(*height)
 	}
-	header, _, err := r.adapter.store.GetBlockData(ctx, h)
+	header, _, err := r.adapter.Store.GetBlockData(ctx, h)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := r.adapter.store.GetBlockResponses(ctx, h)
+	resp, err := r.adapter.Store.GetBlockResponses(ctx, h)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +215,7 @@ func (r *RPCServer) BlockSearch(ctx context.Context, query string, pagePtr *int,
 
 	apiResults := make([]*coretypes.ResultBlock, 0, pageSize)
 	for i := skipCount; i < skipCount+pageSize; i++ {
-		header, data, err := r.adapter.store.GetBlockData(ctx, uint64(results[i]))
+		header, data, err := r.adapter.Store.GetBlockData(ctx, uint64(results[i]))
 		if err != nil {
 			return nil, err
 		}
@@ -236,7 +241,7 @@ func (r *RPCServer) BlockchainInfo(ctx context.Context, minHeight int64, maxHeig
 	// Currently blocks are not pruned and are synced linearly so the base height is 0
 	minHeight, maxHeight, err := filterMinMax(
 		0,
-		int64(r.adapter.store.Height()), //nolint:gosec
+		int64(r.adapter.Store.Height()), //nolint:gosec
 		minHeight,
 		maxHeight,
 		limit)
@@ -246,7 +251,7 @@ func (r *RPCServer) BlockchainInfo(ctx context.Context, minHeight int64, maxHeig
 
 	blocks := make([]*cmttypes.BlockMeta, 0, maxHeight-minHeight+1)
 	for height := maxHeight; height >= minHeight; height-- {
-		header, data, err := r.adapter.store.GetBlockData(ctx, uint64(height))
+		header, data, err := r.adapter.Store.GetBlockData(ctx, uint64(height))
 		if err != nil {
 			return nil, err
 		}
@@ -260,14 +265,14 @@ func (r *RPCServer) BlockchainInfo(ctx context.Context, minHeight int64, maxHeig
 	}
 
 	return &coretypes.ResultBlockchainInfo{
-		LastHeight: int64(r.adapter.store.Height()), //nolint:gosec
+		LastHeight: int64(r.adapter.Store.Height()), //nolint:gosec
 		BlockMetas: blocks,
 	}, nil
 }
 
 // BroadcastTxAsync implements client.CometRPC.
 func (r *RPCServer) BroadcastTxAsync(ctx context.Context, tx cmttypes.Tx) (*coretypes.ResultBroadcastTx, error) {
-	err := r.adapter.mempool.CheckTx(tx, nil, mempool.TxInfo{})
+	err := r.adapter.Mempool.CheckTx(tx, nil, mempool.TxInfo{})
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +290,7 @@ func (r *RPCServer) BroadcastTxCommit(ctx context.Context, tx cmttypes.Tx) (*cor
 // BroadcastTxSync implements client.CometRPC.
 func (r *RPCServer) BroadcastTxSync(ctx context.Context, tx cmttypes.Tx) (*coretypes.ResultBroadcastTx, error) {
 	resCh := make(chan *abci.ResponseCheckTx, 1)
-	err := r.adapter.mempool.CheckTx(tx, func(res *abci.ResponseCheckTx) {
+	err := r.adapter.Mempool.CheckTx(tx, func(res *abci.ResponseCheckTx) {
 		select {
 		case <-ctx.Done():
 			return
@@ -308,7 +313,7 @@ func (r *RPCServer) BroadcastTxSync(ctx context.Context, tx cmttypes.Tx) (*coret
 			// if this does not occur, then the user will not be able to try again using
 			// this node, as the CheckTx call above will return an error indicating that
 			// the tx is already in the mempool
-			_ = r.adapter.mempool.RemoveTxByKey(tx.Key())
+			_ = r.adapter.Mempool.RemoveTxByKey(tx.Key())
 			return nil, fmt.Errorf("failed to gossip tx: %w", err)
 		}
 	}
@@ -325,7 +330,7 @@ func (r *RPCServer) BroadcastTxSync(ctx context.Context, tx cmttypes.Tx) (*coret
 // Commit implements client.CometRPC.
 func (r *RPCServer) Commit(ctx context.Context, height *int64) (*coretypes.ResultCommit, error) {
 	heightValue := r.normalizeHeight(height)
-	header, data, err := r.adapter.store.GetBlockData(ctx, heightValue)
+	header, data, err := r.adapter.Store.GetBlockData(ctx, heightValue)
 	if err != nil {
 		return nil, err
 	}
@@ -348,12 +353,12 @@ func (r *RPCServer) Commit(ctx context.Context, height *int64) (*coretypes.Resul
 
 // Status implements client.CometRPC.
 func (r *RPCServer) Status(ctx context.Context) (*coretypes.ResultStatus, error) {
-	info, err := r.adapter.app.Info(&abci.RequestInfo{})
+	info, err := r.adapter.App.Info(&abci.RequestInfo{})
 	if err != nil {
 		return nil, err
 	}
 
-	s := r.adapter.state.Load()
+	s := r.adapter.State.Load()
 
 	return &coretypes.ResultStatus{
 		NodeInfo: p2p.DefaultNodeInfo{}, // TODO: fill this in
@@ -386,7 +391,7 @@ func (r *RPCServer) Tx(ctx context.Context, hash []byte, prove bool) (*coretypes
 
 	var proof cmttypes.TxProof
 	if prove {
-		_, data, _ := r.adapter.store.GetBlockData(ctx, uint64(height))
+		_, data, _ := r.adapter.Store.GetBlockData(ctx, uint64(height))
 		blockProof := data.Txs.Proof(int(index)) // XXX: overflow on 32-bit machines
 		proof = cmttypes.TxProof{
 			RootHash: blockProof.RootHash,
@@ -484,7 +489,7 @@ func (r *RPCServer) TxSearch(ctx context.Context, query string, prove bool, page
 
 // Validators implements client.CometRPC.
 func (r *RPCServer) Validators(ctx context.Context, height *int64, page *int, perPage *int) (*coretypes.ResultValidators, error) {
-	s := r.adapter.state.Load()
+	s := r.adapter.State.Load()
 
 	validators := s.Validators.Validators
 	totalCount := len(validators)
@@ -498,7 +503,7 @@ func (r *RPCServer) Validators(ctx context.Context, height *int64, page *int, pe
 
 		if start >= totalCount {
 			return &coretypes.ResultValidators{
-				BlockHeight: int64(r.adapter.store.Height()),
+				BlockHeight: int64(r.adapter.Store.Height()),
 				Validators:  []*cmttypes.Validator{},
 				Total:       totalCount,
 			}, nil
@@ -507,7 +512,7 @@ func (r *RPCServer) Validators(ctx context.Context, height *int64, page *int, pe
 	}
 
 	return &coretypes.ResultValidators{
-		BlockHeight: int64(r.adapter.store.Height()),
+		BlockHeight: int64(r.adapter.Store.Height()),
 		Validators:  validators,
 		Total:       totalCount,
 	}, nil
@@ -562,7 +567,7 @@ func validatePage(pagePtr *int, perPage, totalCount int) (int, error) {
 func (r *RPCServer) normalizeHeight(height *int64) uint64 {
 	var heightValue uint64
 	if height == nil {
-		heightValue = r.adapter.store.Height()
+		heightValue = r.adapter.Store.Height()
 	} else {
 		heightValue = uint64(*height)
 	}

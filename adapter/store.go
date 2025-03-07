@@ -1,4 +1,4 @@
-package goexecutionabci
+package adapter
 
 import (
 	cmproto "github.com/cometbft/cometbft/proto/tendermint/types"

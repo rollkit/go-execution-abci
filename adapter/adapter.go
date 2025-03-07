@@ -1,4 +1,4 @@
-package goexecutionabci
+package adapter
 
 import (
 	"context"
@@ -6,18 +6,18 @@ import (
 	"sync/atomic"
 	"time"
 
+	"cosmossdk.io/log"
 	header "github.com/celestiaorg/go-header"
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtypes "github.com/cometbft/cometbft/types"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/rollkit/go-execution"
 	"github.com/rollkit/go-execution-abci/mempool"
 	"github.com/rollkit/go-execution-abci/p2p"
 	"github.com/rollkit/go-execution/types"
+	"github.com/rollkit/rollkit/core/execution"
+	"github.com/rollkit/rollkit/node"
+	rollkitp2p "github.com/rollkit/rollkit/p2p"
 	"github.com/rollkit/rollkit/store"
-	"github.com/rollkit/rollkit/third_party/log"
 )
 
 var _ execution.Executor = &Adapter{}
@@ -26,13 +26,20 @@ var genesis *cmtypes.GenesisDoc
 
 // Adapter is a struct that will contain an ABCI Application, and will implement the go-execution interface
 type Adapter struct {
-	app        servertypes.ABCI
-	store      store.Store
-	mempool    mempool.Mempool
-	txGossiper *p2p.Gossiper
-	logger     log.Logger
+	App        servertypes.ABCI
+	Store      store.Store
+	Mempool    mempool.Mempool
+	P2PClient  *rollkitp2p.Client
+	TxGossiper *p2p.Gossiper
+	State      atomic.Pointer[State] // TODO: this should store data on disk
 
-	state atomic.Pointer[State] // TODO: this should store data on disk
+	logger log.Logger
+}
+
+func NewABCIExecutorCreator(app servertypes.ABCI) node.ExecutorCreator {
+	return func(s store.Store, c *rollkitp2p.Client, l log.Logger) execution.Executor {
+		return NewABCIExecutor(app, s, c, l)
+	}
 }
 
 // NewABCIExecutor creates a new Adapter instance that implements the go-execution.Executor interface.
@@ -40,32 +47,26 @@ type Adapter struct {
 func NewABCIExecutor(
 	app servertypes.ABCI,
 	store store.Store,
-	ps *pubsub.PubSub,
-	host host.Host,
+	p2pClient *rollkitp2p.Client,
 	logger log.Logger,
-) execution.Executor {
-	a := &Adapter{app: app, store: store, logger: logger}
-	err := a.setupGossiping(context.Background(), ps, host)
-	if err != nil {
-		panic(err)
-	}
-
+) *Adapter {
+	a := &Adapter{App: app, Store: store, logger: logger, P2PClient: p2pClient}
 	return a
 }
 
-func (a *Adapter) setupGossiping(ctx context.Context, ps *pubsub.PubSub, host host.Host) error {
+func (a *Adapter) Start(ctx context.Context) error {
 	var err error
-	a.txGossiper, err = p2p.NewGossiper(host, ps, "TODO:-chainid+tx", a.logger)
+	a.TxGossiper, err = p2p.NewGossiper(a.P2PClient.Host(), a.P2PClient.PubSub(), "TODO:-chainid+tx", a.logger)
 	if err != nil {
 		return err
 	}
-	go a.txGossiper.ProcessMessages(ctx)
+	go a.TxGossiper.ProcessMessages(ctx)
 
 	return nil
 }
 
 // InitChain implements execution.Executor.
-func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialHeight uint64, chainID string) (stateRoot header.Hash, maxBytes uint64, err error) {
+func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialHeight uint64, chainID string) (stateRoot []byte, maxBytes uint64, err error) {
 	// TODO: add genesis file support, check if the genesis data provided by rollkit matches the provided for the ABCI app
 	if genesis.GenesisTime != genesisTime {
 		return header.Hash{}, 0, fmt.Errorf("genesis time mismatch: expected %s, got %s", genesis.GenesisTime, genesisTime)
@@ -86,7 +87,7 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 
 	consensusParams := genesis.ConsensusParams.ToProto()
 
-	res, err := a.app.InitChain(&abci.RequestInitChain{
+	res, err := a.App.InitChain(&abci.RequestInitChain{
 		Time:            genesisTime,
 		ChainId:         chainID,
 		ConsensusParams: &consensusParams,
@@ -99,7 +100,7 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 		return nil, 0, err
 	}
 
-	s := a.state.Load()
+	s := a.State.Load()
 	s.ConsensusParams = *res.ConsensusParams
 
 	vals, err := cmtypes.PB2TM.ValidatorUpdates(res.Validators)
@@ -125,67 +126,65 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 	s.LastHeightConsensusParamsChanged = int64(initialHeight)
 	s.LastHeightValidatorsChanged = int64(initialHeight)
 
-	a.state.Store(s)
+	a.State.Store(s)
 
 	return res.AppHash, uint64(res.ConsensusParams.Block.MaxBytes), err
 }
 
 // ExecuteTxs implements execution.Executor.
-func (a *Adapter) ExecuteTxs(ctx context.Context, txs []types.Tx, blockHeight uint64, timestamp time.Time, prevStateRoot header.Hash) (updatedStateRoot header.Hash, maxBytes uint64, err error) {
-	// run processProposal, then run finalizeblock
-	s := a.state.Load()
-
+func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint64, timestamp time.Time, prevStateRoot []byte) ([]byte, uint64, error) {
 	// Process proposal first
-	ppResp, err := a.app.ProcessProposal(&abci.RequestProcessProposal{
-		Txs:                byteTxs(txs),
+	s := a.State.Load()
+
+	ppResp, err := a.App.ProcessProposal(&abci.RequestProcessProposal{
+		Txs:                txs,
 		ProposedLastCommit: abci.CommitInfo{},
-		Hash:               prevStateRoot[:],
+		Hash:               prevStateRoot,
 		Height:             int64(blockHeight),
 		Time:               timestamp,
 		NextValidatorsHash: s.NextValidators.Hash(),
 		ProposerAddress:    s.Validators.Proposer.Address,
 	})
 	if err != nil {
-		return header.Hash{}, 0, err
+		return nil, 0, err
 	}
 
 	if ppResp.Status != abci.ResponseProcessProposal_ACCEPT {
-		return header.Hash{}, 0, fmt.Errorf("proposal rejected by app")
+		return nil, 0, fmt.Errorf("proposal rejected by app")
 	}
 
 	// Then finalize block
-	fbResp, err := a.app.FinalizeBlock(&abci.RequestFinalizeBlock{
-		Txs:                byteTxs(txs),
-		Hash:               prevStateRoot[:],
+	fbResp, err := a.App.FinalizeBlock(&abci.RequestFinalizeBlock{
+		Txs:                txs,
+		Hash:               prevStateRoot,
 		Height:             int64(blockHeight),
 		Time:               timestamp,
 		NextValidatorsHash: s.NextValidators.Hash(),
 		ProposerAddress:    s.Validators.Proposer.Address,
 	})
 	if err != nil {
-		return header.Hash{}, 0, err
+		return nil, 0, err
 	}
 
-	return header.Hash(fbResp.AppHash), uint64(s.ConsensusParams.Block.MaxBytes), nil
-
+	return fbResp.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
 }
 
 // GetTxs calls PrepareProposal with the next height from the store and returns the transactions from the ABCI app
-func (a *Adapter) GetTxs(ctx context.Context) ([]types.Tx, error) {
-	s := a.state.Load()
+func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
+	s := a.State.Load()
 
-	reapedTxs := a.mempool.ReapMaxBytesMaxGas(int64(s.ConsensusParams.Block.MaxBytes), -1)
+	reapedTxs := a.Mempool.ReapMaxBytesMaxGas(int64(s.ConsensusParams.Block.MaxBytes), -1)
 	txsBytes := make([][]byte, len(reapedTxs))
 	for i, tx := range reapedTxs {
 		txsBytes[i] = tx
 	}
 
-	resp, err := a.app.PrepareProposal(&abci.RequestPrepareProposal{
+	resp, err := a.App.PrepareProposal(&abci.RequestPrepareProposal{
 		MaxTxBytes:         int64(s.ConsensusParams.Block.MaxBytes),
 		Txs:                txsBytes,
 		LocalLastCommit:    abci.ExtendedCommitInfo{},
 		Misbehavior:        []abci.Misbehavior{},
-		Height:             int64(a.store.Height() + 1),
+		Height:             int64(a.Store.Height() + 1),
 		Time:               time.Now(), // TODO: this shouldn't cause any issues during sync, as this is only called during block creation
 		NextValidatorsHash: s.NextValidators.Hash(),
 		ProposerAddress:    s.Validators.Proposer.Address,
@@ -195,19 +194,14 @@ func (a *Adapter) GetTxs(ctx context.Context) ([]types.Tx, error) {
 		return nil, err
 	}
 
-	var txs = make([]types.Tx, len(resp.Txs))
-	for i, tx := range resp.Txs {
-		txs[i] = tx
-	}
-
-	return txs, nil
+	return resp.Txs, nil
 
 }
 
 // SetFinal implements execution.Executor.
 func (a *Adapter) SetFinal(ctx context.Context, blockHeight uint64) error {
 	// call commit
-	_, err := a.app.Commit()
+	_, err := a.App.Commit()
 	return err
 }
 

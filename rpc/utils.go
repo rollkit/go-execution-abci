@@ -1,4 +1,4 @@
-package goexecutionabci
+package rpc
 
 import (
 	"errors"
@@ -125,6 +125,29 @@ func ToABCIBlockMeta(header *types.SignedHeader, data *types.Data) (*cmtypes.Blo
 	}, nil
 }
 
+// GetABCICommit returns a commit format defined by ABCI.
+// Other fields (especially ValidatorAddress and Timestamp of Signature) have to be filled by caller.
+func GetABCICommit(height uint64, hash []byte, val cmtypes.Address, time time.Time, signature []byte) *cmtypes.Commit {
+	tmCommit := cmtypes.Commit{
+		Height: int64(height), //nolint:gosec
+		Round:  0,
+		BlockID: cmtypes.BlockID{
+			Hash:          cmbytes.HexBytes(hash),
+			PartSetHeader: cmtypes.PartSetHeader{},
+		},
+		Signatures: make([]cmtypes.CommitSig, 1),
+	}
+	commitSig := cmtypes.CommitSig{
+		BlockIDFlag:      cmtypes.BlockIDFlagCommit,
+		Signature:        signature,
+		ValidatorAddress: val,
+		Timestamp:        time,
+	}
+	tmCommit.Signatures[0] = commitSig
+
+	return &tmCommit
+}
+
 func filterMinMax(base, height, mini, maxi, limit int64) (int64, int64, error) {
 	// filter negatives
 	if mini < 0 || maxi < 0 {
@@ -154,27 +177,4 @@ func filterMinMax(base, height, mini, maxi, limit int64) (int64, int64, error) {
 			errors.New("invalid request"), mini, maxi)
 	}
 	return mini, maxi, nil
-}
-
-// GetABCICommit returns a commit format defined by ABCI.
-// Other fields (especially ValidatorAddress and Timestamp of Signature) have to be filled by caller.
-func GetABCICommit(height uint64, hash []byte, val cmtypes.Address, time time.Time, signature []byte) *cmtypes.Commit {
-	tmCommit := cmtypes.Commit{
-		Height: int64(height), //nolint:gosec
-		Round:  0,
-		BlockID: cmtypes.BlockID{
-			Hash:          cmbytes.HexBytes(hash),
-			PartSetHeader: cmtypes.PartSetHeader{},
-		},
-		Signatures: make([]cmtypes.CommitSig, 1),
-	}
-	commitSig := cmtypes.CommitSig{
-		BlockIDFlag:      cmtypes.BlockIDFlagCommit,
-		Signature:        signature,
-		ValidatorAddress: val,
-		Timestamp:        time,
-	}
-	tmCommit.Signatures[0] = commitSig
-
-	return &tmCommit
 }

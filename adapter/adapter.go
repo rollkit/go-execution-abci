@@ -9,20 +9,30 @@ import (
 	"cosmossdk.io/log"
 	header "github.com/celestiaorg/go-header"
 	abci "github.com/cometbft/cometbft/abci/types"
+	"github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/proxy"
 	cmtypes "github.com/cometbft/cometbft/types"
+	"github.com/cosmos/cosmos-sdk/server"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
+	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	"github.com/rollkit/go-execution-abci/mempool"
 	"github.com/rollkit/go-execution-abci/p2p"
-	"github.com/rollkit/go-execution/types"
 	"github.com/rollkit/rollkit/core/execution"
-	"github.com/rollkit/rollkit/node"
 	rollkitp2p "github.com/rollkit/rollkit/p2p"
 	"github.com/rollkit/rollkit/store"
 )
 
 var _ execution.Executor = &Adapter{}
 
-var genesis *cmtypes.GenesisDoc
+// LoadGenesisDoc returns the genesis document from the provided config file.
+func LoadGenesisDoc(cfg *config.Config) (*cmtypes.GenesisDoc, error) {
+	genesisFile := cfg.GenesisFile()
+	doc, err := cmtypes.GenesisDocFromFile(genesisFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read genesis doc from file: %w", err)
+	}
+	return doc, nil
+}
 
 // Adapter is a struct that will contain an ABCI Application, and will implement the go-execution interface
 type Adapter struct {
@@ -32,14 +42,11 @@ type Adapter struct {
 	P2PClient  *rollkitp2p.Client
 	TxGossiper *p2p.Gossiper
 	State      atomic.Pointer[State] // TODO: this should store data on disk
+	EventBus   *cmtypes.EventBus
+	CometCfg   *config.Config
+	AppGenesis *genutiltypes.AppGenesis
 
-	logger log.Logger
-}
-
-func NewABCIExecutorCreator(app servertypes.ABCI) node.ExecutorCreator {
-	return func(s store.Store, c *rollkitp2p.Client, l log.Logger) execution.Executor {
-		return NewABCIExecutor(app, s, c, l)
-	}
+	Logger log.Logger
 }
 
 // NewABCIExecutor creates a new Adapter instance that implements the go-execution.Executor interface.
@@ -49,14 +56,45 @@ func NewABCIExecutor(
 	store store.Store,
 	p2pClient *rollkitp2p.Client,
 	logger log.Logger,
+	cfg *config.Config,
+	appGenesis *genutiltypes.AppGenesis,
 ) *Adapter {
-	a := &Adapter{App: app, Store: store, logger: logger, P2PClient: p2pClient}
+	a := &Adapter{
+		App:        app,
+		Store:      store,
+		Logger:     logger,
+		P2PClient:  p2pClient,
+		CometCfg:   cfg,
+		AppGenesis: appGenesis,
+	}
+
+	// TODO: this looks soooo bad
+	cmtApp := server.NewCometABCIWrapper(app)
+	clientCreator := proxy.NewLocalClientCreator(cmtApp)
+
+	proxyApp, err := initProxyApp(clientCreator, logger, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	mempool := mempool.NewCListMempool(cfg.Mempool, proxyApp.Mempool(), a.Store.Height(context.Background()))
+	a.Mempool = mempool
+
 	return a
+}
+
+func initProxyApp(clientCreator proxy.ClientCreator, logger log.Logger, metrics *proxy.Metrics) (proxy.AppConns, error) {
+	proxyApp := proxy.NewAppConns(clientCreator, metrics)
+	// proxyApp.SetLogger(logger.With("module", "proxy"))
+	if err := proxyApp.Start(); err != nil {
+		return nil, fmt.Errorf("error while starting proxy app connections: %w", err)
+	}
+	return proxyApp, nil
 }
 
 func (a *Adapter) Start(ctx context.Context) error {
 	var err error
-	a.TxGossiper, err = p2p.NewGossiper(a.P2PClient.Host(), a.P2PClient.PubSub(), "TODO:-chainid+tx", a.logger)
+	a.TxGossiper, err = p2p.NewGossiper(a.P2PClient.Host(), a.P2PClient.PubSub(), "TODO:-chainid+tx", a.Logger)
 	if err != nil {
 		return err
 	}
@@ -67,32 +105,35 @@ func (a *Adapter) Start(ctx context.Context) error {
 
 // InitChain implements execution.Executor.
 func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialHeight uint64, chainID string) (stateRoot []byte, maxBytes uint64, err error) {
-	// TODO: add genesis file support, check if the genesis data provided by rollkit matches the provided for the ABCI app
-	if genesis.GenesisTime != genesisTime {
-		return header.Hash{}, 0, fmt.Errorf("genesis time mismatch: expected %s, got %s", genesis.GenesisTime, genesisTime)
+	if a.AppGenesis == nil {
+		return header.Hash{}, 0, fmt.Errorf("app genesis not loaded")
 	}
 
-	if genesis.ChainID != chainID {
-		return header.Hash{}, 0, fmt.Errorf("chain ID mismatch: expected %s, got %s", genesis.ChainID, chainID)
+	if a.AppGenesis.GenesisTime != genesisTime {
+		return header.Hash{}, 0, fmt.Errorf("genesis time mismatch: expected %s, got %s", a.AppGenesis.GenesisTime, genesisTime)
 	}
 
-	if initialHeight != uint64(genesis.InitialHeight) {
-		return header.Hash{}, 0, fmt.Errorf("initial height mismatch: expected %d, got %d", genesis.InitialHeight, initialHeight)
+	if a.AppGenesis.ChainID != chainID {
+		return header.Hash{}, 0, fmt.Errorf("chain ID mismatch: expected %s, got %s", a.AppGenesis.ChainID, chainID)
 	}
 
-	validators := make([]*cmtypes.Validator, len(genesis.Validators))
-	for i, v := range genesis.Validators {
+	if initialHeight != uint64(a.AppGenesis.InitialHeight) {
+		return header.Hash{}, 0, fmt.Errorf("initial height mismatch: expected %d, got %d", a.AppGenesis.InitialHeight, initialHeight)
+	}
+
+	validators := make([]*cmtypes.Validator, len(a.AppGenesis.Consensus.Validators))
+	for i, v := range a.AppGenesis.Consensus.Validators {
 		validators[i] = cmtypes.NewValidator(v.PubKey, v.Power)
 	}
 
-	consensusParams := genesis.ConsensusParams.ToProto()
+	consensusParams := a.AppGenesis.Consensus.Params.ToProto()
 
 	res, err := a.App.InitChain(&abci.RequestInitChain{
 		Time:            genesisTime,
 		ChainId:         chainID,
 		ConsensusParams: &consensusParams,
 		Validators:      cmtypes.TM2PB.ValidatorUpdates(cmtypes.NewValidatorSet(validators)),
-		AppStateBytes:   genesis.AppState,
+		AppStateBytes:   a.AppGenesis.AppState,
 		InitialHeight:   int64(initialHeight),
 	})
 
@@ -101,7 +142,15 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 	}
 
 	s := a.State.Load()
-	s.ConsensusParams = *res.ConsensusParams
+	if s == nil {
+		s = &State{}
+	}
+
+	if res.ConsensusParams != nil {
+		s.ConsensusParams = *res.ConsensusParams
+	} else {
+		s.ConsensusParams = consensusParams
+	}
 
 	vals, err := cmtypes.PB2TM.ValidatorUpdates(res.Validators)
 	if err != nil {
@@ -109,11 +158,7 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 	}
 
 	// apply initchain valset change
-	nValSet := s.Validators.Copy()
-	err = nValSet.UpdateWithChangeSet(vals)
-	if err != nil {
-		return nil, 0, err
-	}
+	nValSet := cmtypes.NewValidatorSet(vals)
 
 	// TODO: this should be removed, as we should not assume that there is only one validator
 	if len(nValSet.Validators) != 1 {
@@ -128,7 +173,7 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 
 	a.State.Store(s)
 
-	return res.AppHash, uint64(res.ConsensusParams.Block.MaxBytes), err
+	return res.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), err
 }
 
 // ExecuteTxs implements execution.Executor.
@@ -173,6 +218,10 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 	s := a.State.Load()
 
+	if a.Mempool == nil {
+		return nil, fmt.Errorf("mempool not initialized")
+	}
+
 	reapedTxs := a.Mempool.ReapMaxBytesMaxGas(int64(s.ConsensusParams.Block.MaxBytes), -1)
 	txsBytes := make([][]byte, len(reapedTxs))
 	for i, tx := range reapedTxs {
@@ -184,7 +233,7 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 		Txs:                txsBytes,
 		LocalLastCommit:    abci.ExtendedCommitInfo{},
 		Misbehavior:        []abci.Misbehavior{},
-		Height:             int64(a.Store.Height() + 1),
+		Height:             int64(a.Store.Height(ctx) + 1),
 		Time:               time.Now(), // TODO: this shouldn't cause any issues during sync, as this is only called during block creation
 		NextValidatorsHash: s.NextValidators.Hash(),
 		ProposerAddress:    s.Validators.Proposer.Address,
@@ -200,15 +249,6 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 
 // SetFinal implements execution.Executor.
 func (a *Adapter) SetFinal(ctx context.Context, blockHeight uint64) error {
-	// call commit
 	_, err := a.App.Commit()
 	return err
-}
-
-func byteTxs(txs []types.Tx) [][]byte {
-	result := make([][]byte, len(txs))
-	for i, tx := range txs {
-		result[i] = tx
-	}
-	return result
 }

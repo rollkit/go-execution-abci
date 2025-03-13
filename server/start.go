@@ -7,7 +7,7 @@ import (
 	"os"
 
 	cmtcfg "github.com/cometbft/cometbft/config"
-	"github.com/cometbft/cometbft/p2p"
+	cmtp2p "github.com/cometbft/cometbft/p2p"
 	pvm "github.com/cometbft/cometbft/privval"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -20,6 +20,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/version"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	"github.com/hashicorp/go-metrics"
+	"github.com/rollkit/rollkit/p2p"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -242,7 +243,7 @@ func startNode(
 	app sdktypes.Application,
 	svrCtx *server.Context,
 ) (rolllkitNode node.Node, cleanupFn func(), err error) {
-	nodeKey, err := p2p.LoadOrGenNodeKey(cfg.NodeKeyFile())
+	nodeKey, err := cmtp2p.LoadOrGenNodeKey(cfg.NodeKeyFile())
 	if err != nil {
 		return nil, cleanupFn, err
 	}
@@ -257,7 +258,7 @@ func startNode(
 		return nil, cleanupFn, err
 	}
 
-	signingKey, err := types.GetNodeKey(&p2p.NodeKey{PrivKey: pval.Key.PrivKey})
+	signingKey, err := types.GetNodeKey(&cmtp2p.NodeKey{PrivKey: pval.Key.PrivKey})
 	if err != nil {
 		return nil, cleanupFn, err
 	}
@@ -294,27 +295,34 @@ func startNode(
 		return nil, cleanupFn, err
 	}
 
+	metrics := node.DefaultMetricsProvider(cmtcfg.DefaultInstrumentationConfig())
+
+	_, p2pMetrics := metrics(cmtGenDoc.ChainID)
+	p2pClient, err := p2p.NewClient(nodeConfig.P2P, p2pKey, cmtGenDoc.ChainID, database, svrCtx.Logger.With("module", "p2p"), p2pMetrics)
+	if err != nil {
+		return nil, cleanupFn, err
+	}
+
 	executor := adapter.NewABCIExecutor(
 		app,
 		store.New(database),
-		nil,
+		p2pClient,
 		svrCtx.Logger,
 		cfg,
-		appGenesis, // pass AppGenesis to the executor
+		appGenesis,
 	)
+
 	ctxWithCancel, cancelFn := context.WithCancel(ctx)
 	cleanupFn = func() {
 		cancelFn()
 	}
-
-	metrics := node.DefaultMetricsProvider(cmtcfg.DefaultInstrumentationConfig())
 
 	rolllkitNode, err = node.NewNode(
 		ctxWithCancel,
 		nodeConfig,
 		executor,
 		node.NewDummySequencer(),
-		p2pKey,
+		p2pClient,
 		signingKey,
 		cmtGenDoc,
 		database,

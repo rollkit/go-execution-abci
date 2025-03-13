@@ -9,7 +9,6 @@ import (
 	cmtcfg "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/p2p"
 	pvm "github.com/cometbft/cometbft/privval"
-	cmttypes "github.com/cometbft/cometbft/types"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/server"
@@ -28,10 +27,9 @@ import (
 	"github.com/rollkit/go-execution-abci/adapter"
 	"github.com/rollkit/go-execution-abci/rpc"
 	"github.com/rollkit/rollkit/config"
-	"github.com/rollkit/rollkit/core/sequencer"
 	"github.com/rollkit/rollkit/node"
+	"github.com/rollkit/rollkit/store"
 
-	// "github.com/rollkit/rollkit/rpc"
 	"github.com/rollkit/rollkit/types"
 )
 
@@ -280,20 +278,55 @@ func startNode(
 		return nil, cleanupFn, err
 	}
 
-	executorCreator := adapter.NewABCIExecutorCreator(app)
+	cmtGenDoc, err := genDoc.ToGenesisDoc()
+	if err != nil {
+		return nil, cleanupFn, err
+	}
+
+	// Get AppGenesis before creating the executor
+	appGenesis, err := genutiltypes.AppGenesisFromFile(cfg.GenesisFile())
+	if err != nil {
+		return nil, cleanupFn, err
+	}
+
+	database, err := store.NewDefaultInMemoryKVStore()
+	if err != nil {
+		return nil, cleanupFn, err
+	}
+
+	executor := adapter.NewABCIExecutor(
+		app,
+		store.New(database),
+		nil,
+		svrCtx.Logger,
+		cfg,
+		appGenesis, // pass AppGenesis to the executor
+	)
 	ctxWithCancel, cancelFn := context.WithCancel(ctx)
+	cleanupFn = func() {
+		cancelFn()
+	}
+
+	metrics := node.DefaultMetricsProvider(cmtcfg.DefaultInstrumentationConfig())
 
 	rolllkitNode, err = node.NewNode(
 		ctxWithCancel,
 		nodeConfig,
-		executorCreator,
-		sequencer.NewDummySequencer(),
+		executor,
+		node.NewDummySequencer(),
 		p2pKey,
 		signingKey,
-		genDoc,
-		node.DefaultMetricsProvider(nil), // TODO: fix
+		cmtGenDoc,
+		database,
+		metrics,
 		svrCtx.Logger,
 	)
+	if err != nil {
+		return nil, cleanupFn, err
+	}
+
+	server := rpc.NewRPCServer(executor, nil, nil)
+	err = server.Start()
 	if err != nil {
 		return nil, cleanupFn, err
 	}
@@ -304,26 +337,22 @@ func startNode(
 	// 	return nil, cleanupFn, err
 	// }
 
-	if err := rolllkitNode.Run(ctx); err != nil {
+	if err := rolllkitNode.Start(ctx); err != nil {
 		return nil, cleanupFn, err
-	}
-
-	cleanupFn = func() {
-		cancelFn()
 	}
 
 	return rolllkitNode, cleanupFn, nil
 }
 
 // getGenDocProvider returns a function which returns the genesis doc from the genesis file.
-func getGenDocProvider(cfg *cmtcfg.Config) func() (*cmttypes.GenesisDoc, error) {
-	return func() (*cmttypes.GenesisDoc, error) {
+func getGenDocProvider(cfg *cmtcfg.Config) func() (*genutiltypes.AppGenesis, error) {
+	return func() (*genutiltypes.AppGenesis, error) {
 		appGenesis, err := genutiltypes.AppGenesisFromFile(cfg.GenesisFile())
 		if err != nil {
 			return nil, err
 		}
 
-		return appGenesis.ToGenesisDoc()
+		return appGenesis, nil
 	}
 }
 

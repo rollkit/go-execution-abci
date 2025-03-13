@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
+	"github.com/cometbft/cometbft/libs/log"
 	cmtmath "github.com/cometbft/cometbft/libs/math"
 	cmtquery "github.com/cometbft/cometbft/libs/pubsub/query"
 	"github.com/cometbft/cometbft/p2p"
@@ -21,6 +23,7 @@ import (
 	cmttypes "github.com/cometbft/cometbft/types"
 	"github.com/rollkit/go-execution-abci/adapter"
 	"github.com/rollkit/go-execution-abci/mempool"
+	"github.com/rollkit/rollkit/types"
 
 	"github.com/cosmos/cosmos-sdk/client"
 )
@@ -34,12 +37,25 @@ const (
 	maxPerPage     = 100
 )
 
+var (
+	// ErrConsensusStateNotAvailable is returned because Rollkit doesn't use Tendermint consensus.
+	ErrConsensusStateNotAvailable = errors.New("consensus state not available in Rollkit")
+
+	subscribeTimeout = 5 * time.Second
+)
+
 type RPCServer struct {
 	adapter      *adapter.Adapter
 	txIndexer    txindex.TxIndexer
 	blockIndexer indexer.BlockIndexer
 }
 
+// Start implements client.Client.
+func (r *RPCServer) Start() error {
+	return nil
+}
+
+var _ rpcclient.Client = &RPCServer{}
 var _ client.CometRPC = &RPCServer{}
 
 func NewRPCServer(adapter *adapter.Adapter, txIndexer txindex.TxIndexer, blockIndexer indexer.BlockIndexer) *RPCServer {
@@ -149,7 +165,7 @@ func (r *RPCServer) BlockByHash(ctx context.Context, hash []byte) (*coretypes.Re
 func (r *RPCServer) BlockResults(ctx context.Context, height *int64) (*coretypes.ResultBlockResults, error) {
 	var h uint64
 	if height == nil {
-		h = r.adapter.Store.Height()
+		h = r.adapter.Store.Height(ctx)
 	} else {
 		h = uint64(*height)
 	}
@@ -241,7 +257,7 @@ func (r *RPCServer) BlockchainInfo(ctx context.Context, minHeight int64, maxHeig
 	// Currently blocks are not pruned and are synced linearly so the base height is 0
 	minHeight, maxHeight, err := filterMinMax(
 		0,
-		int64(r.adapter.Store.Height()), //nolint:gosec
+		int64(r.adapter.Store.Height(ctx)), //nolint:gosec
 		minHeight,
 		maxHeight,
 		limit)
@@ -265,7 +281,7 @@ func (r *RPCServer) BlockchainInfo(ctx context.Context, minHeight int64, maxHeig
 	}
 
 	return &coretypes.ResultBlockchainInfo{
-		LastHeight: int64(r.adapter.Store.Height()), //nolint:gosec
+		LastHeight: int64(r.adapter.Store.Height(ctx)), //nolint:gosec
 		BlockMetas: blocks,
 	}, nil
 }
@@ -284,7 +300,94 @@ func (r *RPCServer) BroadcastTxAsync(ctx context.Context, tx cmttypes.Tx) (*core
 
 // BroadcastTxCommit implements client.CometRPC.
 func (r *RPCServer) BroadcastTxCommit(ctx context.Context, tx cmttypes.Tx) (*coretypes.ResultBroadcastTxCommit, error) {
-	panic("unimplemented")
+	// This implementation corresponds to Tendermints implementation from rpc/core/mempool.go.
+	// ctx.RemoteAddr godoc: If neither HTTPReq nor WSConn is set, an empty string is returned.
+	// This code is a local client, so we can assume that subscriber is ""
+	subscriber := "" //ctx.RemoteAddr()
+
+	if r.adapter.EventBus.NumClients() >= r.adapter.CometCfg.RPC.MaxSubscriptionClients {
+		return nil, fmt.Errorf("max_subscription_clients %d reached", r.adapter.CometCfg.RPC.MaxSubscriptionClients)
+	} else if r.adapter.EventBus.NumClientSubscriptions(subscriber) >= r.adapter.CometCfg.RPC.MaxSubscriptionsPerClient {
+		return nil, fmt.Errorf("max_subscriptions_per_client %d reached", r.adapter.CometCfg.RPC.MaxSubscriptionsPerClient)
+	}
+
+	// Subscribe to tx being committed in block.
+	subCtx, cancel := context.WithTimeout(ctx, subscribeTimeout)
+	defer cancel()
+	q := cmttypes.EventQueryTxFor(tx)
+	deliverTxSub, err := r.adapter.EventBus.Subscribe(subCtx, subscriber, q)
+	if err != nil {
+		err = fmt.Errorf("failed to subscribe to tx: %w", err)
+		r.adapter.Logger.Error("Error on broadcast_tx_commit", "err", err)
+		return nil, err
+	}
+	defer func() {
+		if err := r.adapter.EventBus.Unsubscribe(ctx, subscriber, q); err != nil {
+			r.adapter.Logger.Error("Error unsubscribing from eventBus", "err", err)
+		}
+	}()
+
+	// add to mempool and wait for CheckTx result
+	checkTxResCh := make(chan *abci.ResponseCheckTx, 1)
+	err = r.adapter.Mempool.CheckTx(tx, func(res *abci.ResponseCheckTx) {
+		select {
+		case <-ctx.Done():
+			return
+		case checkTxResCh <- res:
+		}
+	}, mempool.TxInfo{})
+	if err != nil {
+		r.adapter.Logger.Error("Error on broadcastTxCommit", "err", err)
+		return nil, fmt.Errorf("error on broadcastTxCommit: %w", err)
+	}
+	checkTxRes := <-checkTxResCh
+	if checkTxRes.Code != abci.CodeTypeOK {
+		return &coretypes.ResultBroadcastTxCommit{
+			CheckTx:  *checkTxRes,
+			TxResult: abci.ExecTxResult{},
+			Hash:     tx.Hash(),
+		}, nil
+	}
+
+	// broadcast tx
+	err = r.adapter.TxGossiper.Publish(ctx, tx)
+	if err != nil {
+		return nil, fmt.Errorf("tx added to local mempool but failure to broadcast: %w", err)
+	}
+
+	// Wait for the tx to be included in a block or timeout.
+	select {
+	case msg := <-deliverTxSub.Out(): // The tx was included in a block.
+		deliverTxRes := msg.Data().(cmttypes.EventDataTx)
+		return &coretypes.ResultBroadcastTxCommit{
+			CheckTx:  *checkTxRes,
+			TxResult: deliverTxRes.Result,
+			Hash:     tx.Hash(),
+			Height:   deliverTxRes.Height,
+		}, nil
+	case <-deliverTxSub.Canceled():
+		var reason string
+		if deliverTxSub.Err() == nil {
+			reason = "Tendermint exited"
+		} else {
+			reason = deliverTxSub.Err().Error()
+		}
+		err = fmt.Errorf("deliverTxSub was cancelled (reason: %s)", reason)
+		r.adapter.Logger.Error("Error on broadcastTxCommit", "err", err)
+		return &coretypes.ResultBroadcastTxCommit{
+			CheckTx:  *checkTxRes,
+			TxResult: abci.ExecTxResult{},
+			Hash:     tx.Hash(),
+		}, err
+	case <-time.After(r.adapter.CometCfg.RPC.TimeoutBroadcastTxCommit):
+		err = errors.New("timed out waiting for tx to be included in a block")
+		r.adapter.Logger.Error("Error on broadcastTxCommit", "err", err)
+		return &coretypes.ResultBroadcastTxCommit{
+			CheckTx:  *checkTxRes,
+			TxResult: abci.ExecTxResult{},
+			Hash:     tx.Hash(),
+		}, err
+	}
 }
 
 // BroadcastTxSync implements client.CometRPC.
@@ -503,7 +606,7 @@ func (r *RPCServer) Validators(ctx context.Context, height *int64, page *int, pe
 
 		if start >= totalCount {
 			return &coretypes.ResultValidators{
-				BlockHeight: int64(r.adapter.Store.Height()),
+				BlockHeight: int64(r.adapter.Store.Height(ctx)),
 				Validators:  []*cmttypes.Validator{},
 				Total:       totalCount,
 			}, nil
@@ -512,10 +615,220 @@ func (r *RPCServer) Validators(ctx context.Context, height *int64, page *int, pe
 	}
 
 	return &coretypes.ResultValidators{
-		BlockHeight: int64(r.adapter.Store.Height()),
+		BlockHeight: int64(r.adapter.Store.Height(ctx)),
 		Validators:  validators,
 		Total:       totalCount,
 	}, nil
+}
+
+// BroadcastEvidence is not implemented
+func (r *RPCServer) BroadcastEvidence(_ context.Context, evidence cmttypes.Evidence) (*coretypes.ResultBroadcastEvidence, error) {
+	return &coretypes.ResultBroadcastEvidence{
+		Hash: evidence.Hash(),
+	}, nil
+}
+
+// CheckTx implements client.Client.
+func (r *RPCServer) CheckTx(ctx context.Context, tx cmttypes.Tx) (*coretypes.ResultCheckTx, error) {
+	res, err := r.adapter.App.CheckTx(&abci.RequestCheckTx{Tx: tx})
+	if err != nil {
+		return nil, err
+	}
+	return &coretypes.ResultCheckTx{ResponseCheckTx: *res}, nil
+}
+
+// ConsensusParams implements client.Client.
+func (r *RPCServer) ConsensusParams(ctx context.Context, height *int64) (*coretypes.ResultConsensusParams, error) {
+	state, err := r.adapter.Store.GetState(ctx)
+	if err != nil {
+		return nil, err
+	}
+	params := state.ConsensusParams
+	return &coretypes.ResultConsensusParams{
+		BlockHeight: int64(r.normalizeHeight(height)), //nolint:gosec
+		ConsensusParams: cmttypes.ConsensusParams{
+			Block: cmttypes.BlockParams{
+				MaxBytes: params.Block.MaxBytes,
+				MaxGas:   params.Block.MaxGas,
+			},
+			Evidence: cmttypes.EvidenceParams{
+				MaxAgeNumBlocks: params.Evidence.MaxAgeNumBlocks,
+				MaxAgeDuration:  params.Evidence.MaxAgeDuration,
+				MaxBytes:        params.Evidence.MaxBytes,
+			},
+			Validator: cmttypes.ValidatorParams{
+				PubKeyTypes: params.Validator.PubKeyTypes,
+			},
+			Version: cmttypes.VersionParams{
+				App: params.Version.App,
+			},
+		},
+	}, nil
+}
+
+// ConsensusState implements client.Client.
+func (r *RPCServer) ConsensusState(context.Context) (*coretypes.ResultConsensusState, error) {
+	return nil, ErrConsensusStateNotAvailable
+}
+
+// DumpConsensusState implements client.Client.
+func (r *RPCServer) DumpConsensusState(context.Context) (*coretypes.ResultDumpConsensusState, error) {
+	return nil, ErrConsensusStateNotAvailable
+}
+
+// Genesis implements client.Client.
+func (r *RPCServer) Genesis(context.Context) (*coretypes.ResultGenesis, error) {
+	panic("unimplemented")
+}
+
+// GenesisChunked implements client.Client.
+func (r *RPCServer) GenesisChunked(context.Context, uint) (*coretypes.ResultGenesisChunk, error) {
+	panic("unimplemented")
+}
+
+// Header implements client.Client.
+func (r *RPCServer) Header(ctx context.Context, heightPtr *int64) (*coretypes.ResultHeader, error) {
+	height := r.normalizeHeight(heightPtr)
+	blockMeta := r.getBlockMeta(ctx, height)
+	if blockMeta == nil {
+		return nil, fmt.Errorf("block at height %d not found", height)
+	}
+	return &coretypes.ResultHeader{Header: &blockMeta.Header}, nil
+}
+
+// HeaderByHash implements client.Client.
+func (r *RPCServer) HeaderByHash(ctx context.Context, hash cmtbytes.HexBytes) (*coretypes.ResultHeader, error) {
+	// N.B. The hash parameter is HexBytes so that the reflective parameter
+	// decoding logic in the HTTP service will correctly translate from JSON.
+	// See https://github.com/cometbft/cometbft/issues/6802 for context.
+
+	header, data, err := r.adapter.Store.GetBlockByHash(ctx, types.Hash(hash))
+	if err != nil {
+		return nil, err
+	}
+
+	blockMeta, err := ToABCIBlockMeta(header, data)
+	if err != nil {
+		return nil, err
+	}
+
+	if blockMeta == nil {
+		return &coretypes.ResultHeader{}, nil
+	}
+
+	return &coretypes.ResultHeader{Header: &blockMeta.Header}, nil
+}
+
+// Health implements client.Client.
+func (r *RPCServer) Health(context.Context) (*coretypes.ResultHealth, error) {
+	return &coretypes.ResultHealth{}, nil
+}
+
+// IsRunning implements client.Client.
+func (r *RPCServer) IsRunning() bool {
+	panic("unimplemented")
+}
+
+// NetInfo implements client.Client.
+func (r *RPCServer) NetInfo(context.Context) (*coretypes.ResultNetInfo, error) {
+	res := coretypes.ResultNetInfo{
+		Listening: true,
+	}
+	for _, ma := range r.adapter.P2PClient.Addrs() {
+		res.Listeners = append(res.Listeners, ma.String())
+	}
+	peers := r.adapter.P2PClient.Peers()
+	res.NPeers = len(peers)
+	for _, peer := range peers {
+		res.Peers = append(res.Peers, coretypes.Peer{
+			NodeInfo:         peer.NodeInfo,
+			IsOutbound:       peer.IsOutbound,
+			ConnectionStatus: peer.ConnectionStatus,
+			RemoteIP:         peer.RemoteIP,
+		})
+	}
+
+	return &res, nil
+}
+
+// NumUnconfirmedTxs implements client.Client.
+func (r *RPCServer) NumUnconfirmedTxs(context.Context) (*coretypes.ResultUnconfirmedTxs, error) {
+	return &coretypes.ResultUnconfirmedTxs{
+		Count:      r.adapter.Mempool.Size(),
+		Total:      r.adapter.Mempool.Size(),
+		TotalBytes: r.adapter.Mempool.SizeBytes(),
+		// TODO: should also return the actual txs
+	}, nil
+
+}
+
+// OnReset implements client.Client.
+func (r *RPCServer) OnReset() error {
+	panic("unimplemented")
+}
+
+// OnStart implements client.Client.
+func (r *RPCServer) OnStart() error {
+	panic("unimplemented")
+}
+
+// OnStop implements client.Client.
+func (r *RPCServer) OnStop() {
+	panic("unimplemented")
+}
+
+// Quit implements client.Client.
+func (r *RPCServer) Quit() <-chan struct{} {
+	panic("unimplemented")
+}
+
+// Reset implements client.Client.
+func (r *RPCServer) Reset() error {
+	panic("unimplemented")
+}
+
+// SetLogger implements client.Client.
+func (r *RPCServer) SetLogger(log.Logger) {
+	panic("unimplemented")
+}
+
+// Stop implements client.Client.
+func (r *RPCServer) Stop() error {
+	panic("unimplemented")
+}
+
+// String implements client.Client.
+func (r *RPCServer) String() string {
+	panic("unimplemented")
+}
+
+// Subscribe implements client.Client.
+func (r *RPCServer) Subscribe(ctx context.Context, subscriber string, query string, outCapacity ...int) (out <-chan coretypes.ResultEvent, err error) {
+	panic("unimplemented")
+}
+
+// UnconfirmedTxs implements client.Client.
+func (r *RPCServer) UnconfirmedTxs(ctx context.Context, limitPtr *int) (*coretypes.ResultUnconfirmedTxs, error) {
+	limit := validatePerPage(limitPtr)
+	txs := r.adapter.Mempool.ReapMaxTxs(limit)
+	return &coretypes.ResultUnconfirmedTxs{
+		Count:      len(txs),
+		Total:      r.adapter.Mempool.Size(),
+		TotalBytes: r.adapter.Mempool.SizeBytes(),
+		Txs:        txs,
+	}, nil
+}
+
+// Unsubscribe implements client.Client.
+func (r *RPCServer) Unsubscribe(ctx context.Context, subscriber string, query string) error {
+	// TODO: implement EventBus
+	panic("unimplemented")
+}
+
+// UnsubscribeAll implements client.Client.
+func (r *RPCServer) UnsubscribeAll(ctx context.Context, subscriber string) error {
+	// TODO: implement EventBus
+	panic("unimplemented")
 }
 
 //----------------------------------------------
@@ -567,10 +880,23 @@ func validatePage(pagePtr *int, perPage, totalCount int) (int, error) {
 func (r *RPCServer) normalizeHeight(height *int64) uint64 {
 	var heightValue uint64
 	if height == nil {
-		heightValue = r.adapter.Store.Height()
+		heightValue = r.adapter.Store.Height(context.Background())
 	} else {
 		heightValue = uint64(*height)
 	}
 
 	return heightValue
+}
+
+func (r *RPCServer) getBlockMeta(ctx context.Context, n uint64) *cmttypes.BlockMeta {
+	header, data, err := r.adapter.Store.GetBlockData(ctx, n)
+	if err != nil {
+		return nil
+	}
+	bmeta, err := ToABCIBlockMeta(header, data)
+	if err != nil {
+		return nil
+	}
+
+	return bmeta
 }

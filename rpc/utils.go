@@ -30,7 +30,7 @@ func ToABCIHeaderPB(header *types.Header) (cmproto.Header, error) {
 				Hash:  nil,
 			},
 		},
-		LastCommitHash:     header.LastHeaderHash[:],
+		LastCommitHash:     header.LastCommitHash[:],
 		DataHash:           header.DataHash[:],
 		ConsensusHash:      header.ConsensusHash[:],
 		AppHash:            header.AppHash[:],

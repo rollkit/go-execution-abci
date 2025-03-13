@@ -1,11 +1,12 @@
 module github.com/rollkit/go-execution-abci
 
-go 1.24.0
+go 1.23.3
 
 require (
 	github.com/celestiaorg/go-header v0.6.4
 	github.com/cosmos/cosmos-sdk v0.50.12
 	github.com/gorilla/rpc v1.2.1
+	github.com/ipfs/go-datastore v0.7.0
 	github.com/rollkit/go-execution v0.2.3
 	github.com/rollkit/go-sequencing v0.4.1
 	github.com/rollkit/rollkit/core v0.0.0-00010101000000-000000000000
@@ -50,7 +51,6 @@ require (
 	github.com/huandu/skiplist v1.2.0 // indirect
 	github.com/huin/goupnp v1.3.0 // indirect
 	github.com/ipfs/boxo v0.27.4 // indirect
-	github.com/ipfs/go-datastore v0.7.0 // indirect
 	github.com/ipfs/go-ds-badger4 v0.1.5 // indirect
 	github.com/ipfs/go-log v1.0.5 // indirect
 	github.com/ipld/go-ipld-prime v0.21.0 // indirect

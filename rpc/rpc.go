@@ -763,7 +763,6 @@ func (r *RPCServer) NumUnconfirmedTxs(context.Context) (*coretypes.ResultUnconfi
 		Count:      r.adapter.Mempool.Size(),
 		Total:      r.adapter.Mempool.Size(),
 		TotalBytes: r.adapter.Mempool.SizeBytes(),
-		// TODO: should also return the actual txs
 	}, nil
 
 }

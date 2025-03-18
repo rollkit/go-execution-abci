@@ -3,11 +3,9 @@ package adapter
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"cosmossdk.io/log"
-	header "github.com/celestiaorg/go-header"
 	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/proxy"
@@ -41,7 +39,6 @@ type Adapter struct {
 	Mempool    mempool.Mempool
 	P2PClient  *rollkitp2p.Client
 	TxGossiper *p2p.Gossiper
-	State      atomic.Pointer[State] // TODO: this should store data on disk
 	EventBus   *cmtypes.EventBus
 	CometCfg   *config.Config
 	AppGenesis *genutiltypes.AppGenesis
@@ -104,21 +101,21 @@ func (a *Adapter) Start(ctx context.Context) error {
 }
 
 // InitChain implements execution.Executor.
-func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialHeight uint64, chainID string) (stateRoot []byte, maxBytes uint64, err error) {
+func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialHeight uint64, chainID string) ([]byte, uint64, error) {
 	if a.AppGenesis == nil {
-		return header.Hash{}, 0, fmt.Errorf("app genesis not loaded")
+		return nil, 0, fmt.Errorf("app genesis not loaded")
 	}
 
 	if a.AppGenesis.GenesisTime != genesisTime {
-		return header.Hash{}, 0, fmt.Errorf("genesis time mismatch: expected %s, got %s", a.AppGenesis.GenesisTime, genesisTime)
+		return nil, 0, fmt.Errorf("genesis time mismatch: expected %s, got %s", a.AppGenesis.GenesisTime, genesisTime)
 	}
 
 	if a.AppGenesis.ChainID != chainID {
-		return header.Hash{}, 0, fmt.Errorf("chain ID mismatch: expected %s, got %s", a.AppGenesis.ChainID, chainID)
+		return nil, 0, fmt.Errorf("chain ID mismatch: expected %s, got %s", a.AppGenesis.ChainID, chainID)
 	}
 
 	if initialHeight != uint64(a.AppGenesis.InitialHeight) {
-		return header.Hash{}, 0, fmt.Errorf("initial height mismatch: expected %d, got %d", a.AppGenesis.InitialHeight, initialHeight)
+		return nil, 0, fmt.Errorf("initial height mismatch: expected %d, got %d", a.AppGenesis.InitialHeight, initialHeight)
 	}
 
 	validators := make([]*cmtypes.Validator, len(a.AppGenesis.Consensus.Validators))
@@ -141,15 +138,11 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 		return nil, 0, err
 	}
 
-	s := a.State.Load()
-	if s == nil {
-		s = &State{}
-	}
-
+	s := &State{}
 	if res.ConsensusParams != nil {
-		s.ConsensusParams = *res.ConsensusParams
+		s.ConsensusParams = cmtypes.ConsensusParamsFromProto(*res.ConsensusParams)
 	} else {
-		s.ConsensusParams = consensusParams
+		s.ConsensusParams = cmtypes.ConsensusParamsFromProto(consensusParams)
 	}
 
 	vals, err := cmtypes.PB2TM.ValidatorUpdates(res.Validators)
@@ -171,15 +164,20 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 	s.LastHeightConsensusParamsChanged = int64(initialHeight)
 	s.LastHeightValidatorsChanged = int64(initialHeight)
 
-	a.State.Store(s)
+	if err := a.SaveState(ctx, s); err != nil {
+		return nil, 0, fmt.Errorf("failed to save initial state: %w", err)
+	}
 
 	return res.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), err
 }
 
 // ExecuteTxs implements execution.Executor.
 func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint64, timestamp time.Time, prevStateRoot []byte) ([]byte, uint64, error) {
-	// Process proposal first
-	s := a.State.Load()
+	// Load state from disk
+	s, err := a.LoadState(ctx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to load state: %w", err)
+	}
 
 	ppResp, err := a.App.ProcessProposal(&abci.RequestProcessProposal{
 		Txs:                txs,
@@ -211,12 +209,66 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 		return nil, 0, err
 	}
 
+	// Apply changes to the state (valset and params)
+
+	// next validators becomes current validators
+	nValSet := s.NextValidators.Copy()
+
+	// Update the validator set with the latest abciResponse.
+	validatorUpdates, err := cmtypes.PB2TM.ValidatorUpdates(fbResp.ValidatorUpdates)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	lastHeightValsChanged := s.LastHeightValidatorsChanged
+	if len(validatorUpdates) > 0 {
+		err := nValSet.UpdateWithChangeSet(validatorUpdates)
+		if err != nil {
+			return nil, 0, fmt.Errorf("changing validator set: %w", err)
+		}
+		// Change results from this height but only applies to the height + 2.
+		lastHeightValsChanged = int64(blockHeight) + 2
+	}
+
+	// Update validator proposer priority and set state variables.
+	nValSet.IncrementProposerPriority(1)
+
+	if fbResp.ConsensusParamUpdates != nil {
+		nextParams := s.ConsensusParams.Update(fbResp.ConsensusParamUpdates)
+		err := nextParams.ValidateBasic()
+		if err != nil {
+			return nil, 0, fmt.Errorf("validating new consensus params: %w", err)
+		}
+
+		err = s.ConsensusParams.ValidateUpdate(fbResp.ConsensusParamUpdates, int64(blockHeight))
+		if err != nil {
+			return nil, 0, fmt.Errorf("updating consensus params: %w", err)
+		}
+
+		s.ConsensusParams = nextParams
+
+		// Change results from this height but only applies to the next height.
+		s.LastHeightConsensusParamsChanged = int64(blockHeight) + 1
+	}
+
+	s.LastValidators = s.Validators.Copy()
+	s.Validators = s.NextValidators.Copy()
+	s.LastHeightValidatorsChanged = lastHeightValsChanged
+
+	if err := a.SaveState(ctx, s); err != nil {
+		return nil, 0, fmt.Errorf("failed to save state: %w", err)
+	}
+
 	return fbResp.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
 }
 
 // GetTxs calls PrepareProposal with the next height from the store and returns the transactions from the ABCI app
 func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
-	s := a.State.Load()
+	// Load state from disk
+	s, err := a.LoadState(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load state: %w", err)
+	}
 
 	if a.Mempool == nil {
 		return nil, fmt.Errorf("mempool not initialized")
@@ -229,26 +281,38 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 	}
 
 	resp, err := a.App.PrepareProposal(&abci.RequestPrepareProposal{
-		MaxTxBytes:         int64(s.ConsensusParams.Block.MaxBytes),
 		Txs:                txsBytes,
-		LocalLastCommit:    abci.ExtendedCommitInfo{},
-		Misbehavior:        []abci.Misbehavior{},
+		MaxTxBytes:         int64(s.ConsensusParams.Block.MaxBytes),
 		Height:             int64(a.Store.Height(ctx) + 1),
-		Time:               time.Now(), // TODO: this shouldn't cause any issues during sync, as this is only called during block creation
+		Time:               time.Now(),
 		NextValidatorsHash: s.NextValidators.Hash(),
 		ProposerAddress:    s.Validators.Proposer.Address,
 	})
-
 	if err != nil {
 		return nil, err
 	}
 
 	return resp.Txs, nil
-
 }
 
 // SetFinal implements execution.Executor.
 func (a *Adapter) SetFinal(ctx context.Context, blockHeight uint64) error {
 	_, err := a.App.Commit()
 	return err
+}
+
+func NewAdapter(store store.Store) *Adapter {
+	return &Adapter{
+		Store: store,
+	}
+}
+
+// LoadState loads the state from disk
+func (a *Adapter) LoadState(ctx context.Context) (*State, error) {
+	return loadState(ctx, a.Store)
+}
+
+// SaveState saves the state to disk
+func (a *Adapter) SaveState(ctx context.Context, state *State) error {
+	return saveState(ctx, a.Store, state)
 }

@@ -461,7 +461,10 @@ func (r *RPCServer) Status(ctx context.Context) (*coretypes.ResultStatus, error)
 		return nil, err
 	}
 
-	s := r.adapter.State.Load()
+	s, err := r.adapter.LoadState(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	return &coretypes.ResultStatus{
 		NodeInfo: p2p.DefaultNodeInfo{}, // TODO: fill this in
@@ -592,7 +595,10 @@ func (r *RPCServer) TxSearch(ctx context.Context, query string, prove bool, page
 
 // Validators implements client.CometRPC.
 func (r *RPCServer) Validators(ctx context.Context, height *int64, page *int, perPage *int) (*coretypes.ResultValidators, error) {
-	s := r.adapter.State.Load()
+	s, err := r.adapter.LoadState(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	validators := s.Validators.Validators
 	totalCount := len(validators)

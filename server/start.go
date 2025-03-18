@@ -290,7 +290,7 @@ func startNode(
 		return nil, cleanupFn, err
 	}
 
-	database, err := store.NewDefaultInMemoryKVStore()
+	database, err := store.NewDefaultKVStore(cfg.RootDir, "rollkit", "rollkit")
 	if err != nil {
 		return nil, cleanupFn, err
 	}

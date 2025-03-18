@@ -65,7 +65,7 @@ func NewABCIExecutor(
 		AppGenesis: appGenesis,
 	}
 
-	// TODO: this looks soooo bad
+	// TODO: pass the metrics if needed
 	cmtApp := server.NewCometABCIWrapper(app)
 	clientCreator := proxy.NewLocalClientCreator(cmtApp)
 
@@ -91,7 +91,8 @@ func initProxyApp(clientCreator proxy.ClientCreator, logger log.Logger, metrics 
 
 func (a *Adapter) Start(ctx context.Context) error {
 	var err error
-	a.TxGossiper, err = p2p.NewGossiper(a.P2PClient.Host(), a.P2PClient.PubSub(), "TODO:-chainid+tx", a.Logger)
+	topic := fmt.Sprintf("%s-tx", a.AppGenesis.ChainID)
+	a.TxGossiper, err = p2p.NewGossiper(a.P2PClient.Host(), a.P2PClient.PubSub(), topic, a.Logger)
 	if err != nil {
 		return err
 	}

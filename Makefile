@@ -63,3 +63,9 @@ test: vet
 	@echo "--> Running unit tests"
 	@go test -v -race -covermode=atomic -coverprofile=coverage.txt $(pkgs) -run $(run) -count=$(count)
 .PHONY: test
+
+proto-gen:
+	$(DOCKER) run --volume "$(CURDIR):/workspace" --workdir /workspace bufbuild/buf mod update
+	$(DOCKER) run --volume "$(CURDIR):/workspace" --workdir /workspace bufbuild/buf generate --config buf.yaml
+
+.PHONY: proto-gen 

@@ -1,0 +1,9 @@
+version: v1
+deps:
+  - buf.build/tendermint/tendermint:v0.38.x
+breaking:
+  use:
+    - FILE
+lint:
+  use:
+    - DEFAULT

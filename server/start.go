@@ -25,7 +25,9 @@ import (
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	"github.com/hashicorp/go-metrics"
 	"github.com/rollkit/go-execution-abci/adapter"
-	"github.com/rollkit/go-execution-abci/mempool"
+
+	// "github.com/rollkit/go-execution-abci/mempool"
+	"github.com/cometbft/cometbft/mempool"
 	"github.com/rollkit/go-execution-abci/rpc"
 	"github.com/rollkit/rollkit/config"
 	"github.com/rollkit/rollkit/node"
@@ -325,7 +327,7 @@ func startNode(
 		panic(err)
 	}
 
-	mempool := mempool.NewCListMempool(cfg.Mempool, proxyApp.Mempool(), st.Height(context.Background()))
+	mempool := mempool.NewCListMempool(cfg.Mempool, proxyApp.Mempool(), int64(st.Height(context.Background())))
 	executor.SetMempool(mempool)
 
 	ctxWithCancel, cancelFn := context.WithCancel(ctx)

@@ -33,7 +33,7 @@ func loadState(ctx context.Context, s store.Store) (*cmtstate.State, error) {
 		return &cmtstate.State{}, nil
 	}
 
-	var stateProto *cmtstateproto.State
+	stateProto := &cmtstateproto.State{}
 	if err := proto.Unmarshal(data, stateProto); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal state: %w", err)
 	}

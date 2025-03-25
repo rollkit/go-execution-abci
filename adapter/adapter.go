@@ -14,7 +14,9 @@ import (
 	cmtypes "github.com/cometbft/cometbft/types"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
-	"github.com/rollkit/go-execution-abci/mempool"
+
+	// "github.com/rollkit/go-execution-abci/mempool"
+	"github.com/cometbft/cometbft/mempool"
 	"github.com/rollkit/go-execution-abci/p2p"
 	"github.com/rollkit/rollkit/core/execution"
 	rollkitp2p "github.com/rollkit/rollkit/p2p"
@@ -38,7 +40,7 @@ type Adapter struct {
 	App        servertypes.ABCI
 	Store      store.Store
 	Mempool    mempool.Mempool
-	MempoolIDs *mempool.MempoolIDs
+	MempoolIDs *mempoolIDs
 	P2PClient  *rollkitp2p.Client
 	TxGossiper *p2p.Gossiper
 	EventBus   *cmtypes.EventBus
@@ -65,7 +67,7 @@ func NewABCIExecutor(
 		P2PClient:  p2pClient,
 		CometCfg:   cfg,
 		AppGenesis: appGenesis,
-		MempoolIDs: mempool.NewMempoolIDs(),
+		MempoolIDs: newMempoolIDs(),
 	}
 
 	return a
@@ -306,11 +308,11 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 
 	// Update mempool.
 	err = a.Mempool.Update(
-		blockHeight,
+		int64(blockHeight),
 		cmtypes.ToTxs(txs),
 		fbResp.TxResults,
-		cmtstate.TxPreCheck(s),
-		cmtstate.TxPostCheck(s),
+		cmtstate.TxPreCheck(*s),
+		cmtstate.TxPostCheck(*s),
 	)
 	if err != nil {
 		a.Logger.Error("client error during mempool.Update", "err", err)

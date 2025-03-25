@@ -32,7 +32,6 @@ import (
 	servercmtlog "github.com/cosmos/cosmos-sdk/server/log"
 	"github.com/rollkit/go-execution-abci/adapter"
 
-	// "github.com/rollkit/go-execution-abci/mempool"
 	"github.com/cometbft/cometbft/mempool"
 	"github.com/rollkit/go-execution-abci/rpc/json"
 	"github.com/rollkit/rollkit/types"

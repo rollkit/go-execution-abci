@@ -10,6 +10,7 @@ import (
 	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/cometbft/cometbft/config"
 	corep2p "github.com/cometbft/cometbft/p2p"
+	cmtstate "github.com/cometbft/cometbft/state"
 	cmtypes "github.com/cometbft/cometbft/types"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
@@ -166,7 +167,7 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 		return nil, 0, err
 	}
 
-	s := &State{}
+	s := &cmtstate.State{}
 	if res.ConsensusParams != nil {
 		s.ConsensusParams = cmtypes.ConsensusParamsFromProto(*res.ConsensusParams)
 	} else {
@@ -287,6 +288,35 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 		return nil, 0, fmt.Errorf("failed to save state: %w", err)
 	}
 
+	// Commit and update mempool
+	a.Mempool.Lock()
+	defer a.Mempool.Unlock()
+
+	err = a.Mempool.FlushAppConn()
+	if err != nil {
+		a.Logger.Error("client error during mempool.FlushAppConn", "err", err)
+		return nil, 0, err
+	}
+
+	_, err = a.App.Commit()
+	if err != nil {
+		a.Logger.Error("client error during proxyAppConn.CommitSync", "err", err)
+		return nil, 0, err
+	}
+
+	// Update mempool.
+	err = a.Mempool.Update(
+		blockHeight,
+		cmtypes.ToTxs(txs),
+		fbResp.TxResults,
+		cmtstate.TxPreCheck(s),
+		cmtstate.TxPostCheck(s),
+	)
+	if err != nil {
+		a.Logger.Error("client error during mempool.Update", "err", err)
+		return nil, 0, err
+	}
+
 	return fbResp.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
 }
 
@@ -325,8 +355,7 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 
 // SetFinal implements execution.Executor.
 func (a *Adapter) SetFinal(ctx context.Context, blockHeight uint64) error {
-	_, err := a.App.Commit()
-	return err
+	return nil
 }
 
 func NewAdapter(store store.Store) *Adapter {
@@ -336,11 +365,11 @@ func NewAdapter(store store.Store) *Adapter {
 }
 
 // LoadState loads the state from disk
-func (a *Adapter) LoadState(ctx context.Context) (*State, error) {
+func (a *Adapter) LoadState(ctx context.Context) (*cmtstate.State, error) {
 	return loadState(ctx, a.Store)
 }
 
 // SaveState saves the state to disk
-func (a *Adapter) SaveState(ctx context.Context, state *State) error {
+func (a *Adapter) SaveState(ctx context.Context, state *cmtstate.State) error {
 	return saveState(ctx, a.Store, state)
 }

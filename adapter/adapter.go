@@ -15,7 +15,6 @@ import (
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 
-	// "github.com/rollkit/go-execution-abci/mempool"
 	"github.com/cometbft/cometbft/mempool"
 	"github.com/rollkit/go-execution-abci/p2p"
 	"github.com/rollkit/rollkit/core/execution"

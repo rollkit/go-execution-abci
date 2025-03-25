@@ -26,7 +26,6 @@ import (
 	"github.com/hashicorp/go-metrics"
 	"github.com/rollkit/go-execution-abci/adapter"
 
-	// "github.com/rollkit/go-execution-abci/mempool"
 	"github.com/cometbft/cometbft/mempool"
 	"github.com/rollkit/go-execution-abci/rpc"
 	"github.com/rollkit/rollkit/config"

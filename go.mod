@@ -5,7 +5,6 @@ go 1.23.3
 toolchain go1.24.1
 
 require (
-	github.com/celestiaorg/go-header v0.6.4
 	github.com/cosmos/cosmos-sdk v0.50.12
 	github.com/gorilla/rpc v1.2.1
 	github.com/rollkit/go-sequencing v0.4.1
@@ -19,10 +18,10 @@ require (
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.0.2 // indirect
 	github.com/bytedance/sonic v1.12.3 // indirect
 	github.com/bytedance/sonic/loader v0.2.0 // indirect
+	github.com/celestiaorg/go-header v0.6.4 // indirect
 	github.com/celestiaorg/go-libp2p-messenger v0.2.0 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect
 	github.com/cloudwego/iasm v0.2.0 // indirect
-	github.com/cometbft/cometbft/api v1.0.0 // indirect
 	github.com/containerd/cgroups v1.1.0 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c // indirect
@@ -275,7 +274,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20241202173237-19429a94021a // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
 	google.golang.org/grpc v1.70.0
-	google.golang.org/protobuf v1.36.5 // indirect
+	google.golang.org/protobuf v1.36.5
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gotest.tools/v3 v3.5.1 // indirect
@@ -287,7 +286,7 @@ require (
 
 replace (
 	github.com/rollkit/rollkit => ../rollkit
+	github.com/rollkit/rollkit/block => ../rollkit/block
 	github.com/rollkit/rollkit/core => ../rollkit/core
-	github.com/rollkit/rollkit/da => ../rollkit/da
 	github.com/rollkit/rollkit/p2p => ../rollkit/p2p
 )

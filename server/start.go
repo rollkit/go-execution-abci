@@ -2,36 +2,39 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"os"
 
+	"cosmossdk.io/log"
 	cmtcfg "github.com/cometbft/cometbft/config"
 	cmtp2p "github.com/cometbft/cometbft/p2p"
 	pvm "github.com/cometbft/cometbft/privval"
+	"github.com/cometbft/cometbft/proxy"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/server"
 	"github.com/cosmos/cosmos-sdk/server/api"
 	serverconfig "github.com/cosmos/cosmos-sdk/server/config"
 	servergrpc "github.com/cosmos/cosmos-sdk/server/grpc"
+	servercmtlog "github.com/cosmos/cosmos-sdk/server/log"
 	sdktypes "github.com/cosmos/cosmos-sdk/server/types"
 	"github.com/cosmos/cosmos-sdk/telemetry"
 	"github.com/cosmos/cosmos-sdk/version"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	"github.com/hashicorp/go-metrics"
-	"github.com/rollkit/rollkit/p2p"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-
 	"github.com/rollkit/go-execution-abci/adapter"
+	"github.com/rollkit/go-execution-abci/mempool"
 	"github.com/rollkit/go-execution-abci/rpc"
 	"github.com/rollkit/rollkit/config"
 	"github.com/rollkit/rollkit/node"
+	"github.com/rollkit/rollkit/p2p"
 	"github.com/rollkit/rollkit/store"
-
 	"github.com/rollkit/rollkit/types"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 const (
@@ -100,7 +103,7 @@ func startInProcess[T sdktypes.Application](svrCtx *server.Context, svrCfg serve
 		svrCfg.GRPC.Enable = true
 	} else {
 		svrCtx.Logger.Info("starting node with ABCI CometBFT in-process")
-		_, cleanupFn, err := startNode(ctx, cmtCfg, app, svrCtx)
+		_, rpcServer, cleanupFn, err := startNode(ctx, cmtCfg, app, svrCtx)
 		if err != nil {
 			return err
 		}
@@ -112,8 +115,7 @@ func startInProcess[T sdktypes.Application](svrCtx *server.Context, svrCfg serve
 		if svrCfg.API.Enable || svrCfg.GRPC.Enable {
 			// Re-assign for making the client available below do not use := to avoid
 			// shadowing the clientCtx variable.
-			rpcClient := rpc.NewRPCServer(nil, nil, nil)
-			clientCtx = clientCtx.WithClient(rpcClient)
+			clientCtx = clientCtx.WithClient(rpcServer)
 
 			app.RegisterTxService(clientCtx)
 			app.RegisterTendermintService(clientCtx)
@@ -242,10 +244,10 @@ func startNode(
 	cfg *cmtcfg.Config,
 	app sdktypes.Application,
 	svrCtx *server.Context,
-) (rolllkitNode node.Node, cleanupFn func(), err error) {
+) (rolllkitNode node.Node, rpcServer *rpc.RPCServer, cleanupFn func(), err error) {
 	nodeKey, err := cmtp2p.LoadOrGenNodeKey(cfg.NodeKeyFile())
 	if err != nil {
-		return nil, cleanupFn, err
+		return nil, nil, cleanupFn, err
 	}
 
 	svrCtx.Logger.Info("starting node with Rollkit in-process")
@@ -255,44 +257,44 @@ func startNode(
 	//keys in Rollkit format
 	p2pKey, err := types.GetNodeKey(nodeKey)
 	if err != nil {
-		return nil, cleanupFn, err
+		return nil, nil, cleanupFn, err
 	}
 
 	signingKey, err := types.GetNodeKey(&cmtp2p.NodeKey{PrivKey: pval.Key.PrivKey})
 	if err != nil {
-		return nil, cleanupFn, err
+		return nil, nil, cleanupFn, err
 	}
 
 	nodeConfig := config.NodeConfig{}
 	err = nodeConfig.GetViperConfig(svrCtx.Viper)
 	if err != nil {
-		return nil, cleanupFn, err
+		return nil, nil, cleanupFn, err
 	}
 	config.GetNodeConfig(&nodeConfig, cfg)
 	err = config.TranslateAddresses(&nodeConfig)
 	if err != nil {
-		return nil, cleanupFn, err
+		return nil, nil, cleanupFn, err
 	}
 
 	genDoc, err := getGenDocProvider(cfg)()
 	if err != nil {
-		return nil, cleanupFn, err
+		return nil, nil, cleanupFn, err
 	}
 
 	cmtGenDoc, err := genDoc.ToGenesisDoc()
 	if err != nil {
-		return nil, cleanupFn, err
+		return nil, nil, cleanupFn, err
 	}
 
 	// Get AppGenesis before creating the executor
 	appGenesis, err := genutiltypes.AppGenesisFromFile(cfg.GenesisFile())
 	if err != nil {
-		return nil, cleanupFn, err
+		return nil, nil, cleanupFn, err
 	}
 
 	database, err := store.NewDefaultKVStore(cfg.RootDir, "rollkit", "rollkit")
 	if err != nil {
-		return nil, cleanupFn, err
+		return nil, nil, cleanupFn, err
 	}
 
 	metrics := node.DefaultMetricsProvider(cmtcfg.DefaultInstrumentationConfig())
@@ -300,17 +302,31 @@ func startNode(
 	_, p2pMetrics := metrics(cmtGenDoc.ChainID)
 	p2pClient, err := p2p.NewClient(nodeConfig.P2P, p2pKey, cmtGenDoc.ChainID, database, svrCtx.Logger.With("module", "p2p"), p2pMetrics)
 	if err != nil {
-		return nil, cleanupFn, err
+		return nil, nil, cleanupFn, err
 	}
+
+	st := store.New(database)
 
 	executor := adapter.NewABCIExecutor(
 		app,
-		store.New(database),
+		st,
 		p2pClient,
 		svrCtx.Logger,
 		cfg,
 		appGenesis,
 	)
+
+	// TODO: pass the metrics if needed
+	cmtApp := server.NewCometABCIWrapper(app)
+	clientCreator := proxy.NewLocalClientCreator(cmtApp)
+
+	proxyApp, err := initProxyApp(clientCreator, svrCtx.Logger, proxy.NopMetrics())
+	if err != nil {
+		panic(err)
+	}
+
+	mempool := mempool.NewCListMempool(cfg.Mempool, proxyApp.Mempool(), st.Height(context.Background()))
+	executor.SetMempool(mempool)
 
 	ctxWithCancel, cancelFn := context.WithCancel(ctx)
 	cleanupFn = func() {
@@ -330,26 +346,26 @@ func startNode(
 		svrCtx.Logger,
 	)
 	if err != nil {
-		return nil, cleanupFn, err
+		return nil, nil, cleanupFn, err
 	}
 
-	server := rpc.NewRPCServer(executor, nil, nil)
-	err = server.Start()
+	rpcServer = rpc.NewRPCServer(executor, cfg.RPC, nil, nil, svrCtx.Logger)
+	err = rpcServer.Start()
 	if err != nil {
-		return nil, cleanupFn, err
+		return nil, nil, cleanupFn, err
 	}
-
-	// serv = rpc.NewServer(node, cfg.RPC, servercmtlog.CometLoggerWrapper{Logger: svrCtx.Logger})
-	// err = serv.Start()
-	// if err != nil {
-	// 	return nil, cleanupFn, err
-	// }
 
 	if err := rolllkitNode.Start(ctx); err != nil {
-		return nil, cleanupFn, err
+		return nil, nil, cleanupFn, err
 	}
 
-	return rolllkitNode, cleanupFn, nil
+	// executor must be started after the node is started
+	err = executor.Start(ctx)
+	if err != nil {
+		return nil, nil, cleanupFn, err
+	}
+
+	return rolllkitNode, rpcServer, cleanupFn, nil
 }
 
 // getGenDocProvider returns a function which returns the genesis doc from the genesis file.
@@ -434,4 +450,13 @@ func emitServerInfoMetrics() {
 	}
 
 	telemetry.SetGaugeWithLabels([]string{"server", "info"}, 1, ls)
+}
+
+func initProxyApp(clientCreator proxy.ClientCreator, logger log.Logger, metrics *proxy.Metrics) (proxy.AppConns, error) {
+	proxyApp := proxy.NewAppConns(clientCreator, metrics)
+	proxyApp.SetLogger(servercmtlog.CometLoggerWrapper{Logger: logger}.With("module", "proxy"))
+	if err := proxyApp.Start(); err != nil {
+		return nil, fmt.Errorf("error while starting proxy app connections: %w", err)
+	}
+	return proxyApp, nil
 }

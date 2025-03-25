@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
-	"github.com/cometbft/cometbft/libs/log"
+	cmtlog "github.com/cometbft/cometbft/libs/log"
 	cmtmath "github.com/cometbft/cometbft/libs/math"
 	cmtquery "github.com/cometbft/cometbft/libs/pubsub/query"
 	"github.com/cometbft/cometbft/p2p"
@@ -17,15 +20,20 @@ import (
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"github.com/cometbft/cometbft/state/indexer"
 	blockidxnull "github.com/cometbft/cometbft/state/indexer/block/null"
+	"github.com/rs/cors"
+	"golang.org/x/net/netutil"
 
+	"cosmossdk.io/log"
+	cmtcfg "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/state/txindex"
 	"github.com/cometbft/cometbft/state/txindex/null"
 	cmttypes "github.com/cometbft/cometbft/types"
+	"github.com/cosmos/cosmos-sdk/client"
+	servercmtlog "github.com/cosmos/cosmos-sdk/server/log"
 	"github.com/rollkit/go-execution-abci/adapter"
 	"github.com/rollkit/go-execution-abci/mempool"
+	"github.com/rollkit/go-execution-abci/rpc/json"
 	"github.com/rollkit/rollkit/types"
-
-	"github.com/cosmos/cosmos-sdk/client"
 )
 
 const (
@@ -48,18 +56,85 @@ type RPCServer struct {
 	adapter      *adapter.Adapter
 	txIndexer    txindex.TxIndexer
 	blockIndexer indexer.BlockIndexer
+	config       *cmtcfg.RPCConfig
+	server       http.Server
+	logger       cmtlog.Logger
+	client       rpcclient.Client
 }
 
 // Start implements client.Client.
 func (r *RPCServer) Start() error {
+	return r.startRPC()
+}
+
+func (r *RPCServer) startRPC() error {
+	if r.config.ListenAddress == "" {
+		r.logger.Info("Listen address not specified - RPC will not be exposed")
+		return nil
+	}
+	parts := strings.SplitN(r.config.ListenAddress, "://", 2)
+	if len(parts) != 2 {
+		return errors.New("invalid RPC listen address: expecting tcp://host:port")
+	}
+	proto := parts[0]
+	addr := parts[1]
+
+	listener, err := net.Listen(proto, addr)
+	if err != nil {
+		return err
+	}
+
+	if r.config.MaxOpenConnections != 0 {
+		r.logger.Debug("limiting number of connections", "limit", r.config.MaxOpenConnections)
+		listener = netutil.LimitListener(listener, r.config.MaxOpenConnections)
+	}
+
+	handler, err := json.GetHTTPHandler(r, r.logger)
+	if err != nil {
+		return err
+	}
+
+	if r.config.IsCorsEnabled() {
+		r.logger.Debug("CORS enabled",
+			"origins", r.config.CORSAllowedOrigins,
+			"methods", r.config.CORSAllowedMethods,
+			"headers", r.config.CORSAllowedHeaders,
+		)
+		c := cors.New(cors.Options{
+			AllowedOrigins: r.config.CORSAllowedOrigins,
+			AllowedMethods: r.config.CORSAllowedMethods,
+			AllowedHeaders: r.config.CORSAllowedHeaders,
+		})
+		handler = c.Handler(handler)
+	}
+
+	go func() {
+		err := r.serve(listener, handler)
+		if !errors.Is(err, http.ErrServerClosed) {
+			r.logger.Error("error while serving HTTP", "error", err)
+		}
+	}()
+
 	return nil
+}
+
+func (r *RPCServer) serve(listener net.Listener, handler http.Handler) error {
+	r.logger.Info("serving HTTP", "listen address", listener.Addr())
+	r.server = http.Server{
+		Handler:           handler,
+		ReadHeaderTimeout: time.Second * 2,
+	}
+	if r.config.TLSCertFile != "" && r.config.TLSKeyFile != "" {
+		return r.server.ServeTLS(listener, r.config.CertFile(), r.config.KeyFile())
+	}
+	return r.server.Serve(listener)
 }
 
 var _ rpcclient.Client = &RPCServer{}
 var _ client.CometRPC = &RPCServer{}
 
-func NewRPCServer(adapter *adapter.Adapter, txIndexer txindex.TxIndexer, blockIndexer indexer.BlockIndexer) *RPCServer {
-	return &RPCServer{adapter: adapter, txIndexer: txIndexer, blockIndexer: blockIndexer}
+func NewRPCServer(adapter *adapter.Adapter, cfg *cmtcfg.RPCConfig, txIndexer txindex.TxIndexer, blockIndexer indexer.BlockIndexer, logger log.Logger) *RPCServer {
+	return &RPCServer{adapter: adapter, txIndexer: txIndexer, blockIndexer: blockIndexer, config: cfg, logger: servercmtlog.CometLoggerWrapper{Logger: logger}}
 }
 
 // ABCIInfo implements client.CometRPC.
@@ -288,13 +363,26 @@ func (r *RPCServer) BlockchainInfo(ctx context.Context, minHeight int64, maxHeig
 
 // BroadcastTxAsync implements client.CometRPC.
 func (r *RPCServer) BroadcastTxAsync(ctx context.Context, tx cmttypes.Tx) (*coretypes.ResultBroadcastTx, error) {
-	err := r.adapter.Mempool.CheckTx(tx, nil, mempool.TxInfo{})
+	var res *abci.ResponseCheckTx
+	responseCh := make(chan *abci.ResponseCheckTx, 1)
+
+	err := r.adapter.Mempool.CheckTx(tx, func(response *abci.ResponseCheckTx) {
+		responseCh <- response
+	}, mempool.TxInfo{})
+
 	if err != nil {
 		return nil, err
 	}
+
+	// Wait for the callback to be called
+	res = <-responseCh
+
 	return &coretypes.ResultBroadcastTx{
-		Code: abci.CodeTypeOK,
-		Hash: tx.Hash(),
+		Code:      res.Code,
+		Data:      res.Data,
+		Log:       res.Log,
+		Codespace: res.Codespace,
+		Hash:      tx.Hash(),
 	}, nil
 }
 
@@ -409,8 +497,7 @@ func (r *RPCServer) BroadcastTxSync(ctx context.Context, tx cmttypes.Tx) (*coret
 	// Note: we have to do this here because, unlike the tendermint mempool reactor, there
 	// is no routine that gossips transactions after they enter the pool
 	if res.Code == abci.CodeTypeOK {
-		// TODO: implement gossiping
-		// err = r.adapter.p2pClient.GossipTx(ctx, tx)
+		err = r.adapter.TxGossiper.Publish(ctx, tx)
 		if err != nil {
 			// the transaction must be removed from the mempool if it cannot be gossiped.
 			// if this does not occur, then the user will not be able to try again using
@@ -636,10 +723,20 @@ func (r *RPCServer) BroadcastEvidence(_ context.Context, evidence cmttypes.Evide
 
 // CheckTx implements client.Client.
 func (r *RPCServer) CheckTx(ctx context.Context, tx cmttypes.Tx) (*coretypes.ResultCheckTx, error) {
-	res, err := r.adapter.App.CheckTx(&abci.RequestCheckTx{Tx: tx})
+	var res *abci.ResponseCheckTx
+	responseCh := make(chan *abci.ResponseCheckTx, 1)
+
+	err := r.adapter.Mempool.CheckTx(tx, func(response *abci.ResponseCheckTx) {
+		responseCh <- response
+	}, mempool.TxInfo{})
+
 	if err != nil {
 		return nil, err
 	}
+
+	// Wait for the callback to be called
+	res = <-responseCh
+
 	return &coretypes.ResultCheckTx{ResponseCheckTx: *res}, nil
 }
 
@@ -779,7 +876,11 @@ func (r *RPCServer) OnStart() error {
 
 // OnStop implements client.Client.
 func (r *RPCServer) OnStop() {
-	panic("unimplemented")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := r.server.Shutdown(ctx); err != nil {
+		r.logger.Error("error while shutting down RPC server", "error", err)
+	}
 }
 
 // Quit implements client.Client.
@@ -793,8 +894,8 @@ func (r *RPCServer) Reset() error {
 }
 
 // SetLogger implements client.Client.
-func (r *RPCServer) SetLogger(log.Logger) {
-	panic("unimplemented")
+func (r *RPCServer) SetLogger(logger cmtlog.Logger) {
+	r.logger = logger
 }
 
 // Stop implements client.Client.

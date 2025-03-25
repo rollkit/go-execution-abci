@@ -2,15 +2,15 @@ package adapter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"cosmossdk.io/log"
 	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/cometbft/cometbft/config"
-	"github.com/cometbft/cometbft/proxy"
+	corep2p "github.com/cometbft/cometbft/p2p"
 	cmtypes "github.com/cometbft/cometbft/types"
-	"github.com/cosmos/cosmos-sdk/server"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	"github.com/rollkit/go-execution-abci/mempool"
@@ -37,6 +37,7 @@ type Adapter struct {
 	App        servertypes.ABCI
 	Store      store.Store
 	Mempool    mempool.Mempool
+	MempoolIDs *mempool.MempoolIDs
 	P2PClient  *rollkitp2p.Client
 	TxGossiper *p2p.Gossiper
 	EventBus   *cmtypes.EventBus
@@ -63,42 +64,68 @@ func NewABCIExecutor(
 		P2PClient:  p2pClient,
 		CometCfg:   cfg,
 		AppGenesis: appGenesis,
+		MempoolIDs: mempool.NewMempoolIDs(),
 	}
-
-	// TODO: pass the metrics if needed
-	cmtApp := server.NewCometABCIWrapper(app)
-	clientCreator := proxy.NewLocalClientCreator(cmtApp)
-
-	proxyApp, err := initProxyApp(clientCreator, logger, nil)
-	if err != nil {
-		panic(err)
-	}
-
-	mempool := mempool.NewCListMempool(cfg.Mempool, proxyApp.Mempool(), a.Store.Height(context.Background()))
-	a.Mempool = mempool
 
 	return a
 }
 
-func initProxyApp(clientCreator proxy.ClientCreator, logger log.Logger, metrics *proxy.Metrics) (proxy.AppConns, error) {
-	proxyApp := proxy.NewAppConns(clientCreator, metrics)
-	// proxyApp.SetLogger(logger.With("module", "proxy"))
-	if err := proxyApp.Start(); err != nil {
-		return nil, fmt.Errorf("error while starting proxy app connections: %w", err)
-	}
-	return proxyApp, nil
+func (a *Adapter) SetMempool(mempool mempool.Mempool) {
+	a.Mempool = mempool
 }
 
 func (a *Adapter) Start(ctx context.Context) error {
 	var err error
 	topic := fmt.Sprintf("%s-tx", a.AppGenesis.ChainID)
-	a.TxGossiper, err = p2p.NewGossiper(a.P2PClient.Host(), a.P2PClient.PubSub(), topic, a.Logger)
+	a.TxGossiper, err = p2p.NewGossiper(a.P2PClient.Host(), a.P2PClient.PubSub(), topic, a.Logger, p2p.WithValidator(
+		a.newTxValidator(ctx),
+	))
 	if err != nil {
 		return err
 	}
+
 	go a.TxGossiper.ProcessMessages(ctx)
 
 	return nil
+}
+
+// TODO: readd metrics
+func (a *Adapter) newTxValidator(ctx context.Context) p2p.GossipValidator {
+	return func(m *p2p.GossipMessage) bool {
+		a.Logger.Debug("transaction received", "bytes", len(m.Data))
+		// msgBytes := m.Data
+		// labels := []string{
+		// 	"peer_id", m.From.String(),
+		// 	"chID", n.genesis.ChainID,
+		// }
+		// metrics.PeerReceiveBytesTotal.With(labels...).Add(float64(len(msgBytes)))
+		// metrics.MessageReceiveBytesTotal.With("message_type", "tx").Add(float64(len(msgBytes)))
+		checkTxResCh := make(chan *abci.ResponseCheckTx, 1)
+		err := a.Mempool.CheckTx(m.Data, func(resp *abci.ResponseCheckTx) {
+			select {
+			case <-ctx.Done():
+				return
+			case checkTxResCh <- resp:
+			}
+		}, mempool.TxInfo{
+			SenderID:    a.MempoolIDs.GetForPeer(m.From),
+			SenderP2PID: corep2p.ID(m.From),
+		})
+		switch {
+		case errors.Is(err, mempool.ErrTxInCache):
+			return true
+		case errors.Is(err, mempool.ErrMempoolIsFull{}):
+			return true
+		case errors.Is(err, mempool.ErrTxTooLarge{}):
+			return false
+		case errors.Is(err, mempool.ErrPreCheck{}):
+			return false
+		default:
+		}
+		checkTxResp := <-checkTxResCh
+
+		return checkTxResp.Code == abci.CodeTypeOK
+	}
 }
 
 // InitChain implements execution.Executor.

@@ -72,8 +72,8 @@ The adapter can be used to create a Rollkit node with an ABCI application:
 ```go
 import (
     "github.com/rollkit/go-execution-abci/adapter"
-    "github.com/rollkit/rollkit/store"
-    rollkitp2p "github.com/rollkit/rollkit/p2p"
+    "github.com/rollkit/rollkit/pkg/store"
+    rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
     // ... other imports
 )
 

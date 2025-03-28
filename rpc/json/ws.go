@@ -9,7 +9,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/rollkit/rollkit/third_party/log"
+	"github.com/cometbft/cometbft/libs/log"
 )
 
 type wsConn struct {

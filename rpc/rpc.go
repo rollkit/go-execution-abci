@@ -25,6 +25,7 @@ import (
 
 	"cosmossdk.io/log"
 	cmtcfg "github.com/cometbft/cometbft/config"
+	cmtp2p "github.com/cometbft/cometbft/p2p"
 	"github.com/cometbft/cometbft/state/txindex"
 	"github.com/cometbft/cometbft/state/txindex/null"
 	cmttypes "github.com/cometbft/cometbft/types"
@@ -239,29 +240,31 @@ func (r *RPCServer) BlockByHash(ctx context.Context, hash []byte) (*coretypes.Re
 
 // BlockResults implements client.CometRPC.
 func (r *RPCServer) BlockResults(ctx context.Context, height *int64) (*coretypes.ResultBlockResults, error) {
-	var h uint64
-	if height == nil {
-		h = r.adapter.Store.Height(ctx)
-	} else {
-		h = uint64(*height)
-	}
-	header, _, err := r.adapter.Store.GetBlockData(ctx, h)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := r.adapter.Store.GetBlockResponses(ctx, h)
-	if err != nil {
-		return nil, err
-	}
+	// var h uint64
+	// if height == nil {
+	// 	h = r.adapter.Store.Height(ctx)
+	// } else {
+	// 	h = uint64(*height)
+	// }
+	// header, _, err := r.adapter.Store.GetBlockData(ctx, h)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	return &coretypes.ResultBlockResults{
-		Height:                int64(h), //nolint:gosec
-		TxsResults:            resp.TxResults,
-		FinalizeBlockEvents:   resp.Events,
-		ValidatorUpdates:      resp.ValidatorUpdates,
-		ConsensusParamUpdates: resp.ConsensusParamUpdates,
-		AppHash:               header.Header.AppHash,
-	}, nil
+	// TODO(facu): implement
+	// resp, err := r.adapter.Store.GetBlockResponses(ctx, h)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	return &coretypes.ResultBlockResults{}, nil
+	// 	Height:                int64(h), //nolint:gosec
+	// 	TxsResults:            resp.TxResults,
+	// 	FinalizeBlockEvents:   resp.Events,
+	// 	ValidatorUpdates:      resp.ValidatorUpdates,
+	// 	ConsensusParamUpdates: resp.ConsensusParamUpdates,
+	// 	AppHash:               header.Header.AppHash,
+	// }, nil
 }
 
 // BlockSearch implements client.CometRPC.
@@ -527,12 +530,11 @@ func (r *RPCServer) Commit(ctx context.Context, height *int64) (*coretypes.Resul
 	}
 
 	// we should have a single validator
-	if len(header.Validators.Validators) == 0 {
+	if len(header.ProposerAddress) == 0 {
 		return nil, errors.New("empty validator set found in block")
 	}
 
-	val := header.Validators.Validators[0].Address
-	commit := GetABCICommit(heightValue, header.Hash(), val, header.Time(), header.Signature)
+	commit := getABCICommit(heightValue, header.Hash(), header.ProposerAddress, header.Time(), header.Signature)
 
 	block, err := ToABCIBlock(header, data)
 	if err != nil {
@@ -557,9 +559,10 @@ func (r *RPCServer) Status(ctx context.Context) (*coretypes.ResultStatus, error)
 	return &coretypes.ResultStatus{
 		NodeInfo: p2p.DefaultNodeInfo{}, // TODO: fill this in
 		SyncInfo: coretypes.SyncInfo{
-			LatestBlockHash:   cmtbytes.HexBytes(info.LastBlockAppHash),
+			// LatestBlockHash:   cmtbytes.HexBytes(info.LastBlockAppHash), // TODO: fill this in  latestBlockMeta.BlockID.Hash
+			LatestAppHash:     cmtbytes.HexBytes(info.LastBlockAppHash),
 			LatestBlockHeight: info.LastBlockHeight,
-			// LatestBlockTime:   s.LastBlockTime, // TODO: fill this in
+			LatestBlockTime:   s.LastBlockTime,
 		},
 		ValidatorInfo: coretypes.ValidatorInfo{
 			Address:     s.Validators.Proposer.Address,
@@ -585,13 +588,14 @@ func (r *RPCServer) Tx(ctx context.Context, hash []byte, prove bool) (*coretypes
 
 	var proof cmttypes.TxProof
 	if prove {
-		_, data, _ := r.adapter.Store.GetBlockData(ctx, uint64(height))
-		blockProof := data.Txs.Proof(int(index)) // XXX: overflow on 32-bit machines
-		proof = cmttypes.TxProof{
-			RootHash: blockProof.RootHash,
-			Data:     cmttypes.Tx(blockProof.Data),
-			Proof:    blockProof.Proof,
-		}
+		// TODO(facu): implement proofs?
+		// _, data, _ := r.adapter.Store.GetBlockData(ctx, uint64(height))
+		// blockProof := data.Txs.Proof(int(index)) // XXX: overflow on 32-bit machines
+		// proof = cmttypes.TxProof{
+		// 	RootHash: blockProof.RootHash,
+		// 	Data:     cmttypes.Tx(blockProof.Data),
+		// 	Proof:    blockProof.Proof,
+		// }
 	}
 
 	return &coretypes.ResultTx{
@@ -743,7 +747,7 @@ func (r *RPCServer) CheckTx(ctx context.Context, tx cmttypes.Tx) (*coretypes.Res
 
 // ConsensusParams implements client.Client.
 func (r *RPCServer) ConsensusParams(ctx context.Context, height *int64) (*coretypes.ResultConsensusParams, error) {
-	state, err := r.adapter.Store.GetState(ctx)
+	state, err := r.adapter.LoadState(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -845,10 +849,13 @@ func (r *RPCServer) NetInfo(context.Context) (*coretypes.ResultNetInfo, error) {
 	res.NPeers = len(peers)
 	for _, peer := range peers {
 		res.Peers = append(res.Peers, coretypes.Peer{
-			NodeInfo:         peer.NodeInfo,
-			IsOutbound:       peer.IsOutbound,
-			ConnectionStatus: peer.ConnectionStatus,
-			RemoteIP:         peer.RemoteIP,
+			NodeInfo: cmtp2p.DefaultNodeInfo{
+				DefaultNodeID: cmtp2p.ID(peer.NodeInfo.DefaultNodeID),
+				ListenAddr:    peer.NodeInfo.ListenAddr,
+				Network:       peer.NodeInfo.Network,
+			},
+			IsOutbound: peer.IsOutbound,
+			RemoteIP:   peer.RemoteIP,
 		})
 	}
 

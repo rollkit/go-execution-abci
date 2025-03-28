@@ -16,7 +16,7 @@ import (
 	"github.com/gorilla/rpc/v2"
 	"github.com/gorilla/rpc/v2/json2"
 
-	"github.com/rollkit/rollkit/third_party/log"
+	"github.com/cometbft/cometbft/libs/log"
 )
 
 type handler struct {

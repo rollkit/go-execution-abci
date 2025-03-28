@@ -25,17 +25,23 @@ import (
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	"github.com/hashicorp/go-metrics"
 	"github.com/rollkit/go-execution-abci/adapter"
+	"github.com/spf13/cobra"
 
 	"github.com/cometbft/cometbft/mempool"
 	"github.com/rollkit/go-execution-abci/rpc"
-	"github.com/rollkit/rollkit/config"
+	"github.com/rollkit/rollkit/core/sequencer"
 	"github.com/rollkit/rollkit/node"
-	"github.com/rollkit/rollkit/p2p"
-	"github.com/rollkit/rollkit/store"
-	"github.com/rollkit/rollkit/types"
+	"github.com/rollkit/rollkit/pkg/config"
+	"github.com/rollkit/rollkit/pkg/genesis"
+	"github.com/rollkit/rollkit/pkg/p2p"
+	"github.com/rollkit/rollkit/pkg/p2p/key"
+	"github.com/rollkit/rollkit/pkg/store"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	goda "github.com/rollkit/go-da/proxy"
+	rollkitda "github.com/rollkit/rollkit/da"
 )
 
 const (
@@ -45,26 +51,28 @@ const (
 )
 
 // StartHandler starts the Rollkit server with the provided application and options.
-func StartHandler[T sdktypes.Application](svrCtx *server.Context, clientCtx client.Context, appCreator sdktypes.AppCreator, inProcess bool, opts server.StartCmdOptions) error {
-	svrCfg, err := getAndValidateConfig(svrCtx)
-	if err != nil {
-		return err
+func StartHandler[T sdktypes.Application](rootCmd *cobra.Command) func(svrCtx *server.Context, clientCtx client.Context, appCreator sdktypes.AppCreator, inProcess bool, opts server.StartCmdOptions) error {
+	return func(svrCtx *server.Context, clientCtx client.Context, appCreator sdktypes.AppCreator, inProcess bool, opts server.StartCmdOptions) error {
+		svrCfg, err := getAndValidateConfig(svrCtx)
+		if err != nil {
+			return err
+		}
+
+		app, appCleanupFn, err := startApp[T](svrCtx, appCreator, opts)
+		if err != nil {
+			return err
+		}
+		defer appCleanupFn()
+
+		metrics, err := startTelemetry(svrCfg)
+		if err != nil {
+			return err
+		}
+
+		emitServerInfoMetrics()
+
+		return startInProcess[T](rootCmd, svrCtx, svrCfg, clientCtx, app, metrics, opts)
 	}
-
-	app, appCleanupFn, err := startApp[T](svrCtx, appCreator, opts)
-	if err != nil {
-		return err
-	}
-	defer appCleanupFn()
-
-	metrics, err := startTelemetry(svrCfg)
-	if err != nil {
-		return err
-	}
-
-	emitServerInfoMetrics()
-
-	return startInProcess[T](svrCtx, svrCfg, clientCtx, app, metrics, opts)
 }
 
 func startApp[T sdktypes.Application](svrCtx *server.Context, appCreator sdktypes.AppCreator, opts server.StartCmdOptions) (app sdktypes.Application, cleanupFn func(), err error) {
@@ -90,12 +98,11 @@ func startApp[T sdktypes.Application](svrCtx *server.Context, appCreator sdktype
 	return app, cleanupFn, nil
 }
 
-func startInProcess[T sdktypes.Application](svrCtx *server.Context, svrCfg serverconfig.Config, clientCtx client.Context, app sdktypes.Application,
+func startInProcess[T sdktypes.Application](rootCmd *cobra.Command, svrCtx *server.Context, svrCfg serverconfig.Config, clientCtx client.Context, app sdktypes.Application,
 	metrics *telemetry.Metrics, opts server.StartCmdOptions,
 ) error {
 	cmtCfg := svrCtx.Config
 	gRPCOnly := svrCtx.Viper.GetBool(flagGRPCOnly)
-
 	g, ctx := getCtx(svrCtx, true)
 
 	if gRPCOnly {
@@ -104,7 +111,7 @@ func startInProcess[T sdktypes.Application](svrCtx *server.Context, svrCfg serve
 		svrCfg.GRPC.Enable = true
 	} else {
 		svrCtx.Logger.Info("starting node with ABCI CometBFT in-process")
-		_, rpcServer, cleanupFn, err := startNode(ctx, cmtCfg, app, svrCtx)
+		_, rpcServer, cleanupFn, err := startNode(ctx, rootCmd, cmtCfg, app, svrCtx)
 		if err != nil {
 			return err
 		}
@@ -242,40 +249,35 @@ func startTelemetry(cfg serverconfig.Config) (*telemetry.Metrics, error) {
 
 func startNode(
 	ctx context.Context,
+	rootCmd *cobra.Command,
 	cfg *cmtcfg.Config,
 	app sdktypes.Application,
 	svrCtx *server.Context,
 ) (rolllkitNode node.Node, rpcServer *rpc.RPCServer, cleanupFn func(), err error) {
-	nodeKey, err := cmtp2p.LoadOrGenNodeKey(cfg.NodeKeyFile())
-	if err != nil {
-		return nil, nil, cleanupFn, err
-	}
-
 	svrCtx.Logger.Info("starting node with Rollkit in-process")
 
 	pval := pvm.LoadOrGenFilePV(cfg.PrivValidatorKeyFile(), cfg.PrivValidatorStateFile())
-
-	//keys in Rollkit format
-	p2pKey, err := types.GetNodeKey(nodeKey)
+	signingKey, err := GetNodeKey(&cmtp2p.NodeKey{PrivKey: pval.Key.PrivKey})
 	if err != nil {
 		return nil, nil, cleanupFn, err
 	}
 
-	signingKey, err := types.GetNodeKey(&cmtp2p.NodeKey{PrivKey: pval.Key.PrivKey})
+	nodeKey := &key.NodeKey{PrivKey: signingKey, PubKey: signingKey.GetPublic()}
+
+	err = config.CreateInitialConfig(svrCtx.Viper.GetString("home"))
+	if err != nil {
+		// return nil, nil, cleanupFn, err
+	}
+
+	rollkitcfg, err := config.LoadNodeConfig(rootCmd, svrCtx.Viper.GetString("home"))
 	if err != nil {
 		return nil, nil, cleanupFn, err
 	}
 
-	nodeConfig := config.NodeConfig{}
-	err = nodeConfig.GetViperConfig(svrCtx.Viper)
-	if err != nil {
-		return nil, nil, cleanupFn, err
-	}
-	config.GetNodeConfig(&nodeConfig, cfg)
-	err = config.TranslateAddresses(&nodeConfig)
-	if err != nil {
-		return nil, nil, cleanupFn, err
-	}
+	// err = config.TranslateAddresses(&rollkitcfg)
+	// if err != nil {
+	// 	return nil, nil, cleanupFn, fmt.Errorf("failed to translate addresses: %w", err)
+	// }
 
 	genDoc, err := getGenDocProvider(cfg)()
 	if err != nil {
@@ -293,15 +295,15 @@ func startNode(
 		return nil, nil, cleanupFn, err
 	}
 
-	database, err := store.NewDefaultKVStore(cfg.RootDir, "rollkit", "rollkit")
+	database, err := store.NewDefaultKVStore(cfg.RootDir, "data", "rollkit")
 	if err != nil {
 		return nil, nil, cleanupFn, err
 	}
 
-	metrics := node.DefaultMetricsProvider(cmtcfg.DefaultInstrumentationConfig())
+	metrics := node.DefaultMetricsProvider(config.DefaultInstrumentationConfig())
 
 	_, p2pMetrics := metrics(cmtGenDoc.ChainID)
-	p2pClient, err := p2p.NewClient(nodeConfig.P2P, p2pKey, cmtGenDoc.ChainID, database, svrCtx.Logger.With("module", "p2p"), p2pMetrics)
+	p2pClient, err := p2p.NewClient(rollkitcfg, cmtGenDoc.ChainID, nodeKey, database, svrCtx.Logger.With("module", "p2p"), p2pMetrics)
 	if err != nil {
 		return nil, nil, cleanupFn, err
 	}
@@ -334,14 +336,34 @@ func startNode(
 		cancelFn()
 	}
 
+	rollkitGenesis := genesis.NewGenesis(
+		cmtGenDoc.ChainID,
+		uint64(cmtGenDoc.InitialHeight),
+		cmtGenDoc.GenesisTime,
+		genesis.GenesisExtraData{
+			ProposerAddress: cmtGenDoc.Validators[0].Address,
+		},
+		cmtGenDoc.AppState, // TODO(facu): maybe we should pass the entire gendoc
+	)
+
+	dalc, err := goda.NewClient(rollkitcfg.DA.Address, rollkitcfg.DA.AuthToken)
+	if err != nil {
+		return nil, nil, cleanupFn, err
+	}
+
+	adapter := &daAdapter{dalc}
+
+	rollkitda := rollkitda.NewDAClient(adapter, 1, 1, []byte(cmtGenDoc.ChainID), []byte{}, svrCtx.Logger)
+
 	rolllkitNode, err = node.NewNode(
 		ctxWithCancel,
-		nodeConfig,
+		rollkitcfg,
 		executor,
-		node.NewDummySequencer(),
-		p2pClient,
+		sequencer.NewDummySequencer(),
+		rollkitda,
 		signingKey,
-		cmtGenDoc,
+		p2pClient,
+		rollkitGenesis,
 		database,
 		metrics,
 		svrCtx.Logger,
@@ -353,17 +375,23 @@ func startNode(
 	rpcServer = rpc.NewRPCServer(executor, cfg.RPC, nil, nil, svrCtx.Logger)
 	err = rpcServer.Start()
 	if err != nil {
-		return nil, nil, cleanupFn, err
+		return nil, nil, cleanupFn, fmt.Errorf("failed to start abci rpc server: %w", err)
 	}
 
-	if err := rolllkitNode.Start(ctx); err != nil {
-		return nil, nil, cleanupFn, err
+	fmt.Println("starting node")
+	err = rolllkitNode.Run(ctx)
+	if err != nil {
+		if err == context.Canceled {
+			return nil, nil, cleanupFn, nil
+		}
+		return nil, nil, cleanupFn, fmt.Errorf("failed to start node: %w", err)
 	}
 
 	// executor must be started after the node is started
+	fmt.Println("starting executor")
 	err = executor.Start(ctx)
 	if err != nil {
-		return nil, nil, cleanupFn, err
+		return nil, nil, cleanupFn, fmt.Errorf("failed to start executor: %w", err)
 	}
 
 	return rolllkitNode, rpcServer, cleanupFn, nil

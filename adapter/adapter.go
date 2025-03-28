@@ -18,8 +18,8 @@ import (
 	"github.com/cometbft/cometbft/mempool"
 	"github.com/rollkit/go-execution-abci/p2p"
 	"github.com/rollkit/rollkit/core/execution"
-	rollkitp2p "github.com/rollkit/rollkit/p2p"
-	"github.com/rollkit/rollkit/store"
+	rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
+	"github.com/rollkit/rollkit/pkg/store"
 )
 
 var _ execution.Executor = &Adapter{}

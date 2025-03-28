@@ -8,7 +8,7 @@ import (
 	cmtstate "github.com/cometbft/cometbft/state"
 	cmtypes "github.com/cometbft/cometbft/types"
 	proto "github.com/cosmos/gogoproto/proto"
-	"github.com/rollkit/rollkit/store"
+	"github.com/rollkit/rollkit/pkg/store"
 )
 
 const stateKey = "abci-s"

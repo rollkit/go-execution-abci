@@ -791,7 +791,7 @@ func (r *RPCServer) Genesis(context.Context) (*coretypes.ResultGenesis, error) {
 
 // GenesisChunked implements client.Client.
 func (r *RPCServer) GenesisChunked(context.Context, uint) (*coretypes.ResultGenesisChunk, error) {
-	panic("unimplemented")
+	return nil, errors.New("GenesisChunked RPC method is not yet implemented")
 }
 
 // Header implements client.Client.

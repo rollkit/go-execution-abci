@@ -936,7 +936,7 @@ func (r *RPCServer) UnconfirmedTxs(ctx context.Context, limitPtr *int) (*coretyp
 // Unsubscribe implements client.Client.
 func (r *RPCServer) Unsubscribe(ctx context.Context, subscriber string, query string) error {
 	// TODO: implement EventBus
-	panic("unimplemented")
+	return errors.New("EventBus subscription functionality is not yet implemented")
 }
 
 // UnsubscribeAll implements client.Client.

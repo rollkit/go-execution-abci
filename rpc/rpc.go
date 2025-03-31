@@ -972,8 +972,9 @@ func validatePerPage(perPagePtr *int) int {
 
 func validatePage(pagePtr *int, perPage, totalCount int) (int, error) {
 	if perPage < 1 {
-		panic(fmt.Sprintf("zero or negative perPage: %d", perPage))
-	}
+		if perPage < 1 {
+			return 0, fmt.Errorf("invalid perPage parameter: %d (must be positive)", perPage)
+		}
 
 	if pagePtr == nil { // no page parameter
 		return 1, nil

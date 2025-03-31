@@ -8,7 +8,7 @@ require (
 	github.com/cosmos/cosmos-sdk v0.50.12
 	github.com/gorilla/rpc v1.2.1
 	github.com/rollkit/go-da v0.9.0
-	github.com/rollkit/rollkit/core v0.0.0-00010101000000-000000000000
+
 )
 
 require (
@@ -27,6 +27,7 @@ require (
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/elastic/gosigar v0.14.3 // indirect
 	github.com/fatih/color v1.15.0 // indirect
+	github.com/filecoin-project/go-jsonrpc v0.6.0 // indirect
 	github.com/flynn/noise v1.1.0 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
@@ -106,6 +107,7 @@ require (
 	github.com/quic-go/webtransport-go v0.8.1-0.20241018022711-4ac2c9250e66 // indirect
 	github.com/raulk/go-watchdog v1.3.0 // indirect
 	github.com/rollkit/go-sequencing v0.4.1 // indirect
+	github.com/rollkit/rollkit/core v0.0.0-20250331155808-550bb03f821a // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/whyrusleeping/go-keyspace v0.0.0-20160322163242-5b898ac5add1 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
@@ -120,6 +122,7 @@ require (
 	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
 	golang.org/x/mod v0.23.0 // indirect
 	golang.org/x/tools v0.30.0 // indirect
+	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	gonum.org/v1/gonum v0.15.1 // indirect
 )
 
@@ -277,12 +280,4 @@ require (
 	nhooyr.io/websocket v1.8.6 // indirect
 	pgregory.net/rapid v1.1.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
-)
-
-replace (
-	github.com/rollkit/rollkit => ../rollkit
-	github.com/rollkit/rollkit/block => ../rollkit/block
-	github.com/rollkit/rollkit/core => ../rollkit/core
-	github.com/rollkit/rollkit/da => ../rollkit/da
-	github.com/rollkit/rollkit/p2p => ../rollkit/p2p
 )

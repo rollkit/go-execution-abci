@@ -918,7 +918,7 @@ func (r *RPCServer) String() string {
 
 // Subscribe implements client.Client.
 func (r *RPCServer) Subscribe(ctx context.Context, subscriber string, query string, outCapacity ...int) (out <-chan coretypes.ResultEvent, err error) {
-	panic("unimplemented")
+	return nil, errors.New("event subscription functionality is not yet implemented")
 }
 
 // UnconfirmedTxs implements client.Client.

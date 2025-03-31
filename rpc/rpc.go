@@ -942,7 +942,7 @@ func (r *RPCServer) Unsubscribe(ctx context.Context, subscriber string, query st
 // UnsubscribeAll implements client.Client.
 func (r *RPCServer) UnsubscribeAll(ctx context.Context, subscriber string) error {
 	// TODO: implement EventBus
-	panic("unimplemented")
+	return errors.New("EventBus subscription functionality is not yet implemented")
 }
 
 //----------------------------------------------

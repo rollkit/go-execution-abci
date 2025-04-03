@@ -333,10 +333,15 @@ func (r *RPCServer) BlockSearch(ctx context.Context, query string, pagePtr *int,
 func (r *RPCServer) BlockchainInfo(ctx context.Context, minHeight int64, maxHeight int64) (*coretypes.ResultBlockchainInfo, error) {
 	const limit int64 = 20
 
+	height, err := r.adapter.Store.Height(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	// Currently blocks are not pruned and are synced linearly so the base height is 0
-	minHeight, maxHeight, err := filterMinMax(
+	minHeight, maxHeight, err = filterMinMax(
 		0,
-		int64(r.adapter.Store.Height(ctx)), //nolint:gosec
+		int64(height),
 		minHeight,
 		maxHeight,
 		limit)
@@ -359,8 +364,13 @@ func (r *RPCServer) BlockchainInfo(ctx context.Context, minHeight int64, maxHeig
 		}
 	}
 
+	height, err = r.adapter.Store.Height(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	return &coretypes.ResultBlockchainInfo{
-		LastHeight: int64(r.adapter.Store.Height(ctx)), //nolint:gosec
+		LastHeight: int64(height), //nolint:gosec
 		BlockMetas: blocks,
 	}, nil
 }
@@ -695,6 +705,11 @@ func (r *RPCServer) Validators(ctx context.Context, height *int64, page *int, pe
 	validators := s.Validators.Validators
 	totalCount := len(validators)
 
+	currentHeight, err := r.adapter.Store.Height(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	// Handle pagination
 	start := 0
 	end := totalCount
@@ -704,7 +719,7 @@ func (r *RPCServer) Validators(ctx context.Context, height *int64, page *int, pe
 
 		if start >= totalCount {
 			return &coretypes.ResultValidators{
-				BlockHeight: int64(r.adapter.Store.Height(ctx)),
+				BlockHeight: int64(currentHeight),
 				Validators:  []*cmttypes.Validator{},
 				Total:       totalCount,
 			}, nil
@@ -713,7 +728,7 @@ func (r *RPCServer) Validators(ctx context.Context, height *int64, page *int, pe
 	}
 
 	return &coretypes.ResultValidators{
-		BlockHeight: int64(r.adapter.Store.Height(ctx)),
+		BlockHeight: int64(currentHeight),
 		Validators:  validators,
 		Total:       totalCount,
 	}, nil
@@ -994,7 +1009,11 @@ func validatePage(pagePtr *int, perPage, totalCount int) (int, error) {
 func (r *RPCServer) normalizeHeight(height *int64) uint64 {
 	var heightValue uint64
 	if height == nil {
-		heightValue = r.adapter.Store.Height(context.Background())
+		var err error
+		heightValue, err = r.adapter.Store.Height(context.Background())
+		if err != nil {
+			return 0
+		}
 	} else {
 		heightValue = uint64(*height)
 	}

@@ -339,10 +339,15 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 		txsBytes[i] = tx
 	}
 
+	currentHeight, err := a.Store.Height(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	resp, err := a.App.PrepareProposal(&abci.RequestPrepareProposal{
 		Txs:                txsBytes,
 		MaxTxBytes:         int64(s.ConsensusParams.Block.MaxBytes),
-		Height:             int64(a.Store.Height(ctx) + 1),
+		Height:             int64(currentHeight + 1),
 		Time:               time.Now(),
 		NextValidatorsHash: s.NextValidators.Hash(),
 		ProposerAddress:    s.Validators.Proposer.Address,

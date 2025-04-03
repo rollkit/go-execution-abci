@@ -35,7 +35,9 @@ import (
 	"github.com/rollkit/rollkit/pkg/genesis"
 	"github.com/rollkit/rollkit/pkg/p2p"
 	"github.com/rollkit/rollkit/pkg/p2p/key"
+	filesigner "github.com/rollkit/rollkit/pkg/signer/file"
 	"github.com/rollkit/rollkit/pkg/store"
+	rollkittypes "github.com/rollkit/rollkit/types"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -274,6 +276,11 @@ func startNode(
 		return nil, nil, cleanupFn, err
 	}
 
+	signer, err := filesigner.NewFileSystemSigner(rollkitcfg.ConfigDir, []byte{})
+	if err != nil {
+		return nil, nil, cleanupFn, err
+	}
+
 	// err = config.TranslateAddresses(&rollkitcfg)
 	// if err != nil {
 	// 	return nil, nil, cleanupFn, fmt.Errorf("failed to translate addresses: %w", err)
@@ -328,7 +335,11 @@ func startNode(
 		panic(err)
 	}
 
-	mempool := mempool.NewCListMempool(cfg.Mempool, proxyApp.Mempool(), int64(st.Height(context.Background())))
+	height, err := st.Height(context.Background())
+	if err != nil {
+		return nil, nil, cleanupFn, err
+	}
+	mempool := mempool.NewCListMempool(cfg.Mempool, proxyApp.Mempool(), int64(height))
 	executor.SetMempool(mempool)
 
 	ctxWithCancel, cancelFn := context.WithCancel(ctx)
@@ -336,13 +347,20 @@ func startNode(
 		cancelFn()
 	}
 
+	signerpb, err := signer.GetPublic()
+	if err != nil {
+		return nil, nil, cleanupFn, err
+	}
+	rollkitSigner, err := rollkittypes.NewSigner(signerpb)
+	if err != nil {
+		return nil, nil, cleanupFn, err
+	}
+
 	rollkitGenesis := genesis.NewGenesis(
 		cmtGenDoc.ChainID,
 		uint64(cmtGenDoc.InitialHeight),
 		cmtGenDoc.GenesisTime,
-		genesis.GenesisExtraData{
-			ProposerAddress: cmtGenDoc.Validators[0].Address,
-		},
+		rollkitSigner.Address,
 		cmtGenDoc.AppState, // TODO(facu): maybe we should pass the entire gendoc
 	)
 
@@ -361,7 +379,8 @@ func startNode(
 		executor,
 		sequencer.NewDummySequencer(),
 		rollkitda,
-		signingKey,
+		signer,
+		*nodeKey,
 		p2pClient,
 		rollkitGenesis,
 		database,

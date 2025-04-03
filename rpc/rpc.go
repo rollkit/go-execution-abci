@@ -806,7 +806,7 @@ func (r *RPCServer) Genesis(context.Context) (*coretypes.ResultGenesis, error) {
 
 // GenesisChunked implements client.Client.
 func (r *RPCServer) GenesisChunked(context.Context, uint) (*coretypes.ResultGenesisChunk, error) {
-	panic("unimplemented")
+	return nil, errors.New("GenesisChunked RPC method is not yet implemented")
 }
 
 // Header implements client.Client.
@@ -933,7 +933,7 @@ func (r *RPCServer) String() string {
 
 // Subscribe implements client.Client.
 func (r *RPCServer) Subscribe(ctx context.Context, subscriber string, query string, outCapacity ...int) (out <-chan coretypes.ResultEvent, err error) {
-	panic("unimplemented")
+	return nil, errors.New("event subscription functionality is not yet implemented")
 }
 
 // UnconfirmedTxs implements client.Client.
@@ -951,13 +951,13 @@ func (r *RPCServer) UnconfirmedTxs(ctx context.Context, limitPtr *int) (*coretyp
 // Unsubscribe implements client.Client.
 func (r *RPCServer) Unsubscribe(ctx context.Context, subscriber string, query string) error {
 	// TODO: implement EventBus
-	panic("unimplemented")
+	return errors.New("EventBus subscription functionality is not yet implemented")
 }
 
 // UnsubscribeAll implements client.Client.
 func (r *RPCServer) UnsubscribeAll(ctx context.Context, subscriber string) error {
 	// TODO: implement EventBus
-	panic("unimplemented")
+	return errors.New("EventBus subscription functionality is not yet implemented")
 }
 
 //----------------------------------------------
@@ -987,7 +987,8 @@ func validatePerPage(perPagePtr *int) int {
 
 func validatePage(pagePtr *int, perPage, totalCount int) (int, error) {
 	if perPage < 1 {
-		panic(fmt.Sprintf("zero or negative perPage: %d", perPage))
+
+		return 0, fmt.Errorf("invalid perPage parameter: %d (must be positive)", perPage)
 	}
 
 	if pagePtr == nil { // no page parameter

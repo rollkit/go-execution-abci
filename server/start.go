@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strings"
 
 	"cosmossdk.io/log"
 	cmtcfg "github.com/cometbft/cometbft/config"
@@ -276,9 +277,18 @@ func startNode(
 		return nil, nil, cleanupFn, err
 	}
 
-	signer, err := filesigner.NewFileSystemSigner(rollkitcfg.ConfigDir, []byte{})
+	signer, err := filesigner.LoadFileSystemSigner(rollkitcfg.ConfigDir, []byte{})
 	if err != nil {
-		return nil, nil, cleanupFn, err
+		if os.IsNotExist(err) || strings.Contains(err.Error(), "key file not found") {
+			// If the file doesn't exist, create it
+			svrCtx.Logger.Info("Creating new signer key file")
+			signer, err = filesigner.CreateFileSystemSigner(rollkitcfg.ConfigDir, []byte{})
+			if err != nil {
+				return nil, nil, cleanupFn, err
+			}
+		} else {
+			return nil, nil, cleanupFn, err
+		}
 	}
 
 	// err = config.TranslateAddresses(&rollkitcfg)

@@ -26,7 +26,6 @@ import (
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	"github.com/hashicorp/go-metrics"
 	"github.com/rollkit/go-execution-abci/adapter"
-	"github.com/spf13/cobra"
 
 	"github.com/cometbft/cometbft/mempool"
 	"github.com/rollkit/go-execution-abci/rpc"
@@ -54,7 +53,7 @@ const (
 )
 
 // StartHandler starts the Rollkit server with the provided application and options.
-func StartHandler[T sdktypes.Application](rootCmd *cobra.Command) func(svrCtx *server.Context, clientCtx client.Context, appCreator sdktypes.AppCreator, inProcess bool, opts server.StartCmdOptions) error {
+func StartHandler[T sdktypes.Application]() func(svrCtx *server.Context, clientCtx client.Context, appCreator sdktypes.AppCreator, inProcess bool, opts server.StartCmdOptions) error {
 	return func(svrCtx *server.Context, clientCtx client.Context, appCreator sdktypes.AppCreator, inProcess bool, opts server.StartCmdOptions) error {
 		svrCfg, err := getAndValidateConfig(svrCtx)
 		if err != nil {
@@ -74,7 +73,7 @@ func StartHandler[T sdktypes.Application](rootCmd *cobra.Command) func(svrCtx *s
 
 		emitServerInfoMetrics()
 
-		return startInProcess[T](rootCmd, svrCtx, svrCfg, clientCtx, app, metrics, opts)
+		return startInProcess[T](svrCtx, svrCfg, clientCtx, app, metrics, opts)
 	}
 }
 
@@ -101,7 +100,7 @@ func startApp[T sdktypes.Application](svrCtx *server.Context, appCreator sdktype
 	return app, cleanupFn, nil
 }
 
-func startInProcess[T sdktypes.Application](rootCmd *cobra.Command, svrCtx *server.Context, svrCfg serverconfig.Config, clientCtx client.Context, app sdktypes.Application,
+func startInProcess[T sdktypes.Application](svrCtx *server.Context, svrCfg serverconfig.Config, clientCtx client.Context, app sdktypes.Application,
 	metrics *telemetry.Metrics, opts server.StartCmdOptions,
 ) error {
 	cmtCfg := svrCtx.Config
@@ -252,7 +251,6 @@ func startTelemetry(cfg serverconfig.Config) (*telemetry.Metrics, error) {
 
 func startNode(
 	ctx context.Context,
-	rootCmd *cobra.Command,
 	cfg *cmtcfg.Config,
 	app sdktypes.Application,
 	svrCtx *server.Context,
@@ -272,7 +270,7 @@ func startNode(
 		// return nil, nil, cleanupFn, err
 	}
 
-	rollkitcfg, err := config.LoadNodeConfig(rootCmd, svrCtx.Viper.GetString("home"))
+	rollkitcfg, err := config.LoadNodeConfig(svrCtx.Viper)
 	if err != nil {
 		return nil, nil, cleanupFn, err
 	}

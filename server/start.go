@@ -52,15 +52,18 @@ const (
 	flagGRPCOnly   = "grpc-only"
 )
 
+// StartCommandHandler is the type that must implement nova to match Cosmos SDK start logic.
+type StartCommandHandler = func(svrCtx *server.Context, clientCtx client.Context, appCreator sdktypes.AppCreator, withCmt bool, opts server.StartCmdOptions) error
+
 // StartHandler starts the Rollkit server with the provided application and options.
-func StartHandler[T sdktypes.Application]() func(svrCtx *server.Context, clientCtx client.Context, appCreator sdktypes.AppCreator, inProcess bool, opts server.StartCmdOptions) error {
+func StartHandler() StartCommandHandler {
 	return func(svrCtx *server.Context, clientCtx client.Context, appCreator sdktypes.AppCreator, inProcess bool, opts server.StartCmdOptions) error {
 		svrCfg, err := getAndValidateConfig(svrCtx)
 		if err != nil {
 			return err
 		}
 
-		app, appCleanupFn, err := startApp[T](svrCtx, appCreator, opts)
+		app, appCleanupFn, err := startApp(svrCtx, appCreator, opts)
 		if err != nil {
 			return err
 		}
@@ -73,11 +76,11 @@ func StartHandler[T sdktypes.Application]() func(svrCtx *server.Context, clientC
 
 		emitServerInfoMetrics()
 
-		return startInProcess[T](svrCtx, svrCfg, clientCtx, app, metrics, opts)
+		return startInProcess(svrCtx, svrCfg, clientCtx, app, metrics, opts)
 	}
 }
 
-func startApp[T sdktypes.Application](svrCtx *server.Context, appCreator sdktypes.AppCreator, opts server.StartCmdOptions) (app sdktypes.Application, cleanupFn func(), err error) {
+func startApp(svrCtx *server.Context, appCreator sdktypes.AppCreator, opts server.StartCmdOptions) (app sdktypes.Application, cleanupFn func(), err error) {
 	traceWriter, traceCleanupFn, err := setupTraceWriter(svrCtx)
 	if err != nil {
 		return app, traceCleanupFn, err
@@ -100,7 +103,7 @@ func startApp[T sdktypes.Application](svrCtx *server.Context, appCreator sdktype
 	return app, cleanupFn, nil
 }
 
-func startInProcess[T sdktypes.Application](svrCtx *server.Context, svrCfg serverconfig.Config, clientCtx client.Context, app sdktypes.Application,
+func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCtx client.Context, app sdktypes.Application,
 	metrics *telemetry.Metrics, opts server.StartCmdOptions,
 ) error {
 	cmtCfg := svrCtx.Config
@@ -113,7 +116,7 @@ func startInProcess[T sdktypes.Application](svrCtx *server.Context, svrCfg serve
 		svrCfg.GRPC.Enable = true
 	} else {
 		svrCtx.Logger.Info("starting node with ABCI CometBFT in-process")
-		_, rpcServer, cleanupFn, err := startNode(ctx, rootCmd, cmtCfg, app, svrCtx)
+		_, rpcServer, cleanupFn, err := startNode(ctx, cmtCfg, app, svrCtx)
 		if err != nil {
 			return err
 		}

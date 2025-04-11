@@ -6,9 +6,9 @@ require (
 	github.com/cosmos/cosmos-sdk v0.50.13
 	github.com/gorilla/rpc v1.2.1
 	github.com/rollkit/go-da v0.9.0
-	github.com/rollkit/rollkit v0.14.2-0.20250404203234-21f74068233a
-	github.com/rollkit/rollkit/core v0.0.0-20250404203234-21f74068233a
-	github.com/rollkit/rollkit/da v0.0.0-20250404203234-21f74068233a
+	github.com/rollkit/rollkit v0.14.2-0.20250411093031-de183ff4a312
+	github.com/rollkit/rollkit/core v0.0.0-20250411093031-de183ff4a312
+	github.com/rollkit/rollkit/da v0.0.0-20250411093031-de183ff4a312
 )
 
 replace github.com/btcsuite/btcd => github.com/btcsuite/btcd v0.22.0-beta
@@ -19,12 +19,11 @@ require (
 	connectrpc.com/connect v1.18.1 // indirect
 	connectrpc.com/grpcreflect v1.3.0 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
-	github.com/bytedance/sonic v1.12.3 // indirect
-	github.com/bytedance/sonic/loader v0.2.0 // indirect
+	github.com/bytedance/sonic v1.13.2 // indirect
+	github.com/bytedance/sonic/loader v0.2.4 // indirect
 	github.com/celestiaorg/go-header v0.6.4 // indirect
 	github.com/celestiaorg/go-libp2p-messenger v0.2.0 // indirect
-	github.com/cloudwego/base64x v0.1.4 // indirect
-	github.com/cloudwego/iasm v0.2.0 // indirect
+	github.com/cloudwego/base64x v0.1.5 // indirect
 	github.com/containerd/cgroups v1.1.0 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c // indirect

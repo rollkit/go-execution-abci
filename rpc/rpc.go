@@ -132,8 +132,10 @@ func (r *RPCServer) serve(listener net.Listener, handler http.Handler) error {
 	return r.server.Serve(listener)
 }
 
-var _ rpcclient.Client = &RPCServer{}
-var _ client.CometRPC = &RPCServer{}
+var (
+	_ rpcclient.Client = &RPCServer{}
+	_ client.CometRPC  = &RPCServer{}
+)
 
 func NewRPCServer(adapter *adapter.Adapter, cfg *cmtcfg.RPCConfig, txIndexer txindex.TxIndexer, blockIndexer indexer.BlockIndexer, logger log.Logger) *RPCServer {
 	return &RPCServer{adapter: adapter, txIndexer: txIndexer, blockIndexer: blockIndexer, config: cfg, logger: servercmtlog.CometLoggerWrapper{Logger: logger}}
@@ -383,7 +385,6 @@ func (r *RPCServer) BroadcastTxAsync(ctx context.Context, tx cmttypes.Tx) (*core
 	err := r.adapter.Mempool.CheckTx(tx, func(response *abci.ResponseCheckTx) {
 		responseCh <- response
 	}, mempool.TxInfo{})
-
 	if err != nil {
 		return nil, err
 	}
@@ -405,7 +406,7 @@ func (r *RPCServer) BroadcastTxCommit(ctx context.Context, tx cmttypes.Tx) (*cor
 	// This implementation corresponds to Tendermints implementation from rpc/core/mempool.go.
 	// ctx.RemoteAddr godoc: If neither HTTPReq nor WSConn is set, an empty string is returned.
 	// This code is a local client, so we can assume that subscriber is ""
-	subscriber := "" //ctx.RemoteAddr()
+	subscriber := "" // ctx.RemoteAddr()
 
 	if r.adapter.EventBus.NumClients() >= r.adapter.CometCfg.RPC.MaxSubscriptionClients {
 		return nil, fmt.Errorf("max_subscription_clients %d reached", r.adapter.CometCfg.RPC.MaxSubscriptionClients)
@@ -749,7 +750,6 @@ func (r *RPCServer) CheckTx(ctx context.Context, tx cmttypes.Tx) (*coretypes.Res
 	err := r.adapter.Mempool.CheckTx(tx, func(response *abci.ResponseCheckTx) {
 		responseCh <- response
 	}, mempool.TxInfo{})
-
 	if err != nil {
 		return nil, err
 	}
@@ -865,7 +865,7 @@ func (r *RPCServer) NetInfo(context.Context) (*coretypes.ResultNetInfo, error) {
 	for _, peer := range peers {
 		res.Peers = append(res.Peers, coretypes.Peer{
 			NodeInfo: cmtp2p.DefaultNodeInfo{
-				DefaultNodeID: cmtp2p.ID(peer.NodeInfo.DefaultNodeID),
+				DefaultNodeID: cmtp2p.ID(peer.NodeInfo.NodeID),
 				ListenAddr:    peer.NodeInfo.ListenAddr,
 				Network:       peer.NodeInfo.Network,
 			},
@@ -884,7 +884,6 @@ func (r *RPCServer) NumUnconfirmedTxs(context.Context) (*coretypes.ResultUnconfi
 		Total:      r.adapter.Mempool.Size(),
 		TotalBytes: r.adapter.Mempool.SizeBytes(),
 	}, nil
-
 }
 
 // OnReset implements client.Client.
@@ -987,7 +986,6 @@ func validatePerPage(perPagePtr *int) int {
 
 func validatePage(pagePtr *int, perPage, totalCount int) (int, error) {
 	if perPage < 1 {
-
 		return 0, fmt.Errorf("invalid perPage parameter: %d (must be positive)", perPage)
 	}
 

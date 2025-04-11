@@ -3,12 +3,12 @@ module github.com/rollkit/go-execution-abci
 go 1.24.1
 
 require (
-	github.com/cosmos/cosmos-sdk v0.50.12
+	github.com/cosmos/cosmos-sdk v0.50.13
 	github.com/gorilla/rpc v1.2.1
 	github.com/rollkit/go-da v0.9.0
-	github.com/rollkit/rollkit v0.14.2-0.20250404203234-21f74068233a
-	github.com/rollkit/rollkit/core v0.0.0-20250404203234-21f74068233a
-	github.com/rollkit/rollkit/da v0.0.0-20250404203234-21f74068233a
+	github.com/rollkit/rollkit v0.14.2-0.20250411093031-de183ff4a312
+	github.com/rollkit/rollkit/core v0.0.0-20250411093031-de183ff4a312
+	github.com/rollkit/rollkit/da v0.0.0-20250411093031-de183ff4a312
 )
 
 replace github.com/btcsuite/btcd => github.com/btcsuite/btcd v0.22.0-beta
@@ -19,12 +19,11 @@ require (
 	connectrpc.com/connect v1.18.1 // indirect
 	connectrpc.com/grpcreflect v1.3.0 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
-	github.com/bytedance/sonic v1.12.3 // indirect
-	github.com/bytedance/sonic/loader v0.2.0 // indirect
+	github.com/bytedance/sonic v1.13.2 // indirect
+	github.com/bytedance/sonic/loader v0.2.4 // indirect
 	github.com/celestiaorg/go-header v0.6.4 // indirect
 	github.com/celestiaorg/go-libp2p-messenger v0.2.0 // indirect
-	github.com/cloudwego/base64x v0.1.4 // indirect
-	github.com/cloudwego/iasm v0.2.0 // indirect
+	github.com/cloudwego/base64x v0.1.5 // indirect
 	github.com/containerd/cgroups v1.1.0 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c // indirect
@@ -156,7 +155,7 @@ require (
 	github.com/cockroachdb/pebble v1.1.2 // indirect
 	github.com/cockroachdb/redact v1.1.5 // indirect
 	github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06 // indirect
-	github.com/cometbft/cometbft v0.38.15
+	github.com/cometbft/cometbft v0.38.17
 	github.com/cometbft/cometbft-db v0.14.1 // indirect
 	github.com/cosmos/btcutil v1.0.5 // indirect
 	github.com/cosmos/cosmos-db v1.1.1 // indirect
@@ -263,9 +262,9 @@ require (
 	go.etcd.io/bbolt v1.4.0-alpha.0.0.20240404170359-43604f3112c5 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
-	golang.org/x/crypto v0.33.0 // indirect
+	golang.org/x/crypto v0.35.0 // indirect
 	golang.org/x/exp v0.0.0-20250218142911-aa4b98e5adaa // indirect
-	golang.org/x/net v0.35.0
+	golang.org/x/net v0.36.0
 	golang.org/x/sync v0.11.0
 	golang.org/x/sys v0.31.0 // indirect
 	golang.org/x/term v0.29.0 // indirect

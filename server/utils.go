@@ -40,14 +40,13 @@ func GetNodeKey(nodeKey *p2p.NodeKey) (crypto.PrivKey, error) {
 
 // AddFlags adds Rollkit specific configuration options to cobra Command.
 func AddFlags(cmd *cobra.Command) {
-	def := config.DefaultNodeConfig
+	def := config.DefaultConfig
 
 	// Add CI flag for testing
 	cmd.Flags().Bool("ci", false, "run node for ci testing")
 
 	// Add base flags
 	cmd.Flags().String(config.FlagDBPath, def.DBPath, "path for the node database")
-	cmd.Flags().String(config.FlagChainConfigDir, def.ConfigDir, "directory containing chain configuration files")
 	cmd.Flags().String(config.FlagChainID, def.ChainID, "chain ID")
 	// Node configuration flags
 	cmd.Flags().BoolVar(&def.Node.Aggregator, config.FlagAggregator, def.Node.Aggregator, "run node in aggregator mode")
@@ -57,9 +56,6 @@ func AddFlags(cmd *cobra.Command) {
 	cmd.Flags().Bool(config.FlagLazyAggregator, def.Node.LazyAggregator, "produce blocks only when transactions are available or after lazy block time")
 	cmd.Flags().Uint64(config.FlagMaxPendingBlocks, def.Node.MaxPendingBlocks, "maximum blocks pending DA confirmation before pausing block production (0 for no limit)")
 	cmd.Flags().Duration(config.FlagLazyBlockTime, def.Node.LazyBlockTime.Duration, "maximum interval between blocks in lazy aggregation mode")
-	cmd.Flags().String(config.FlagSequencerAddress, def.Node.SequencerAddress, "sequencer middleware address (host:port)")
-	cmd.Flags().String(config.FlagSequencerRollupID, def.Node.SequencerRollupID, "sequencer middleware rollup ID (default: mock-rollup)")
-	cmd.Flags().String(config.FlagExecutorAddress, def.Node.ExecutorAddress, "executor middleware address (host:port)")
 
 	// Data Availability configuration flags
 	cmd.Flags().String(config.FlagDAAddress, def.DA.Address, "DA address (host:port)")
@@ -74,13 +70,12 @@ func AddFlags(cmd *cobra.Command) {
 
 	// P2P configuration flags
 	cmd.Flags().String(config.FlagP2PListenAddress, def.P2P.ListenAddress, "P2P listen address (host:port)")
-	cmd.Flags().String(config.FlagP2PSeeds, def.P2P.Seeds, "Comma separated list of seed nodes to connect to")
+	cmd.Flags().String(config.FlagP2PPeers, def.P2P.Peers, "Comma separated list of seed nodes to connect to")
 	cmd.Flags().String(config.FlagP2PBlockedPeers, def.P2P.BlockedPeers, "Comma separated list of nodes to ignore")
 	cmd.Flags().String(config.FlagP2PAllowedPeers, def.P2P.AllowedPeers, "Comma separated list of nodes to whitelist")
 
 	// RPC configuration flags
 	cmd.Flags().String(config.FlagRPCAddress, def.RPC.Address, "RPC server address (host)")
-	cmd.Flags().Uint16(config.FlagRPCPort, def.RPC.Port, "RPC server port")
 
 	// Instrumentation configuration flags
 	instrDef := config.DefaultInstrumentationConfig()

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"cosmossdk.io/log"
@@ -53,15 +54,18 @@ const (
 	flagGRPCOnly   = "grpc-only"
 )
 
+// StartCommandHandler is the type that must implement nova to match Cosmos SDK start logic.
+type StartCommandHandler = func(svrCtx *server.Context, clientCtx client.Context, appCreator sdktypes.AppCreator, withCmt bool, opts server.StartCmdOptions) error
+
 // StartHandler starts the Rollkit server with the provided application and options.
-func StartHandler[T sdktypes.Application](rootCmd *cobra.Command) func(svrCtx *server.Context, clientCtx client.Context, appCreator sdktypes.AppCreator, inProcess bool, opts server.StartCmdOptions) error {
+func StartHandler(rootCmd *cobra.Command) StartCommandHandler {
 	return func(svrCtx *server.Context, clientCtx client.Context, appCreator sdktypes.AppCreator, inProcess bool, opts server.StartCmdOptions) error {
 		svrCfg, err := getAndValidateConfig(svrCtx)
 		if err != nil {
 			return err
 		}
 
-		app, appCleanupFn, err := startApp[T](svrCtx, appCreator, opts)
+		app, appCleanupFn, err := startApp(svrCtx, appCreator, opts)
 		if err != nil {
 			return err
 		}
@@ -74,11 +78,11 @@ func StartHandler[T sdktypes.Application](rootCmd *cobra.Command) func(svrCtx *s
 
 		emitServerInfoMetrics()
 
-		return startInProcess[T](rootCmd, svrCtx, svrCfg, clientCtx, app, metrics, opts)
+		return startInProcess(rootCmd, svrCtx, svrCfg, clientCtx, app, metrics, opts)
 	}
 }
 
-func startApp[T sdktypes.Application](svrCtx *server.Context, appCreator sdktypes.AppCreator, opts server.StartCmdOptions) (app sdktypes.Application, cleanupFn func(), err error) {
+func startApp(svrCtx *server.Context, appCreator sdktypes.AppCreator, opts server.StartCmdOptions) (app sdktypes.Application, cleanupFn func(), err error) {
 	traceWriter, traceCleanupFn, err := setupTraceWriter(svrCtx)
 	if err != nil {
 		return app, traceCleanupFn, err
@@ -101,7 +105,7 @@ func startApp[T sdktypes.Application](svrCtx *server.Context, appCreator sdktype
 	return app, cleanupFn, nil
 }
 
-func startInProcess[T sdktypes.Application](rootCmd *cobra.Command, svrCtx *server.Context, svrCfg serverconfig.Config, clientCtx client.Context, app sdktypes.Application,
+func startInProcess(rootCmd *cobra.Command, svrCtx *server.Context, svrCfg serverconfig.Config, clientCtx client.Context, app sdktypes.Application,
 	metrics *telemetry.Metrics, opts server.StartCmdOptions,
 ) error {
 	cmtCfg := svrCtx.Config
@@ -114,7 +118,7 @@ func startInProcess[T sdktypes.Application](rootCmd *cobra.Command, svrCtx *serv
 		svrCfg.GRPC.Enable = true
 	} else {
 		svrCtx.Logger.Info("starting node with ABCI CometBFT in-process")
-		_, rpcServer, cleanupFn, err := startNode(ctx, rootCmd, cmtCfg, app, svrCtx)
+		_, rpcServer, cleanupFn, err := startNode(ctx, svrCtx.Logger, rootCmd, cmtCfg, app)
 		if err != nil {
 			return err
 		}
@@ -252,12 +256,12 @@ func startTelemetry(cfg serverconfig.Config) (*telemetry.Metrics, error) {
 
 func startNode(
 	ctx context.Context,
+	logger log.Logger,
 	rootCmd *cobra.Command,
 	cfg *cmtcfg.Config,
 	app sdktypes.Application,
-	svrCtx *server.Context,
 ) (rolllkitNode node.Node, rpcServer *rpc.RPCServer, cleanupFn func(), err error) {
-	svrCtx.Logger.Info("starting node with Rollkit in-process")
+	logger.Info("starting node with Rollkit in-process")
 
 	pval := pvm.LoadOrGenFilePV(cfg.PrivValidatorKeyFile(), cfg.PrivValidatorStateFile())
 	signingKey, err := GetNodeKey(&cmtp2p.NodeKey{PrivKey: pval.Key.PrivKey})
@@ -267,22 +271,18 @@ func startNode(
 
 	nodeKey := &key.NodeKey{PrivKey: signingKey, PubKey: signingKey.GetPublic()}
 
-	err = config.CreateInitialConfig(svrCtx.Viper.GetString("home"))
-	if err != nil {
-		// return nil, nil, cleanupFn, err
-	}
-
-	rollkitcfg, err := config.LoadNodeConfig(rootCmd, svrCtx.Viper.GetString("home"))
+	rollkitcfg, err := config.Load(rootCmd)
 	if err != nil {
 		return nil, nil, cleanupFn, err
 	}
 
-	signer, err := filesigner.LoadFileSystemSigner(rollkitcfg.ConfigDir, []byte{})
+	configDir := filepath.Dir(rollkitcfg.ConfigPath())
+	signer, err := filesigner.LoadFileSystemSigner(configDir, []byte{})
 	if err != nil {
 		if os.IsNotExist(err) || strings.Contains(err.Error(), "key file not found") {
 			// If the file doesn't exist, create it
-			svrCtx.Logger.Info("Creating new signer key file")
-			signer, err = filesigner.CreateFileSystemSigner(rollkitcfg.ConfigDir, []byte{})
+			logger.Info("Creating new signer key file")
+			signer, err = filesigner.CreateFileSystemSigner(configDir, []byte{})
 			if err != nil {
 				return nil, nil, cleanupFn, err
 			}
@@ -320,7 +320,7 @@ func startNode(
 	metrics := node.DefaultMetricsProvider(config.DefaultInstrumentationConfig())
 
 	_, p2pMetrics := metrics(cmtGenDoc.ChainID)
-	p2pClient, err := p2p.NewClient(rollkitcfg, cmtGenDoc.ChainID, nodeKey, database, svrCtx.Logger.With("module", "p2p"), p2pMetrics)
+	p2pClient, err := p2p.NewClient(rollkitcfg, nodeKey, database, logger.With("module", "p2p"), p2pMetrics)
 	if err != nil {
 		return nil, nil, cleanupFn, err
 	}
@@ -331,7 +331,7 @@ func startNode(
 		app,
 		st,
 		p2pClient,
-		svrCtx.Logger,
+		logger,
 		cfg,
 		appGenesis,
 	)
@@ -340,7 +340,7 @@ func startNode(
 	cmtApp := server.NewCometABCIWrapper(app)
 	clientCreator := proxy.NewLocalClientCreator(cmtApp)
 
-	proxyApp, err := initProxyApp(clientCreator, svrCtx.Logger, proxy.NopMetrics())
+	proxyApp, err := initProxyApp(clientCreator, logger, proxy.NopMetrics())
 	if err != nil {
 		panic(err)
 	}
@@ -381,7 +381,7 @@ func startNode(
 
 	adapter := &daAdapter{dalc}
 
-	rollkitda := rollkitda.NewDAClient(adapter, 1, 1, []byte(cmtGenDoc.ChainID), []byte{}, svrCtx.Logger)
+	rollkitda := rollkitda.NewDAClient(adapter, 1, 1, []byte(cmtGenDoc.ChainID), []byte{}, logger)
 
 	rolllkitNode, err = node.NewNode(
 		ctxWithCancel,
@@ -395,19 +395,19 @@ func startNode(
 		rollkitGenesis,
 		database,
 		metrics,
-		svrCtx.Logger,
+		logger,
 	)
 	if err != nil {
 		return nil, nil, cleanupFn, err
 	}
 
-	rpcServer = rpc.NewRPCServer(executor, cfg.RPC, nil, nil, svrCtx.Logger)
+	rpcServer = rpc.NewRPCServer(executor, cfg.RPC, nil, nil, logger)
 	err = rpcServer.Start()
 	if err != nil {
 		return nil, nil, cleanupFn, fmt.Errorf("failed to start abci rpc server: %w", err)
 	}
 
-	fmt.Println("starting node")
+	logger.Info("starting node")
 	err = rolllkitNode.Run(ctx)
 	if err != nil {
 		if err == context.Canceled {
@@ -417,7 +417,7 @@ func startNode(
 	}
 
 	// executor must be started after the node is started
-	fmt.Println("starting executor")
+	logger.Info("starting executor")
 	err = executor.Start(ctx)
 	if err != nil {
 		return nil, nil, cleanupFn, fmt.Errorf("failed to start executor: %w", err)

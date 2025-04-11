@@ -281,7 +281,7 @@ func startNode(
 	var signer signer.Signer
 	if rollkitcfg.Node.Aggregator {
 		configDir := filepath.Dir(rollkitcfg.ConfigPath())
-		signer, err := filesigner.LoadFileSystemSigner(configDir, []byte{})
+		signer, err = filesigner.LoadFileSystemSigner(configDir, []byte{})
 		if err != nil {
 			if os.IsNotExist(err) || strings.Contains(err.Error(), "key file not found") {
 				// If the file doesn't exist, create it

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"cosmossdk.io/log"
+
 	cmtcfg "github.com/cometbft/cometbft/config"
 	cmtp2p "github.com/cometbft/cometbft/p2p"
 	pvm "github.com/cometbft/cometbft/privval"
@@ -37,9 +38,9 @@ import (
 	"github.com/rollkit/rollkit/pkg/genesis"
 	"github.com/rollkit/rollkit/pkg/p2p"
 	"github.com/rollkit/rollkit/pkg/p2p/key"
+	"github.com/rollkit/rollkit/pkg/signer"
 	filesigner "github.com/rollkit/rollkit/pkg/signer/file"
 	"github.com/rollkit/rollkit/pkg/store"
-	rollkittypes "github.com/rollkit/rollkit/types"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -276,18 +277,22 @@ func startNode(
 		return nil, nil, cleanupFn, err
 	}
 
-	configDir := filepath.Dir(rollkitcfg.ConfigPath())
-	signer, err := filesigner.LoadFileSystemSigner(configDir, []byte{})
-	if err != nil {
-		if os.IsNotExist(err) || strings.Contains(err.Error(), "key file not found") {
-			// If the file doesn't exist, create it
-			logger.Info("Creating new signer key file")
-			signer, err = filesigner.CreateFileSystemSigner(configDir, []byte{})
-			if err != nil {
+	// only load signer if rollkit.node.aggregator == true
+	var signer signer.Signer
+	if rollkitcfg.Node.Aggregator {
+		configDir := filepath.Dir(rollkitcfg.ConfigPath())
+		signer, err = filesigner.LoadFileSystemSigner(configDir, []byte{})
+		if err != nil {
+			if os.IsNotExist(err) || strings.Contains(err.Error(), "key file not found") {
+				// If the file doesn't exist, create it
+				logger.Info("Creating new signer key file")
+				signer, err = filesigner.CreateFileSystemSigner(configDir, []byte{})
+				if err != nil {
+					return nil, nil, cleanupFn, err
+				}
+			} else {
 				return nil, nil, cleanupFn, err
 			}
-		} else {
-			return nil, nil, cleanupFn, err
 		}
 	}
 
@@ -357,20 +362,11 @@ func startNode(
 		cancelFn()
 	}
 
-	signerpb, err := signer.GetPublic()
-	if err != nil {
-		return nil, nil, cleanupFn, err
-	}
-	rollkitSigner, err := rollkittypes.NewSigner(signerpb)
-	if err != nil {
-		return nil, nil, cleanupFn, err
-	}
-
 	rollkitGenesis := genesis.NewGenesis(
 		cmtGenDoc.ChainID,
 		uint64(cmtGenDoc.InitialHeight),
 		cmtGenDoc.GenesisTime,
-		rollkitSigner.Address,
+		cmtGenDoc.Validators[0].Address,
 		cmtGenDoc.AppState, // TODO(facu): maybe we should pass the entire gendoc
 	)
 
@@ -381,6 +377,7 @@ func startNode(
 
 	adapter := &daAdapter{dalc}
 
+	// TODO(@facu): gas price and gas multiplier should be set by the node operator
 	rollkitda := rollkitda.NewDAClient(adapter, 1, 1, []byte(cmtGenDoc.ChainID), []byte{}, logger)
 
 	rolllkitNode, err = node.NewNode(

@@ -6,22 +6,11 @@ import (
 
 	cmtstateproto "github.com/cometbft/cometbft/proto/tendermint/state"
 	cmtstate "github.com/cometbft/cometbft/state"
-	cmtypes "github.com/cometbft/cometbft/types"
 	proto "github.com/cosmos/gogoproto/proto"
 	"github.com/rollkit/rollkit/pkg/store"
 )
 
 const stateKey = "abci-s"
-
-// State contains information about current state of the blockchain.
-type State struct {
-	ConsensusParams                  cmtypes.ConsensusParams
-	LastHeightConsensusParamsChanged int64
-	Validators                       *cmtypes.ValidatorSet
-	NextValidators                   *cmtypes.ValidatorSet
-	LastValidators                   *cmtypes.ValidatorSet
-	LastHeightValidatorsChanged      int64
-}
 
 // loadState loads the state from disk
 func loadState(ctx context.Context, s store.Store) (*cmtstate.State, error) {

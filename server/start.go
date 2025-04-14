@@ -277,6 +277,9 @@ func startNode(
 		return nil, nil, cleanupFn, err
 	}
 
+	asd, _ := rootCmd.Flags().GetString("home")
+	fmt.Println("HERE IS THE HOME", asd, rollkitcfg.RootDir)
+
 	// only load signer if rollkit.node.aggregator == true
 	var signer signer.Signer
 	if rollkitcfg.Node.Aggregator {

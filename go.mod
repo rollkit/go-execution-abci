@@ -24,7 +24,6 @@ require (
 	github.com/celestiaorg/go-header v0.6.4 // indirect
 	github.com/celestiaorg/go-libp2p-messenger v0.2.0 // indirect
 	github.com/cloudwego/base64x v0.1.5 // indirect
-	github.com/cometbft/cometbft/api v1.0.0 // indirect
 	github.com/containerd/cgroups v1.1.0 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c // indirect
@@ -56,13 +55,12 @@ require (
 	github.com/huandu/skiplist v1.2.0 // indirect
 	github.com/huin/goupnp v1.3.0 // indirect
 	github.com/ipfs/boxo v0.27.4 // indirect
-	github.com/ipfs/go-datastore v0.7.0 // indirect
-	github.com/ipfs/go-ds-badger4 v0.1.5 // indirect
+	github.com/ipfs/go-datastore v0.8.2 // indirect
+	github.com/ipfs/go-ds-badger4 v0.1.8 // indirect
 	github.com/ipfs/go-log v1.0.5 // indirect
 	github.com/ipld/go-ipld-prime v0.21.0 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
-	github.com/jbenet/goprocess v0.1.4 // indirect
 	github.com/koron/go-ssdp v0.0.5 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/libp2p/go-cidranger v1.1.0 // indirect
@@ -113,7 +111,6 @@ require (
 	github.com/quic-go/webtransport-go v0.8.1-0.20241018022711-4ac2c9250e66 // indirect
 	github.com/raulk/go-watchdog v1.3.0 // indirect
 	github.com/rollkit/go-sequencing v0.4.1 // indirect
-	github.com/supranational/blst v0.3.13 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/whyrusleeping/go-keyspace v0.0.0-20160322163242-5b898ac5add1 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
@@ -157,7 +154,7 @@ require (
 	github.com/cockroachdb/pebble v1.1.2 // indirect
 	github.com/cockroachdb/redact v1.1.5 // indirect
 	github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06 // indirect
-	github.com/cometbft/cometbft v1.0.1
+	github.com/cometbft/cometbft v0.38.17
 	github.com/cometbft/cometbft-db v1.0.1 // indirect
 	github.com/cosmos/btcutil v1.0.5 // indirect
 	github.com/cosmos/cosmos-db v1.1.1 // indirect
@@ -284,3 +281,5 @@ require (
 	pgregory.net/rapid v1.1.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
+
+replace github.com/rollkit/rollkit => ../rollkit

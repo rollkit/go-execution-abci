@@ -13,8 +13,6 @@ require (
 
 replace github.com/btcsuite/btcd => github.com/btcsuite/btcd v0.22.0-beta
 
-replace github.com/rollkit/rollkit => ../rollkit
-
 exclude github.com/btcsuite/btcd/chaincfg/chainhash v1.0.2
 
 require (

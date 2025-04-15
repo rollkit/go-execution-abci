@@ -13,6 +13,8 @@ require (
 
 replace github.com/btcsuite/btcd => github.com/btcsuite/btcd v0.22.0-beta
 
+replace github.com/rollkit/rollkit => ../rollkit
+
 exclude github.com/btcsuite/btcd/chaincfg/chainhash v1.0.2
 
 require (
@@ -250,7 +252,7 @@ require (
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/spf13/cobra v1.9.1
-	github.com/spf13/pflag v1.0.6 // indirect
+	github.com/spf13/pflag v1.0.6
 	github.com/spf13/viper v1.19.0 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect

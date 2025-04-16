@@ -28,7 +28,6 @@ import (
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	"github.com/hashicorp/go-metrics"
 	"github.com/rollkit/go-execution-abci/adapter"
-	"github.com/spf13/cobra"
 
 	"github.com/cometbft/cometbft/mempool"
 	"github.com/rollkit/go-execution-abci/rpc"
@@ -59,7 +58,7 @@ const (
 type StartCommandHandler = func(svrCtx *server.Context, clientCtx client.Context, appCreator sdktypes.AppCreator, withCmt bool, opts server.StartCmdOptions) error
 
 // StartHandler starts the Rollkit server with the provided application and options.
-func StartHandler(rootCmd *cobra.Command) StartCommandHandler {
+func StartHandler() StartCommandHandler {
 	return func(svrCtx *server.Context, clientCtx client.Context, appCreator sdktypes.AppCreator, inProcess bool, opts server.StartCmdOptions) error {
 		svrCfg, err := getAndValidateConfig(svrCtx)
 		if err != nil {
@@ -79,7 +78,7 @@ func StartHandler(rootCmd *cobra.Command) StartCommandHandler {
 
 		emitServerInfoMetrics()
 
-		return startInProcess(rootCmd, svrCtx, svrCfg, clientCtx, app, metrics, opts)
+		return startInProcess(svrCtx, svrCfg, clientCtx, app, metrics, opts)
 	}
 }
 
@@ -106,7 +105,7 @@ func startApp(svrCtx *server.Context, appCreator sdktypes.AppCreator, opts serve
 	return app, cleanupFn, nil
 }
 
-func startInProcess(rootCmd *cobra.Command, svrCtx *server.Context, svrCfg serverconfig.Config, clientCtx client.Context, app sdktypes.Application,
+func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCtx client.Context, app sdktypes.Application,
 	metrics *telemetry.Metrics, opts server.StartCmdOptions,
 ) error {
 	cmtCfg := svrCtx.Config
@@ -119,7 +118,7 @@ func startInProcess(rootCmd *cobra.Command, svrCtx *server.Context, svrCfg serve
 		svrCfg.GRPC.Enable = true
 	} else {
 		svrCtx.Logger.Info("starting node with ABCI CometBFT in-process")
-		_, rpcServer, cleanupFn, err := startNode(ctx, svrCtx.Logger, rootCmd, cmtCfg, app)
+		_, rpcServer, cleanupFn, err := startNode(ctx, svrCtx, cmtCfg, app)
 		if err != nil {
 			return err
 		}
@@ -257,11 +256,11 @@ func startTelemetry(cfg serverconfig.Config) (*telemetry.Metrics, error) {
 
 func startNode(
 	ctx context.Context,
-	logger log.Logger,
-	rootCmd *cobra.Command,
+	srvCtx *server.Context,
 	cfg *cmtcfg.Config,
 	app sdktypes.Application,
 ) (rolllkitNode node.Node, rpcServer *rpc.RPCServer, cleanupFn func(), err error) {
+	logger := srvCtx.Logger.With("module", "rollkit")
 	logger.Info("starting node with Rollkit in-process")
 
 	pval := pvm.LoadOrGenFilePV(cfg.PrivValidatorKeyFile(), cfg.PrivValidatorStateFile())
@@ -272,7 +271,7 @@ func startNode(
 
 	nodeKey := &key.NodeKey{PrivKey: signingKey, PubKey: signingKey.GetPublic()}
 
-	rollkitcfg, err := config.Load(rootCmd)
+	rollkitcfg, err := config.LoadFromViper(srvCtx.Viper)
 	if err != nil {
 		return nil, nil, cleanupFn, err
 	}

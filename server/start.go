@@ -28,8 +28,6 @@ import (
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	"github.com/hashicorp/go-metrics"
 	"github.com/rollkit/go-execution-abci/adapter"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	"github.com/cometbft/cometbft/mempool"
 	"github.com/rollkit/go-execution-abci/rpc"
@@ -273,14 +271,7 @@ func startNode(
 
 	nodeKey := &key.NodeKey{PrivKey: signingKey, PubKey: signingKey.GetPublic()}
 
-	cmd := &cobra.Command{}
-	flags := &pflag.FlagSet{}
-	for key, value := range srvCtx.Viper.AllSettings() {
-		flags.Set(key, fmt.Sprintf("%v", value))
-	}
-	cmd.Flags().AddFlagSet(flags)
-
-	rollkitcfg, err := config.Load(cmd)
+	rollkitcfg, err := config.LoadFromViper(srvCtx.Viper)
 	if err != nil {
 		return nil, nil, cleanupFn, err
 	}

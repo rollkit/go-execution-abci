@@ -365,8 +365,7 @@ func startNode(
 		cmtGenDoc.ChainID,
 		uint64(cmtGenDoc.InitialHeight),
 		cmtGenDoc.GenesisTime,
-		cmtGenDoc.Validators[0].Address,
-		cmtGenDoc.AppState, // TODO(facu): maybe we should pass the entire gendoc
+		cmtGenDoc.Validators[0].Address, // use the first validator as sequencer
 	)
 
 	dalc, err := goda.NewClient(rollkitcfg.DA.Address, rollkitcfg.DA.AuthToken)

@@ -8,13 +8,12 @@ import (
 	rollconf "github.com/rollkit/rollkit/pkg/config"
 )
 
-// InitCmd is meant to be used for initializing the rollkit node.
-// It is meant to
+// InitCmd is meant to be used for initializing the rollkit config.
 func InitCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize rollkit configuration files.",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			aggregator, err := cmd.Flags().GetBool(rollconf.FlagAggregator)
 			if err != nil {

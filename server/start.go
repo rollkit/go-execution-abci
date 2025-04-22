@@ -365,7 +365,7 @@ func startNode(
 		cmtGenDoc.ChainID,
 		uint64(cmtGenDoc.InitialHeight),
 		cmtGenDoc.GenesisTime,
-		cmtGenDoc.Validators[0].Address, // use the first validator as sequencer
+		cmtGenDoc.Validators[0].Address.Bytes(), // use the first validator as sequencer
 	)
 
 	dalc, err := goda.NewClient(rollkitcfg.DA.Address, rollkitcfg.DA.AuthToken)
@@ -413,8 +413,7 @@ func startNode(
 
 	// executor must be started after the node is started
 	logger.Info("starting executor")
-	err = executor.Start(ctx)
-	if err != nil {
+	if err = executor.Start(ctx); err != nil {
 		return nil, nil, cleanupFn, fmt.Errorf("failed to start executor: %w", err)
 	}
 

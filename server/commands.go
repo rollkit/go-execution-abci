@@ -1,0 +1,44 @@
+package server
+
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+
+	rollconf "github.com/rollkit/rollkit/pkg/config"
+)
+
+// InitCmd is meant to be used for initializing the rollkit node.
+// It is meant to
+func InitCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "init",
+		Short: "Initialize rollkit configuration files.",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			aggregator, err := cmd.Flags().GetBool(rollconf.FlagAggregator)
+			if err != nil {
+				return fmt.Errorf("error reading aggregator flag: %w", err)
+			}
+
+			// ignore error, as we are creating a new config
+			// we use load in order to parse all the flags
+			cfg, _ := rollconf.Load(cmd)
+			cfg.Node.Aggregator = aggregator
+
+			if err := cfg.Validate(); err != nil {
+				return fmt.Errorf("error validating config: %w", err)
+			}
+
+			if err := cfg.SaveAsYaml(); err != nil {
+				return fmt.Errorf("error writing rollkit.yaml file: %w", err)
+			}
+
+			return nil
+		},
+	}
+
+	rollconf.AddFlags(cmd)
+
+	return cmd
+}

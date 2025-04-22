@@ -7,6 +7,7 @@ An ABCI adapter for [Rollkit](https://github.com/rollkit/rollkit) that enables A
 `go-execution-abci` is a bridge between ABCI-compatible applications and Rollkit's execution layer. It implements the Rollkit execution interface and adapts it to the ABCI interface, allowing developers to use existing ABCI applications with Rollkit.
 
 This adapter connects various components of the Rollkit ecosystem:
+
 - Provides compatibility with the Cosmos SDK and CometBFT ABCI applications
 - Implements transaction handling, state management, and blockchain operations
 - Supports P2P communication for transaction gossip
@@ -60,6 +61,7 @@ go get github.com/rollkit/go-execution-abci
 ## Dependencies
 
 The project relies on several key dependencies:
+
 - [Rollkit](https://github.com/rollkit/rollkit): For the core rollup functionality
 - [Cosmos SDK](https://github.com/cosmos/cosmos-sdk): For the ABCI integration
 - [CometBFT](https://github.com/cometbft/cometbft): For consensus-related types and functionality
@@ -227,7 +229,7 @@ make proto-gen
 
 ### Project Structure
 
-```
+```bash
 go-execution-abci/
 ├── adapter/      # Core adapter implementation
 ├── mempool/      # Transaction mempool
@@ -243,4 +245,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-Apache License 2.0 
+Apache License 2.0

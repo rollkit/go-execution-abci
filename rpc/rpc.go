@@ -512,6 +512,10 @@ func (r *RPCServer) BroadcastTxSync(ctx context.Context, tx cmttypes.Tx) (*coret
 	// Note: we have to do this here because, unlike the tendermint mempool reactor, there
 	// is no routine that gossips transactions after they enter the pool
 	if res.Code == abci.CodeTypeOK {
+		if r.adapter.TxGossiper == nil {
+			return nil, fmt.Errorf("tx gossiper is not ready")
+		}
+
 		err = r.adapter.TxGossiper.Publish(ctx, tx)
 		if err != nil {
 			// the transaction must be removed from the mempool if it cannot be gossiped.

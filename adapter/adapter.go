@@ -9,17 +9,18 @@ import (
 	"cosmossdk.io/log"
 	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/mempool"
 	corep2p "github.com/cometbft/cometbft/p2p"
 	cmtstate "github.com/cometbft/cometbft/state"
 	cmtypes "github.com/cometbft/cometbft/types"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 
-	"github.com/cometbft/cometbft/mempool"
-	"github.com/rollkit/go-execution-abci/p2p"
 	"github.com/rollkit/rollkit/core/execution"
 	rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
 	"github.com/rollkit/rollkit/pkg/store"
+
+	"github.com/rollkit/go-execution-abci/p2p"
 )
 
 var _ execution.Executor = &Adapter{}
@@ -163,7 +164,6 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 		AppStateBytes:   a.AppGenesis.AppState,
 		InitialHeight:   int64(initialHeight),
 	})
-
 	if err != nil {
 		return nil, 0, err
 	}

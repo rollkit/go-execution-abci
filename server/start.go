@@ -110,14 +110,13 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 ) error {
 	cmtCfg := svrCtx.Config
 	gRPCOnly := svrCtx.Viper.GetBool(flagGRPCOnly)
-	g, ctx := getCtx(svrCtx, true) // Main context, cancels on Signal
+	g, ctx := getCtx(svrCtx, true)
 
 	// Hold gRPC server instance and potential error
 	var grpcSrv *grpc.Server
 	var err error
 
 	// 1. Start gRPC server FIRST (if enabled and not gRPC-only mode initially)
-	// Uses the main errgroup 'g' and context 'ctx'
 	if !gRPCOnly && svrCfg.GRPC.Enable {
 		svrCtx.Logger.Info("Attempting to start gRPC server before Rollkit node...")
 		grpcSrv, clientCtx, err = startGrpcServer(ctx, g, svrCfg.GRPC, clientCtx, svrCtx, app)
@@ -130,8 +129,8 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 	}
 
 	// 2. Start the Rollkit Node (if not in gRPC-only mode)
-	var rpcServer *rpc.RPCServer // Rollkit's specific RPC server
-	var cleanupRollkitFn func()  // Cleanup function for Rollkit node
+	var rpcServer *rpc.RPCServer
+	var cleanupRollkitFn func()
 	if !gRPCOnly {
 		svrCtx.Logger.Info("Starting Rollkit node with ABCI CometBFT in-process...")
 		// Pass the main context 'ctx' to startNode
@@ -140,7 +139,7 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 			svrCtx.Logger.Error("Failed to start Rollkit node", "error", err)
 			return err // Error starting Rollkit
 		}
-		defer cleanupRollkitFn() // Ensure Rollkit node cleanup
+		defer cleanupRollkitFn()
 		svrCtx.Logger.Info("Rollkit node components initialized.")
 
 		// Register Tx/Tendermint services if API or gRPC are enabled
@@ -175,18 +174,17 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 	}
 
 	// 3. Start gRPC server if we are in gRPC-only mode and it wasn't started before
-	if gRPCOnly && grpcSrv == nil && svrCfg.GRPC.Enable { // Check grpcSrv == nil too
+	if gRPCOnly && grpcSrv == nil && svrCfg.GRPC.Enable {
 		svrCtx.Logger.Info("Attempting to start gRPC server in gRPC-only mode...")
 		grpcSrv, clientCtx, err = startGrpcServer(ctx, g, svrCfg.GRPC, clientCtx, svrCtx, app)
 		if err != nil {
 			svrCtx.Logger.Error("Failed to start gRPC server in gRPC-only mode", "error", err)
-			return err // Handle error starting gRPC in gRPC-only mode
+			return err
 		}
 		svrCtx.Logger.Info("Successfully started gRPC server in gRPC-only mode.")
 	}
 
 	// 4. Start API Server (if enabled)
-	// Uses the main errgroup 'g' and context 'ctx'
 	if svrCfg.API.Enable {
 		svrCtx.Logger.Info("Attempting to start API server...")
 		err = startAPIServer(ctx, g, svrCfg, clientCtx, svrCtx, app, cmtCfg.RootDir, grpcSrv, metrics)

@@ -110,53 +110,111 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 ) error {
 	cmtCfg := svrCtx.Config
 	gRPCOnly := svrCtx.Viper.GetBool(flagGRPCOnly)
-	g, ctx := getCtx(svrCtx, true)
+	g, ctx := getCtx(svrCtx, true) // Main context, cancels on Signal
 
-	if gRPCOnly {
-		// TODO: Generalize logic so that gRPC only is really in startStandAlone
-		svrCtx.Logger.Info("starting node in gRPC only mode; CometBFT is disabled")
-		svrCfg.GRPC.Enable = true
-	} else {
-		svrCtx.Logger.Info("starting node with ABCI CometBFT in-process")
-		_, rpcServer, cleanupFn, err := startNode(ctx, svrCtx, cmtCfg, app)
+	// Hold gRPC server instance and potential error
+	var grpcSrv *grpc.Server
+	var err error
+
+	// 1. Start gRPC server FIRST (if enabled and not gRPC-only mode initially)
+	// Uses the main errgroup 'g' and context 'ctx'
+	if !gRPCOnly && svrCfg.GRPC.Enable {
+		svrCtx.Logger.Info("Attempting to start gRPC server before Rollkit node...")
+		grpcSrv, clientCtx, err = startGrpcServer(ctx, g, svrCfg.GRPC, clientCtx, svrCtx, app)
 		if err != nil {
-			return err
+			svrCtx.Logger.Error("Failed to start gRPC server early", "error", err)
+			// Decide whether to proceed or return the error
+			return fmt.Errorf("failed to start gRPC server: %w", err) // Return error if gRPC is essential
 		}
-		defer cleanupFn()
+		svrCtx.Logger.Info("Successfully started gRPC server early.")
+	}
 
-		// Add the tx service to the gRPC router. We only need to register this
-		// service if API or gRPC is enabled, and avoid doing so in the general
-		// case, because it spawns a new local CometBFT RPC client.
+	// 2. Start the Rollkit Node (if not in gRPC-only mode)
+	var rpcServer *rpc.RPCServer // Rollkit's specific RPC server
+	var cleanupRollkitFn func()  // Cleanup function for Rollkit node
+	if !gRPCOnly {
+		svrCtx.Logger.Info("Starting Rollkit node with ABCI CometBFT in-process...")
+		// Pass the main context 'ctx' to startNode
+		_, rpcServer, cleanupRollkitFn, err = startNode(ctx, svrCtx, cmtCfg, app)
+		if err != nil {
+			svrCtx.Logger.Error("Failed to start Rollkit node", "error", err)
+			return err // Error starting Rollkit
+		}
+		defer cleanupRollkitFn() // Ensure Rollkit node cleanup
+		svrCtx.Logger.Info("Rollkit node components initialized.")
+
+		// Register Tx/Tendermint services if API or gRPC are enabled
+		// (API server starts later)
 		if svrCfg.API.Enable || svrCfg.GRPC.Enable {
-			// Re-assign for making the client available below do not use := to avoid
-			// shadowing the clientCtx variable.
-			clientCtx = clientCtx.WithClient(rpcServer)
-
-			app.RegisterTxService(clientCtx)
-			app.RegisterTendermintService(clientCtx)
-			app.RegisterNodeService(clientCtx, svrCfg)
+			svrCtx.Logger.Info("Registering Tx/Tendermint/Node services...")
+			if rpcServer != nil {
+				// Use Rollkit's RPC client if available
+				clientCtx = clientCtx.WithClient(rpcServer)
+				svrCtx.Logger.Info("Using Rollkit RPC client for service registration.")
+				app.RegisterTxService(clientCtx)
+				app.RegisterTendermintService(clientCtx)
+				app.RegisterNodeService(clientCtx, svrCfg)
+				svrCtx.Logger.Info("Services registered using Rollkit RPC client.")
+			} else {
+				// Handle case where rpcServer is nil but services are needed?
+				// This might require a different RPC client if Rollkit's isn't available.
+				svrCtx.Logger.Warn("Rollkit RPC server not available for registering Tx/Tendermint/Node services")
+			}
 		}
+	} else {
+		// gRPC Only Mode - Still might need to register services,
+		// but won't have the Rollkit rpcServer.
+		svrCtx.Logger.Info("Starting node in gRPC only mode; Rollkit node disabled.")
+		svrCfg.GRPC.Enable = true // Ensure gRPC is enabled in this mode
+		// We need to ensure that the registered services do not depend on
+		// a CometBFT RPC client that doesn't exist in this mode.
+		// app.RegisterTxService(clientCtx)       // Might fail without RPC client
+		// app.RegisterTendermintService(clientCtx) // Might fail without RPC client
+		// app.RegisterNodeService(clientCtx, svrCfg) // Might fail without RPC client
+		svrCtx.Logger.Info("Skipping Rollkit node startup and service registration dependent on Rollkit RPC.")
 	}
 
-	grpcSrv, clientCtx, err := startGrpcServer(ctx, g, svrCfg.GRPC, clientCtx, svrCtx, app)
-	if err != nil {
-		return err
+	// 3. Start gRPC server if we are in gRPC-only mode and it wasn't started before
+	if gRPCOnly && grpcSrv == nil && svrCfg.GRPC.Enable { // Check grpcSrv == nil too
+		svrCtx.Logger.Info("Attempting to start gRPC server in gRPC-only mode...")
+		grpcSrv, clientCtx, err = startGrpcServer(ctx, g, svrCfg.GRPC, clientCtx, svrCtx, app)
+		if err != nil {
+			svrCtx.Logger.Error("Failed to start gRPC server in gRPC-only mode", "error", err)
+			return err // Handle error starting gRPC in gRPC-only mode
+		}
+		svrCtx.Logger.Info("Successfully started gRPC server in gRPC-only mode.")
 	}
 
-	err = startAPIServer(ctx, g, svrCfg, clientCtx, svrCtx, app, cmtCfg.RootDir, grpcSrv, metrics)
-	if err != nil {
-		return err
-	}
-
-	if opts.PostSetup != nil {
-		if err := opts.PostSetup(svrCtx, clientCtx, ctx, g); err != nil {
+	// 4. Start API Server (if enabled)
+	// Uses the main errgroup 'g' and context 'ctx'
+	if svrCfg.API.Enable {
+		svrCtx.Logger.Info("Attempting to start API server...")
+		err = startAPIServer(ctx, g, svrCfg, clientCtx, svrCtx, app, cmtCfg.RootDir, grpcSrv, metrics)
+		if err != nil {
+			svrCtx.Logger.Error("Failed to start API server", "error", err)
 			return err
 		}
+		svrCtx.Logger.Info("Successfully launched API server start goroutine.")
+	} else {
+		svrCtx.Logger.Info("API server disabled, skipping.")
+	}
+
+	// 5. Run PostSetup hook if provided
+	if opts.PostSetup != nil {
+		svrCtx.Logger.Info("Running PostSetup hook...")
+		if err := opts.PostSetup(svrCtx, clientCtx, ctx, g); err != nil {
+			svrCtx.Logger.Error("PostSetup hook failed", "error", err)
+			return err
+		}
+		svrCtx.Logger.Info("PostSetup hook completed.")
 	}
 
 	// wait for signal capture and gracefully return
 	// we are guaranteed to be waiting for the "ListenForQuitSignals" goroutine.
-	return g.Wait()
+	svrCtx.Logger.Info("Waiting for termination signals...")
+	err = g.Wait()
+	svrCtx.Logger.Info("Termination signal received or error occurred.", "error", err)
+	return err
 }
 
 func startGrpcServer(
@@ -167,12 +225,19 @@ func startGrpcServer(
 	svrCtx *server.Context,
 	app sdktypes.Application,
 ) (*grpc.Server, client.Context, error) {
+	svrCtx.Logger.Info("Attempting to start gRPC server...")
+
 	if !config.Enable {
+		svrCtx.Logger.Info("gRPC server disabled in config, skipping.")
 		// return grpcServer as nil if gRPC is disabled
 		return nil, clientCtx, nil
 	}
+
+	svrCtx.Logger.Info("gRPC server is enabled.", "address", config.Address)
+
 	_, _, err := net.SplitHostPort(config.Address)
 	if err != nil {
+		svrCtx.Logger.Error("Invalid gRPC address", "address", config.Address, "error", err)
 		return nil, clientCtx, err
 	}
 
@@ -186,6 +251,7 @@ func startGrpcServer(
 		maxRecvMsgSize = serverconfig.DefaultGRPCMaxRecvMsgSize
 	}
 
+	svrCtx.Logger.Info("Creating gRPC client for gateway...")
 	// if gRPC is enabled, configure gRPC client for gRPC gateway
 	grpcClient, err := grpc.NewClient(
 		config.Address,
@@ -197,22 +263,37 @@ func startGrpcServer(
 		),
 	)
 	if err != nil {
+		svrCtx.Logger.Error("Failed to create gRPC client", "error", err)
 		return nil, clientCtx, err
 	}
+	svrCtx.Logger.Info("Successfully created gRPC client.")
 
 	clientCtx = clientCtx.WithGRPCClient(grpcClient)
 	svrCtx.Logger.Debug("gRPC client assigned to client context", "target", config.Address)
 
+	svrCtx.Logger.Info("Creating gRPC server instance...")
 	grpcSrv, err := servergrpc.NewGRPCServer(clientCtx, app, config)
 	if err != nil {
+		svrCtx.Logger.Error("Failed to create gRPC server instance", "error", err)
 		return nil, clientCtx, err
 	}
+	svrCtx.Logger.Info("Successfully created gRPC server instance.")
 
 	// Start the gRPC server in a goroutine. Note, the provided ctx will ensure
 	// that the server is gracefully shut down.
+	svrCtx.Logger.Info("Launching gRPC server start goroutine...")
 	g.Go(func() error {
-		return servergrpc.StartGRPCServer(ctx, svrCtx.Logger.With("module", "grpc-server"), config, grpcSrv)
+		svrCtx.Logger.Info("Goroutine started: Calling StartGRPCServer", "address", config.Address)
+		err := servergrpc.StartGRPCServer(ctx, svrCtx.Logger.With("module", "grpc-server"), config, grpcSrv)
+		if err != nil {
+			svrCtx.Logger.Error("StartGRPCServer returned error", "error", err)
+		} else {
+			svrCtx.Logger.Info("StartGRPCServer finished (graceful shutdown?).")
+		}
+		return err
 	})
+	svrCtx.Logger.Info("Successfully launched gRPC server start goroutine.")
+
 	return grpcSrv, clientCtx, nil
 }
 
@@ -366,6 +447,7 @@ func startNode(
 		uint64(cmtGenDoc.InitialHeight),
 		cmtGenDoc.GenesisTime,
 		cmtGenDoc.Validators[0].Address, // use the first validator as sequencer
+		appGenesis.AppState,
 	)
 
 	dalc, err := goda.NewClient(rollkitcfg.DA.Address, rollkitcfg.DA.AuthToken)

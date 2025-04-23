@@ -445,7 +445,6 @@ func startNode(
 		uint64(cmtGenDoc.InitialHeight),
 		cmtGenDoc.GenesisTime,
 		cmtGenDoc.Validators[0].Address, // use the first validator as sequencer
-		appGenesis.AppState,
 	)
 
 	dalc, err := goda.NewClient(rollkitcfg.DA.Address, rollkitcfg.DA.AuthToken)

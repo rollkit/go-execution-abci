@@ -7,6 +7,7 @@ import (
 	cmtstateproto "github.com/cometbft/cometbft/proto/tendermint/state"
 	cmtstate "github.com/cometbft/cometbft/state"
 	proto "github.com/cosmos/gogoproto/proto"
+
 	"github.com/rollkit/rollkit/pkg/store"
 )
 

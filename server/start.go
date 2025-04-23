@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"cosmossdk.io/log"
-
 	cmtcfg "github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/mempool"
 	cmtp2p "github.com/cometbft/cometbft/p2p"
 	pvm "github.com/cometbft/cometbft/privval"
 	"github.com/cometbft/cometbft/proxy"
@@ -27,11 +27,13 @@ import (
 	"github.com/cosmos/cosmos-sdk/version"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	"github.com/hashicorp/go-metrics"
-	"github.com/rollkit/go-execution-abci/adapter"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/cometbft/cometbft/mempool"
-	"github.com/rollkit/go-execution-abci/rpc"
 	"github.com/rollkit/rollkit/core/sequencer"
+	rollkitda "github.com/rollkit/rollkit/da"
+	"github.com/rollkit/rollkit/da/proxy/jsonrpc"
 	"github.com/rollkit/rollkit/node"
 	"github.com/rollkit/rollkit/pkg/config"
 	"github.com/rollkit/rollkit/pkg/genesis"
@@ -40,12 +42,9 @@ import (
 	"github.com/rollkit/rollkit/pkg/signer"
 	filesigner "github.com/rollkit/rollkit/pkg/signer/file"
 	"github.com/rollkit/rollkit/pkg/store"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
-	goda "github.com/rollkit/go-da/proxy"
-	rollkitda "github.com/rollkit/rollkit/da"
+	"github.com/rollkit/go-execution-abci/adapter"
+	"github.com/rollkit/go-execution-abci/rpc"
 )
 
 const (
@@ -368,15 +367,14 @@ func startNode(
 		cmtGenDoc.Validators[0].Address.Bytes(), // use the first validator as sequencer
 	)
 
-	dalc, err := goda.NewClient(rollkitcfg.DA.Address, rollkitcfg.DA.AuthToken)
+	// create the DA client
+	daClient, err := jsonrpc.NewClient(ctx, logger, rollkitcfg.DA.Address, rollkitcfg.DA.AuthToken)
 	if err != nil {
-		return nil, nil, cleanupFn, err
+		return nil, nil, cleanupFn, fmt.Errorf("failed to create DA client: %w", err)
 	}
 
-	adapter := &daAdapter{dalc}
-
 	// TODO(@facu): gas price and gas multiplier should be set by the node operator
-	rollkitda := rollkitda.NewDAClient(adapter, 1, 1, []byte(cmtGenDoc.ChainID), []byte{}, logger)
+	rollkitda := rollkitda.NewDAClient(&daClient.DA, 1, 1, []byte(cmtGenDoc.ChainID), []byte{}, logger)
 
 	rolllkitNode, err = node.NewNode(
 		ctxWithCancel,

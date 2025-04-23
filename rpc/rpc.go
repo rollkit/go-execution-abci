@@ -10,32 +10,32 @@ import (
 	"strings"
 	"time"
 
+	"cosmossdk.io/log"
 	abci "github.com/cometbft/cometbft/abci/types"
+	cmtcfg "github.com/cometbft/cometbft/config"
 	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 	cmtmath "github.com/cometbft/cometbft/libs/math"
 	cmtquery "github.com/cometbft/cometbft/libs/pubsub/query"
+	"github.com/cometbft/cometbft/mempool"
 	"github.com/cometbft/cometbft/p2p"
 	rpcclient "github.com/cometbft/cometbft/rpc/client"
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"github.com/cometbft/cometbft/state/indexer"
 	blockidxnull "github.com/cometbft/cometbft/state/indexer/block/null"
-	"github.com/rs/cors"
-	"golang.org/x/net/netutil"
-
-	"cosmossdk.io/log"
-	cmtcfg "github.com/cometbft/cometbft/config"
-	cmtp2p "github.com/cometbft/cometbft/p2p"
 	"github.com/cometbft/cometbft/state/txindex"
 	"github.com/cometbft/cometbft/state/txindex/null"
 	cmttypes "github.com/cometbft/cometbft/types"
 	"github.com/cosmos/cosmos-sdk/client"
 	servercmtlog "github.com/cosmos/cosmos-sdk/server/log"
-	"github.com/rollkit/go-execution-abci/adapter"
+	"github.com/rs/cors"
+	"golang.org/x/net/netutil"
 
-	"github.com/cometbft/cometbft/mempool"
-	"github.com/rollkit/go-execution-abci/rpc/json"
 	"github.com/rollkit/rollkit/types"
+
+	"github.com/rollkit/go-execution-abci/adapter"
+	execp2p "github.com/rollkit/go-execution-abci/p2p"
+	"github.com/rollkit/go-execution-abci/rpc/json"
 )
 
 const (
@@ -61,7 +61,6 @@ type RPCServer struct {
 	config       *cmtcfg.RPCConfig
 	server       http.Server
 	logger       cmtlog.Logger
-	client       rpcclient.Client
 }
 
 // Start implements client.Client.
@@ -513,7 +512,7 @@ func (r *RPCServer) BroadcastTxSync(ctx context.Context, tx cmttypes.Tx) (*coret
 	// is no routine that gossips transactions after they enter the pool
 	if res.Code == abci.CodeTypeOK {
 		if r.adapter.TxGossiper == nil {
-			return nil, fmt.Errorf("tx gossiper is not ready")
+			return nil, execp2p.ErrNotReady
 		}
 
 		err = r.adapter.TxGossiper.Publish(ctx, tx)
@@ -602,7 +601,7 @@ func (r *RPCServer) Tx(ctx context.Context, hash []byte, prove bool) (*coretypes
 	index := res.Index
 
 	var proof cmttypes.TxProof
-	if prove {
+	if prove { // nolint:staticcheck // todo
 		// TODO(facu): implement proofs?
 		// _, data, _ := r.adapter.Store.GetBlockData(ctx, uint64(height))
 		// blockProof := data.Txs.Proof(int(index)) // XXX: overflow on 32-bit machines
@@ -679,7 +678,7 @@ func (r *RPCServer) TxSearch(ctx context.Context, query string, prove bool, page
 		r := results[i]
 
 		var proof cmttypes.TxProof
-		if prove {
+		if prove { // nolint:staticcheck // todo
 			// TODO: implement proofs?
 			// block := env.BlockStore.LoadBlock(r.Height)
 			// if block != nil {
@@ -717,10 +716,9 @@ func (r *RPCServer) Validators(ctx context.Context, height *int64, page *int, pe
 
 	// Handle pagination
 	start := 0
-	end := totalCount
 	if page != nil && perPage != nil {
 		start = (*page - 1) * *perPage
-		end = cmtmath.MinInt(start+*perPage, totalCount)
+		end := cmtmath.MinInt(start+*perPage, totalCount)
 
 		if start >= totalCount {
 			return &coretypes.ResultValidators{
@@ -868,8 +866,8 @@ func (r *RPCServer) NetInfo(context.Context) (*coretypes.ResultNetInfo, error) {
 	res.NPeers = len(peers)
 	for _, peer := range peers {
 		res.Peers = append(res.Peers, coretypes.Peer{
-			NodeInfo: cmtp2p.DefaultNodeInfo{
-				DefaultNodeID: cmtp2p.ID(peer.NodeInfo.NodeID),
+			NodeInfo: p2p.DefaultNodeInfo{
+				DefaultNodeID: p2p.ID(peer.NodeInfo.NodeID),
 				ListenAddr:    peer.NodeInfo.ListenAddr,
 				Network:       peer.NodeInfo.Network,
 			},

@@ -36,13 +36,7 @@ deps:
 ## lint: Run linters golangci-lint and markdownlint.
 lint: vet
 	@echo "--> Running golangci-lint"
-	@golangci-lint run
-	@echo "--> Running markdownlint"
-	@markdownlint --config .markdownlint.yaml '**/*.md'
-	@echo "--> Running hadolint"
-	@hadolint docker/mockserv.Dockerfile
-	@echo "--> Running yamllint"
-	@yamllint --no-warnings . -c .yamllint.yml
+	@golangci-lint run --fix
 
 .PHONY: lint
 

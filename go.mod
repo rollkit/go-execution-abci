@@ -5,10 +5,9 @@ go 1.24.1
 require (
 	github.com/cosmos/cosmos-sdk v0.50.13
 	github.com/gorilla/rpc v1.2.1
-	github.com/rollkit/go-da v0.9.0
-	github.com/rollkit/rollkit v0.14.2-0.20250422080230-27d0737c9ced
-	github.com/rollkit/rollkit/core v0.0.0-20250416080857-e320b1e7f96c
-	github.com/rollkit/rollkit/da v0.0.0-20250416080857-e320b1e7f96c
+	github.com/rollkit/rollkit v0.14.2-0.20250422111549-9f2f92ea5c6e
+	github.com/rollkit/rollkit/core v0.0.0-20250422111549-9f2f92ea5c6e
+	github.com/rollkit/rollkit/da v0.0.0-20250422111549-9f2f92ea5c6e
 )
 
 replace github.com/btcsuite/btcd => github.com/btcsuite/btcd v0.22.0-beta

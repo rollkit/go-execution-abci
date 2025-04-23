@@ -4,11 +4,10 @@ import (
 	"context"
 	"errors"
 
+	"cosmossdk.io/log"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
-
-	"cosmossdk.io/log"
 )
 
 // GossipMessage represents message gossiped via P2P network (e.g. transaction, Block etc).

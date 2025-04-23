@@ -99,11 +99,11 @@ func ToABCIBlock(header *types.SignedHeader, data *types.Data) (*cmtypes.Block, 
 		},
 		LastCommit: abciCommit,
 	}
-	abciBlock.Data.Txs = make([]cmtypes.Tx, len(data.Txs))
+	abciBlock.Txs = make([]cmtypes.Tx, len(data.Txs))
 	for i := range data.Txs {
-		abciBlock.Data.Txs[i] = cmtypes.Tx(data.Txs[i])
+		abciBlock.Txs[i] = cmtypes.Tx(data.Txs[i])
 	}
-	abciBlock.Header.DataHash = cmbytes.HexBytes(header.DataHash)
+	abciBlock.DataHash = cmbytes.HexBytes(header.DataHash)
 
 	return &abciBlock, nil
 }

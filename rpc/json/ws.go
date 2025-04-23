@@ -5,11 +5,9 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/gorilla/rpc/v2"
-
-	"github.com/gorilla/websocket"
-
 	"github.com/cometbft/cometbft/libs/log"
+	"github.com/gorilla/rpc/v2"
+	"github.com/gorilla/websocket"
 )
 
 type wsConn struct {

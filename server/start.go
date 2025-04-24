@@ -6,8 +6,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"cosmossdk.io/log"
 	cmtcfg "github.com/cometbft/cometbft/config"
@@ -40,11 +38,11 @@ import (
 	"github.com/rollkit/rollkit/pkg/p2p"
 	"github.com/rollkit/rollkit/pkg/p2p/key"
 	"github.com/rollkit/rollkit/pkg/signer"
-	filesigner "github.com/rollkit/rollkit/pkg/signer/file"
 	"github.com/rollkit/rollkit/pkg/store"
 
 	"github.com/rollkit/go-execution-abci/adapter"
 	"github.com/rollkit/go-execution-abci/rpc"
+	execsigner "github.com/rollkit/go-execution-abci/signer"
 )
 
 const (
@@ -262,8 +260,12 @@ func startNode(
 	logger := srvCtx.Logger.With("module", "rollkit")
 	logger.Info("starting node with Rollkit in-process")
 
-	pval := pvm.LoadOrGenFilePV(cfg.PrivValidatorKeyFile(), cfg.PrivValidatorStateFile())
-	signingKey, err := GetNodeKey(&cmtp2p.NodeKey{PrivKey: pval.Key.PrivKey})
+	pval := pvm.LoadOrGenFilePV(
+		cfg.PrivValidatorKeyFile(),
+		cfg.PrivValidatorStateFile(),
+	)
+
+	signingKey, err := execsigner.GetNodeKey(&cmtp2p.NodeKey{PrivKey: pval.Key.PrivKey})
 	if err != nil {
 		return nil, nil, cleanupFn, err
 	}
@@ -278,19 +280,9 @@ func startNode(
 	// only load signer if rollkit.node.aggregator == true
 	var signer signer.Signer
 	if rollkitcfg.Node.Aggregator {
-		configDir := filepath.Dir(rollkitcfg.ConfigPath())
-		signer, err = filesigner.LoadFileSystemSigner(configDir, []byte{})
+		signer, err = execsigner.NewSignerWrapper(pval.Key.PrivKey)
 		if err != nil {
-			if os.IsNotExist(err) || strings.Contains(err.Error(), "key file not found") {
-				// If the file doesn't exist, create it
-				logger.Info("Creating new signer key file")
-				signer, err = filesigner.CreateFileSystemSigner(configDir, []byte{})
-				if err != nil {
-					return nil, nil, cleanupFn, err
-				}
-			} else {
-				return nil, nil, cleanupFn, err
-			}
+			return nil, nil, cleanupFn, err
 		}
 	}
 

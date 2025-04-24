@@ -3,7 +3,6 @@ package signer
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	cmtcrypto "github.com/cometbft/cometbft/crypto"
 	"github.com/cometbft/cometbft/crypto/ed25519"
@@ -58,7 +57,7 @@ func GetNodeKey(nodeKey *cmtp2p.NodeKey) (crypto.PrivKey, error) {
 		return nil, errNilKey
 	}
 
-	if strings.EqualFold(nodeKey.PrivKey.Type(), ed25519.KeyType) {
+	if nodeKey.PrivKey.Type() == ed25519.KeyType {
 		privKey, err := crypto.UnmarshalEd25519PrivateKey(nodeKey.PrivKey.Bytes())
 		if err != nil {
 			return nil, fmt.Errorf("error unmarshalling node private key: %w", err)

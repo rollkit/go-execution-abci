@@ -280,7 +280,10 @@ func startNode(
 	// only load signer if rollkit.node.aggregator == true
 	var signer signer.Signer
 	if rollkitcfg.Node.Aggregator {
-		signer = execsigner.NewSignerWrapper(pval.Key.PrivKey)
+		signer, err = execsigner.NewSignerWrapper(pval.Key.PrivKey)
+		if err != nil {
+			return nil, nil, cleanupFn, err
+		}
 	}
 
 	// err = config.TranslateAddresses(&rollkitcfg)

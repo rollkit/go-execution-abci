@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	cmtcrypto "github.com/cometbft/cometbft/crypto"
-	"github.com/cometbft/cometbft/p2p"
 	cmtp2p "github.com/cometbft/cometbft/p2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
 
@@ -24,16 +23,16 @@ type signerWrapper struct {
 	p2pPrivKey crypto.PrivKey
 }
 
-func NewSignerWrapper(cmtPrivKey cmtcrypto.PrivKey) signer.Signer {
+func NewSignerWrapper(cmtPrivKey cmtcrypto.PrivKey) (signer.Signer, error) {
 	p2pPrivKey, err := GetNodeKey(&cmtp2p.NodeKey{PrivKey: cmtPrivKey})
 	if err != nil {
-		panic("failed to get node key")
+		return nil, fmt.Errorf("failed to get node key: %w", err)
 	}
 
 	return &signerWrapper{
 		cmtPrivKey: cmtPrivKey,
 		p2pPrivKey: p2pPrivKey,
-	}
+	}, nil
 }
 
 // GetAddress implements signer.Signer.
@@ -52,7 +51,7 @@ func (s *signerWrapper) Sign(message []byte) ([]byte, error) {
 }
 
 // GetNodeKey creates libp2p private key from Tendermints NodeKey.
-func GetNodeKey(nodeKey *p2p.NodeKey) (crypto.PrivKey, error) {
+func GetNodeKey(nodeKey *cmtp2p.NodeKey) (crypto.PrivKey, error) {
 	if nodeKey == nil || nodeKey.PrivKey == nil {
 		return nil, errNilKey
 	}

@@ -15,7 +15,6 @@ import (
 	rpcclient "github.com/cometbft/cometbft/rpc/client"
 	"github.com/cometbft/cometbft/state/indexer"
 	"github.com/cometbft/cometbft/state/txindex"
-	"github.com/cosmos/cosmos-sdk/client"
 	servercmtlog "github.com/cosmos/cosmos-sdk/server/log"
 	"github.com/rs/cors"
 	"golang.org/x/net/netutil"
@@ -42,7 +41,6 @@ var (
 
 var (
 	_ rpcclient.Client = &RPCServer{}
-	_ client.CometRPC  = &RPCServer{}
 )
 
 func NewRPCServer(

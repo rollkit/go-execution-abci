@@ -3,14 +3,14 @@ module github.com/rollkit/go-execution-abci
 go 1.24.1
 
 require (
+	cosmossdk.io/log v1.5.1
 	github.com/cosmos/cosmos-sdk v0.50.13
+	github.com/cosmos/gogoproto v1.7.0
+	github.com/go-kit/kit v0.13.0
 	github.com/gorilla/rpc v1.2.1
 	github.com/rollkit/rollkit v0.14.2-0.20250422111549-9f2f92ea5c6e
 	github.com/rollkit/rollkit/core v0.0.0-20250422111549-9f2f92ea5c6e
 	github.com/rollkit/rollkit/da v0.0.0-20250422111549-9f2f92ea5c6e
-	cosmossdk.io/log v1.5.1
-	github.com/cosmos/gogoproto v1.7.0
-	github.com/go-kit/kit v0.13.0
 )
 
 replace github.com/btcsuite/btcd => github.com/btcsuite/btcd v0.22.0-beta
@@ -58,7 +58,6 @@ require (
 	github.com/cosmos/cosmos-proto v1.0.0-beta.5 // indirect
 	github.com/cosmos/go-bip39 v1.0.0 // indirect
 	github.com/cosmos/gogogateway v1.2.0 // indirect
-
 	github.com/cosmos/iavl v1.2.2 // indirect
 	github.com/cosmos/ics23/go v0.11.0 // indirect
 	github.com/cosmos/ledger-cosmos-go v0.14.0 // indirect
@@ -81,7 +80,6 @@ require (
 	github.com/francoispqt/gojay v1.2.13 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/getsentry/sentry-go v0.27.0 // indirect
-
 	github.com/go-kit/log v0.2.1 // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect

@@ -401,7 +401,6 @@ func startNode(
 	blockIndexer := indexer.BlockIndexer(nil) // Placeholder for actual BlockIndexer (uses cometbft/state/indexer)
 	rpcProvider := rpc.NewRpcProvider(executor, txIndexer, blockIndexer, servercmtlog.CometLoggerWrapper{Logger: logger})
 
-	// Create the HTTP handler using the provider
 	rpcHandler, err := rpcjson.GetRPCHandler(rpcProvider, servercmtlog.CometLoggerWrapper{Logger: logger})
 	if err != nil {
 		return nil, nil, cleanupFn, fmt.Errorf("failed to create http handler: %w", err)

@@ -34,7 +34,6 @@ import (
 	"github.com/rollkit/rollkit/types"
 
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
-	execp2p "github.com/rollkit/go-execution-abci/pkg/p2p"
 	"github.com/rollkit/go-execution-abci/pkg/rpc/json"
 )
 
@@ -512,7 +511,7 @@ func (r *RPCServer) BroadcastTxSync(ctx context.Context, tx cmttypes.Tx) (*coret
 	// is no routine that gossips transactions after they enter the pool
 	if res.Code == abci.CodeTypeOK {
 		if r.adapter.TxGossiper == nil {
-			return nil, execp2p.ErrNotReady
+			return nil, errors.New("tx gossiper is not ready")
 		}
 
 		err = r.adapter.TxGossiper.Publish(ctx, tx)

@@ -13,12 +13,26 @@ import (
 	"github.com/cometbft/cometbft/libs/log"
 	rpcclient "github.com/cometbft/cometbft/rpc/client"
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
+	"github.com/cometbft/cometbft/types"
 	"github.com/gorilla/rpc/v2"
 	"github.com/gorilla/rpc/v2/json2"
 )
 
+// RpcClient defines the interface needed by the service.
+// It's a subset of rpcclient.Client methods.
+type RpcClient interface {
+	rpcclient.ABCIClient
+	rpcclient.HistoryClient
+	rpcclient.NetworkClient
+	rpcclient.SignClient
+	rpcclient.StatusClient
+	rpcclient.EventsClient
+	rpcclient.EvidenceClient
+	rpcclient.MempoolClient
+}
+
 // GetHTTPHandler returns handler configured to serve Tendermint-compatible RPC.
-func GetHTTPHandler(l rpcclient.Client, logger log.Logger) (http.Handler, error) {
+func GetHTTPHandler(l RpcClient, logger log.Logger) (http.Handler, error) {
 	return newHandler(newService(l, logger), json2.NewCodec(), logger), nil
 }
 
@@ -41,12 +55,12 @@ func newMethod(m interface{}) *method {
 }
 
 type service struct {
-	client  rpcclient.Client
+	client  RpcClient
 	methods map[string]*method
 	logger  log.Logger
 }
 
-func newService(c rpcclient.Client, l log.Logger) *service {
+func newService(c RpcClient, l log.Logger) *service {
 	s := service{
 		client: c,
 		logger: l,

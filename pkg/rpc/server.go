@@ -45,6 +45,26 @@ var (
 	_ client.CometRPC  = &RPCServer{}
 )
 
+func NewRPCServer(
+	adapter *adapter.Adapter,
+	cfg *cmtcfg.RPCConfig,
+	txIndexer txindex.TxIndexer,
+	blockIndexer indexer.BlockIndexer,
+	logger log.Logger,
+) *RPCServer {
+	return &RPCServer{
+		adapter:      adapter,
+		txIndexer:    txIndexer,
+		blockIndexer: blockIndexer,
+		config:       cfg,
+		logger:       servercmtlog.CometLoggerWrapper{Logger: logger},
+	}
+}
+
+// RPCServer is a RPC server that implements the client.Client and client.CometRPC interfaces.
+// It provides functionality to interact with the node through RPC calls.
+// The server can be configured with different options such as CORS, connection limits,
+// and listen addresses.
 type RPCServer struct {
 	adapter      *adapter.Adapter
 	txIndexer    txindex.TxIndexer
@@ -121,20 +141,6 @@ func (r *RPCServer) serve(listener net.Listener, handler http.Handler) error {
 	}
 	return r.server.Serve(listener)
 }
-
-func NewRPCServer(adapter *adapter.Adapter, cfg *cmtcfg.RPCConfig, txIndexer txindex.TxIndexer, blockIndexer indexer.BlockIndexer, logger log.Logger) *RPCServer {
-	return &RPCServer{adapter: adapter, txIndexer: txIndexer, blockIndexer: blockIndexer, config: cfg, logger: servercmtlog.CometLoggerWrapper{Logger: logger}}
-}
-
-// ----------------------------------------------------------------------------
-// RPC Method Implementations (Moved to separate files: rpc_*.go)
-// - rpc_info.go (ABCI*, Status, NetInfo, Health, Consensus*, Genesis*)
-// - rpc_block.go (Block*, BlockResults, Commit, Header*, BlockchainInfo, BlockSearch)
-// - rpc_tx.go (Tx, TxSearch, BroadcastTx*, CheckTx, NumUnconfirmedTxs, UnconfirmedTxs)
-// - rpc_validators.go (Validators)
-// - rpc_evidence.go (BroadcastEvidence)
-// - rpc_events.go (Subscribe, Unsubscribe*)
-// ----------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------
 // Client Lifecycle Methods

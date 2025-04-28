@@ -356,11 +356,6 @@ func startNode(
 		return nil, nil, nil, cleanupFn, err
 	}
 
-	adapaterMetrics := adapter.NopMetrics()
-	if rollkitcfg.Instrumentation.IsPrometheusEnabled() {
-		adapaterMetrics = adapter.PrometheusMetrics(config.DefaultInstrumentationConfig().Namespace, "chain_id", cmtGenDoc.ChainID)
-	}
-
 	adapterMetrics := adapter.NopMetrics()
 	if rollkitcfg.Instrumentation.IsPrometheusEnabled() {
 		adapterMetrics = adapter.PrometheusMetrics(config.DefaultInstrumentationConfig().Namespace, "chain_id", cmtGenDoc.ChainID)

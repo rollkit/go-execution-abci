@@ -33,9 +33,9 @@ import (
 
 	"github.com/rollkit/rollkit/types"
 
-	"github.com/rollkit/go-execution-abci/adapter"
-	execp2p "github.com/rollkit/go-execution-abci/p2p"
-	"github.com/rollkit/go-execution-abci/rpc/json"
+	"github.com/rollkit/go-execution-abci/pkg/adapter"
+	execp2p "github.com/rollkit/go-execution-abci/pkg/p2p"
+	"github.com/rollkit/go-execution-abci/pkg/rpc/json"
 )
 
 const (

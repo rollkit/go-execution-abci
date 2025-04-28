@@ -40,9 +40,9 @@ import (
 	"github.com/rollkit/rollkit/pkg/signer"
 	"github.com/rollkit/rollkit/pkg/store"
 
-	"github.com/rollkit/go-execution-abci/adapter"
-	"github.com/rollkit/go-execution-abci/rpc"
-	execsigner "github.com/rollkit/go-execution-abci/signer"
+	"github.com/rollkit/go-execution-abci/pkg/adapter"
+	"github.com/rollkit/go-execution-abci/pkg/rpc"
+	execsigner "github.com/rollkit/go-execution-abci/pkg/signer"
 )
 
 const (

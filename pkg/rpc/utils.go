@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -176,4 +177,94 @@ func filterMinMax(base, height, mini, maxi, limit int64) (int64, int64, error) {
 			errors.New("invalid request"), mini, maxi)
 	}
 	return mini, maxi, nil
+}
+
+func validateSkipCount(page, perPage int) int {
+	skipCount := (page - 1) * perPage
+	if skipCount < 0 {
+		return 0
+	}
+
+	return skipCount
+}
+
+func validatePerPage(perPagePtr *int) int {
+	if perPagePtr == nil { // no per_page parameter
+		return defaultPerPage
+	}
+
+	perPage := *perPagePtr
+	if perPage < 1 {
+		return defaultPerPage
+	} else if perPage > maxPerPage {
+		return maxPerPage
+	}
+	return perPage
+}
+
+func validatePage(pagePtr *int, perPage, totalCount int) (int, error) {
+	if perPage < 1 {
+		return 0, fmt.Errorf("invalid perPage parameter: %d (must be positive)", perPage)
+	}
+
+	if pagePtr == nil { // no page parameter
+		return 1, nil
+	}
+
+	pages := ((totalCount - 1) / perPage) + 1
+	if pages == 0 {
+		pages = 1 // one page (even if it's empty)
+	}
+	page := *pagePtr
+	if page <= 0 || page > pages {
+		return 1, fmt.Errorf("page should be within [1, %d] range, given %d", pages, page)
+	}
+
+	return page, nil
+}
+
+func (r *RPCServer) normalizeHeight(height *int64) uint64 {
+	var heightValue uint64
+	if height == nil {
+		var err error
+		// TODO: Decide how to handle context here. Using background for now.
+		heightValue, err = r.adapter.Store.Height(context.Background())
+		if err != nil {
+			// TODO: Consider logging or returning error
+			return 0
+		}
+	} else if *height < 0 {
+		// Handle negative heights if they have special meaning (e.g., -1 for latest)
+		// Currently, just treat them as 0 or latest, adjust as needed.
+		// For now, let's assume negative height means latest valid height.
+		var err error
+		heightValue, err = r.adapter.Store.Height(context.Background())
+		if err != nil {
+			return 0
+		}
+	} else {
+		heightValue = uint64(*height)
+	}
+
+	return heightValue
+}
+
+func (r *RPCServer) getBlockMeta(ctx context.Context, n uint64) *cmtypes.BlockMeta {
+	header, data, err := r.adapter.Store.GetBlockData(ctx, n)
+	if err != nil {
+		// TODO: Log error? Return error?
+		return nil
+	}
+	// Handle case where GetBlockData might return nil header/data without error?
+	if header == nil || data == nil {
+		// TODO: Log this situation?
+		return nil
+	}
+	bmeta, err := ToABCIBlockMeta(header, data)
+	if err != nil {
+		// TODO: Log error? Return error?
+		return nil
+	}
+
+	return bmeta
 }

@@ -11,13 +11,10 @@ import (
 	"cosmossdk.io/log"
 	cmtcfg "github.com/cometbft/cometbft/config"
 	cmtlog "github.com/cometbft/cometbft/libs/log"
-	"github.com/cometbft/cometbft/state/indexer"
-	"github.com/cometbft/cometbft/state/txindex"
 	servercmtlog "github.com/cosmos/cosmos-sdk/server/log"
 	"github.com/rs/cors"
 	"golang.org/x/net/netutil"
 
-	"github.com/rollkit/go-execution-abci/pkg/adapter"
 	"github.com/rollkit/go-execution-abci/pkg/rpc/json"
 )
 
@@ -37,14 +34,11 @@ var (
 
 // NewRPCServer creates a new RPC server.
 func NewRPCServer(
-	adapter *adapter.Adapter,
+	provider *RpcProvider,
 	cfg *cmtcfg.RPCConfig,
 	logger log.Logger,
-	txIndexer txindex.TxIndexer,
-	blockIndexer indexer.BlockIndexer,
 ) *RPCServer {
 	cmtLogger := servercmtlog.CometLoggerWrapper{Logger: logger}
-	provider := NewRpcProvider(adapter, txIndexer, blockIndexer, cmtLogger)
 	return &RPCServer{
 		config:   cfg,
 		provider: provider,
@@ -56,13 +50,13 @@ func NewRPCServer(
 // It delegates the actual RPC method implementations to an rpcProvider.
 type RPCServer struct {
 	config   *cmtcfg.RPCConfig
-	provider *rpcProvider
+	provider *RpcProvider
 	server   http.Server
 	logger   cmtlog.Logger
 }
 
 // GetProvider returns the underlying rpcProvider which implements the CometRPC interface.
-func (r *RPCServer) GetProvider() *rpcProvider {
+func (r *RPCServer) GetProvider() *RpcProvider {
 	return r.provider
 }
 

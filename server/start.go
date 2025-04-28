@@ -29,6 +29,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/cometbft/cometbft/state/indexer"
+	"github.com/cometbft/cometbft/state/txindex"
 	"github.com/rollkit/rollkit/core/sequencer"
 	rollkitda "github.com/rollkit/rollkit/da"
 	"github.com/rollkit/rollkit/da/proxy/jsonrpc"
@@ -392,7 +394,14 @@ func startNode(
 		return nil, nil, cleanupFn, err
 	}
 
-	rpcServer = rpc.NewRPCServer(executor, cfg.RPC, logger, nil, nil)
+	// Create the RPC provider with necessary dependencies
+	// TODO: Pass actual indexers when implemented/available
+	txIndexer := txindex.TxIndexer(nil)       // Placeholder for actual TxIndexer (uses cometbft/state/txindex)
+	blockIndexer := indexer.BlockIndexer(nil) // Placeholder for actual BlockIndexer (uses cometbft/state/indexer)
+	rpcProvider := rpc.NewRpcProvider(executor, txIndexer, blockIndexer, servercmtlog.CometLoggerWrapper{Logger: logger})
+
+	// Pass the created provider to the RPC server constructor
+	rpcServer = rpc.NewRPCServer(rpcProvider, cfg.RPC, logger)
 	err = rpcServer.Start()
 	if err != nil {
 		return nil, nil, cleanupFn, fmt.Errorf("failed to start abci rpc server: %w", err)

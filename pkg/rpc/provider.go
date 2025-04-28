@@ -31,14 +31,13 @@ import (
 // ErrConsensusStateNotAvailable is returned because Rollkit doesn't use Tendermint consensus.
 var ErrConsensusStateNotAvailable = errors.New("consensus state not available in Rollkit")
 
-// rpcProvider implements the interfaces required by the JSON-RPC service,
+// RpcProvider implements the interfaces required by the JSON-RPC service,
 // primarily by delegating calls to the underlying adapter and indexers.
-type rpcProvider struct {
+type RpcProvider struct {
 	adapter      *adapter.Adapter
 	txIndexer    txindex.TxIndexer
 	blockIndexer indexer.BlockIndexer
 	logger       cmtlog.Logger
-	// TODO(gess): Consider adding config if any RPC methods need it directly
 }
 
 // NewRpcProvider creates a new instance of rpcProvider.
@@ -47,8 +46,8 @@ func NewRpcProvider(
 	txIndexer txindex.TxIndexer,
 	blockIndexer indexer.BlockIndexer,
 	logger cmtlog.Logger,
-) *rpcProvider {
-	return &rpcProvider{
+) *RpcProvider {
+	return &RpcProvider{
 		adapter:      adapter,
 		txIndexer:    txIndexer,
 		blockIndexer: blockIndexer,
@@ -57,7 +56,7 @@ func NewRpcProvider(
 }
 
 // ABCIInfo implements client.CometRPC.
-func (p *rpcProvider) ABCIInfo(context.Context) (*coretypes.ResultABCIInfo, error) {
+func (p *RpcProvider) ABCIInfo(context.Context) (*coretypes.ResultABCIInfo, error) {
 	info, err := p.adapter.App.Info(&abci.RequestInfo{})
 	if err != nil {
 		return nil, err
@@ -68,7 +67,7 @@ func (p *rpcProvider) ABCIInfo(context.Context) (*coretypes.ResultABCIInfo, erro
 }
 
 // ABCIQuery implements client.CometRPC.
-func (p *rpcProvider) ABCIQuery(ctx context.Context, path string, data cmtbytes.HexBytes) (*coretypes.ResultABCIQuery, error) {
+func (p *RpcProvider) ABCIQuery(ctx context.Context, path string, data cmtbytes.HexBytes) (*coretypes.ResultABCIQuery, error) {
 	resp, err := p.adapter.App.Query(ctx, &abci.RequestQuery{
 		Data: data,
 		Path: path,
@@ -82,7 +81,7 @@ func (p *rpcProvider) ABCIQuery(ctx context.Context, path string, data cmtbytes.
 }
 
 // ABCIQueryWithOptions implements client.CometRPC.
-func (p *rpcProvider) ABCIQueryWithOptions(ctx context.Context, path string, data cmtbytes.HexBytes, opts rpcclient.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
+func (p *RpcProvider) ABCIQueryWithOptions(ctx context.Context, path string, data cmtbytes.HexBytes, opts rpcclient.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
 	resp, err := p.adapter.App.Query(ctx, &abci.RequestQuery{
 		Data:   data,
 		Path:   path,
@@ -98,7 +97,7 @@ func (p *rpcProvider) ABCIQueryWithOptions(ctx context.Context, path string, dat
 }
 
 // Status implements client.CometRPC.
-func (p *rpcProvider) Status(ctx context.Context) (*coretypes.ResultStatus, error) {
+func (p *RpcProvider) Status(ctx context.Context) (*coretypes.ResultStatus, error) {
 	info, err := p.adapter.App.Info(&abci.RequestInfo{})
 	if err != nil {
 		return nil, err
@@ -126,7 +125,7 @@ func (p *rpcProvider) Status(ctx context.Context) (*coretypes.ResultStatus, erro
 }
 
 // NetInfo implements client.Client.
-func (p *rpcProvider) NetInfo(context.Context) (*coretypes.ResultNetInfo, error) {
+func (p *RpcProvider) NetInfo(context.Context) (*coretypes.ResultNetInfo, error) {
 	res := coretypes.ResultNetInfo{
 		Listening: true,
 	}
@@ -151,12 +150,12 @@ func (p *rpcProvider) NetInfo(context.Context) (*coretypes.ResultNetInfo, error)
 }
 
 // Health implements client.Client.
-func (p *rpcProvider) Health(context.Context) (*coretypes.ResultHealth, error) {
+func (p *RpcProvider) Health(context.Context) (*coretypes.ResultHealth, error) {
 	return &coretypes.ResultHealth{}, nil
 }
 
 // ConsensusParams implements client.Client.
-func (p *rpcProvider) ConsensusParams(ctx context.Context, height *int64) (*coretypes.ResultConsensusParams, error) {
+func (p *RpcProvider) ConsensusParams(ctx context.Context, height *int64) (*coretypes.ResultConsensusParams, error) {
 	state, err := p.adapter.LoadState(ctx)
 	if err != nil {
 		return nil, err
@@ -187,29 +186,29 @@ func (p *rpcProvider) ConsensusParams(ctx context.Context, height *int64) (*core
 }
 
 // ConsensusState implements client.Client.
-func (p *rpcProvider) ConsensusState(context.Context) (*coretypes.ResultConsensusState, error) {
+func (p *RpcProvider) ConsensusState(context.Context) (*coretypes.ResultConsensusState, error) {
 	return nil, ErrConsensusStateNotAvailable // Assuming ErrConsensusStateNotAvailable is defined in rpc package or imported
 }
 
 // DumpConsensusState implements client.Client.
-func (p *rpcProvider) DumpConsensusState(context.Context) (*coretypes.ResultDumpConsensusState, error) {
+func (p *RpcProvider) DumpConsensusState(context.Context) (*coretypes.ResultDumpConsensusState, error) {
 	return nil, ErrConsensusStateNotAvailable // Assuming ErrConsensusStateNotAvailable is defined in rpc package or imported
 }
 
 // Genesis implements client.Client.
-func (p *rpcProvider) Genesis(context.Context) (*coretypes.ResultGenesis, error) {
+func (p *RpcProvider) Genesis(context.Context) (*coretypes.ResultGenesis, error) {
 	// Returning unimplemented as per the original code.
 	// Consider implementing or returning a more specific error if needed.
 	panic("unimplemented")
 }
 
 // GenesisChunked implements client.Client.
-func (p *rpcProvider) GenesisChunked(context.Context, uint) (*coretypes.ResultGenesisChunk, error) {
+func (p *RpcProvider) GenesisChunked(context.Context, uint) (*coretypes.ResultGenesisChunk, error) {
 	return nil, errors.New("GenesisChunked RPC method is not yet implemented")
 }
 
 // Block implements client.CometRPC.
-func (p *rpcProvider) Block(ctx context.Context, height *int64) (*coretypes.ResultBlock, error) {
+func (p *RpcProvider) Block(ctx context.Context, height *int64) (*coretypes.ResultBlock, error) {
 	var heightValue uint64
 
 	switch {
@@ -244,7 +243,7 @@ func (p *rpcProvider) Block(ctx context.Context, height *int64) (*coretypes.Resu
 }
 
 // BlockByHash implements client.CometRPC.
-func (p *rpcProvider) BlockByHash(ctx context.Context, hash []byte) (*coretypes.ResultBlock, error) {
+func (p *RpcProvider) BlockByHash(ctx context.Context, hash []byte) (*coretypes.ResultBlock, error) {
 	header, data, err := p.adapter.Store.GetBlockByHash(ctx, rlktypes.Hash(hash)) // Used types.Hash from rollkit/types
 	if err != nil {
 		return nil, err
@@ -267,7 +266,7 @@ func (p *rpcProvider) BlockByHash(ctx context.Context, hash []byte) (*coretypes.
 }
 
 // BlockResults implements client.CometRPC.
-func (p *rpcProvider) BlockResults(ctx context.Context, height *int64) (*coretypes.ResultBlockResults, error) {
+func (p *RpcProvider) BlockResults(ctx context.Context, height *int64) (*coretypes.ResultBlockResults, error) {
 	// Currently, this method returns an empty result as the original implementation was commented out.
 	// If block results become available, this implementation should be updated.
 	_ = p.normalizeHeight(height) // Use height to avoid unused variable error, logic depends on future implementation
@@ -298,7 +297,7 @@ func (p *rpcProvider) BlockResults(ctx context.Context, height *int64) (*coretyp
 }
 
 // Commit implements client.CometRPC.
-func (p *rpcProvider) Commit(ctx context.Context, height *int64) (*coretypes.ResultCommit, error) {
+func (p *RpcProvider) Commit(ctx context.Context, height *int64) (*coretypes.ResultCommit, error) {
 	heightValue := p.normalizeHeight(height)
 	header, data, err := p.adapter.Store.GetBlockData(ctx, heightValue)
 	if err != nil {
@@ -321,7 +320,7 @@ func (p *rpcProvider) Commit(ctx context.Context, height *int64) (*coretypes.Res
 }
 
 // Header implements client.Client.
-func (p *rpcProvider) Header(ctx context.Context, heightPtr *int64) (*coretypes.ResultHeader, error) {
+func (p *RpcProvider) Header(ctx context.Context, heightPtr *int64) (*coretypes.ResultHeader, error) {
 	height := p.normalizeHeight(heightPtr)
 	blockMeta := p.getBlockMeta(ctx, height)
 	if blockMeta == nil {
@@ -331,7 +330,7 @@ func (p *rpcProvider) Header(ctx context.Context, heightPtr *int64) (*coretypes.
 }
 
 // HeaderByHash implements client.Client.
-func (p *rpcProvider) HeaderByHash(ctx context.Context, hash cmtbytes.HexBytes) (*coretypes.ResultHeader, error) {
+func (p *RpcProvider) HeaderByHash(ctx context.Context, hash cmtbytes.HexBytes) (*coretypes.ResultHeader, error) {
 	// N.B. The hash parameter is HexBytes so that the reflective parameter
 	// decoding logic in the HTTP service will correctly translate from JSON.
 	// See https://github.com/cometbft/cometbft/issues/6802 for context.
@@ -356,7 +355,7 @@ func (p *rpcProvider) HeaderByHash(ctx context.Context, hash cmtbytes.HexBytes) 
 }
 
 // BlockchainInfo implements client.CometRPC.
-func (p *rpcProvider) BlockchainInfo(ctx context.Context, minHeight int64, maxHeight int64) (*coretypes.ResultBlockchainInfo, error) {
+func (p *RpcProvider) BlockchainInfo(ctx context.Context, minHeight int64, maxHeight int64) (*coretypes.ResultBlockchainInfo, error) {
 	const limit int64 = 20 // Default limit used in the original code
 
 	height, err := p.adapter.Store.Height(ctx)
@@ -403,7 +402,7 @@ func (p *rpcProvider) BlockchainInfo(ctx context.Context, minHeight int64, maxHe
 }
 
 // BlockSearch implements client.CometRPC.
-func (p *rpcProvider) BlockSearch(ctx context.Context, query string, pagePtr *int, perPagePtr *int, orderBy string) (*coretypes.ResultBlockSearch, error) {
+func (p *RpcProvider) BlockSearch(ctx context.Context, query string, pagePtr *int, perPagePtr *int, orderBy string) (*coretypes.ResultBlockSearch, error) {
 	// skip if block indexing is disabled
 	if _, ok := p.blockIndexer.(*blockidxnull.BlockerIndexer); ok {
 		return nil, errors.New("block indexing is disabled")
@@ -475,7 +474,7 @@ func (p *rpcProvider) BlockSearch(ctx context.Context, query string, pagePtr *in
 }
 
 // BroadcastTxAsync implements client.CometRPC.
-func (p *rpcProvider) BroadcastTxAsync(ctx context.Context, tx cmttypes.Tx) (*coretypes.ResultBroadcastTx, error) {
+func (p *RpcProvider) BroadcastTxAsync(ctx context.Context, tx cmttypes.Tx) (*coretypes.ResultBroadcastTx, error) {
 	var res *abci.ResponseCheckTx
 	responseCh := make(chan *abci.ResponseCheckTx, 1)
 
@@ -507,7 +506,7 @@ func (p *rpcProvider) BroadcastTxAsync(ctx context.Context, tx cmttypes.Tx) (*co
 }
 
 // BroadcastTxCommit implements client.CometRPC.
-func (p *rpcProvider) BroadcastTxCommit(ctx context.Context, tx cmttypes.Tx) (*coretypes.ResultBroadcastTxCommit, error) {
+func (p *RpcProvider) BroadcastTxCommit(ctx context.Context, tx cmttypes.Tx) (*coretypes.ResultBroadcastTxCommit, error) {
 	// This implementation corresponds to Tendermint's implementation from rpc/core/mempool.go.
 	// ctx.RemoteAddr godoc: If neither HTTPReq nor WSConn is set, an empty string is returned.
 	// This code is a local client, so we can assume that subscriber is ""
@@ -654,7 +653,7 @@ func (p *rpcProvider) BroadcastTxCommit(ctx context.Context, tx cmttypes.Tx) (*c
 }
 
 // BroadcastTxSync implements client.CometRPC.
-func (p *rpcProvider) BroadcastTxSync(ctx context.Context, tx cmttypes.Tx) (*coretypes.ResultBroadcastTx, error) {
+func (p *RpcProvider) BroadcastTxSync(ctx context.Context, tx cmttypes.Tx) (*coretypes.ResultBroadcastTx, error) {
 	resCh := make(chan *abci.ResponseCheckTx, 1)
 	err := p.adapter.Mempool.CheckTx(tx, func(res *abci.ResponseCheckTx) {
 		select {
@@ -704,7 +703,7 @@ func (p *rpcProvider) BroadcastTxSync(ctx context.Context, tx cmttypes.Tx) (*cor
 }
 
 // CheckTx implements client.Client.
-func (p *rpcProvider) CheckTx(ctx context.Context, tx cmttypes.Tx) (*coretypes.ResultCheckTx, error) {
+func (p *RpcProvider) CheckTx(ctx context.Context, tx cmttypes.Tx) (*coretypes.ResultCheckTx, error) {
 	var res *abci.ResponseCheckTx
 	responseCh := make(chan *abci.ResponseCheckTx, 1)
 
@@ -729,7 +728,7 @@ func (p *rpcProvider) CheckTx(ctx context.Context, tx cmttypes.Tx) (*coretypes.R
 }
 
 // Tx implements client.CometRPC.
-func (p *rpcProvider) Tx(ctx context.Context, hash []byte, prove bool) (*coretypes.ResultTx, error) {
+func (p *RpcProvider) Tx(ctx context.Context, hash []byte, prove bool) (*coretypes.ResultTx, error) {
 	// Check if tx indexing is disabled
 	if p.txIndexer == nil {
 		return nil, fmt.Errorf("transaction indexing is disabled")
@@ -786,7 +785,7 @@ func (p *rpcProvider) Tx(ctx context.Context, hash []byte, prove bool) (*coretyp
 }
 
 // TxSearch implements client.CometRPC.
-func (p *rpcProvider) TxSearch(ctx context.Context, query string, prove bool, pagePtr *int, perPagePtr *int, orderBy string) (*coretypes.ResultTxSearch, error) {
+func (p *RpcProvider) TxSearch(ctx context.Context, query string, prove bool, pagePtr *int, perPagePtr *int, orderBy string) (*coretypes.ResultTxSearch, error) {
 	// Check if tx indexing is disabled
 	if p.txIndexer == nil {
 		return nil, fmt.Errorf("transaction indexing is disabled")
@@ -885,7 +884,7 @@ func (p *rpcProvider) TxSearch(ctx context.Context, query string, prove bool, pa
 }
 
 // NumUnconfirmedTxs implements client.Client.
-func (p *rpcProvider) NumUnconfirmedTxs(context.Context) (*coretypes.ResultUnconfirmedTxs, error) {
+func (p *RpcProvider) NumUnconfirmedTxs(context.Context) (*coretypes.ResultUnconfirmedTxs, error) {
 	return &coretypes.ResultUnconfirmedTxs{
 		Count:      p.adapter.Mempool.Size(),
 		Total:      p.adapter.Mempool.Size(), // Assuming Total means current size
@@ -894,7 +893,7 @@ func (p *rpcProvider) NumUnconfirmedTxs(context.Context) (*coretypes.ResultUncon
 }
 
 // UnconfirmedTxs implements client.CometRPC.
-func (p *rpcProvider) UnconfirmedTxs(ctx context.Context, limitPtr *int) (*coretypes.ResultUnconfirmedTxs, error) {
+func (p *RpcProvider) UnconfirmedTxs(ctx context.Context, limitPtr *int) (*coretypes.ResultUnconfirmedTxs, error) {
 	txs := p.adapter.Mempool.ReapMaxTxs(-1) // Reap all transactions
 
 	limit := len(txs)
@@ -915,7 +914,7 @@ func (p *rpcProvider) UnconfirmedTxs(ctx context.Context, limitPtr *int) (*coret
 }
 
 // Validators implements client.CometRPC.
-func (p *rpcProvider) Validators(ctx context.Context, heightPtr *int64, pagePtr *int, perPagePtr *int) (*coretypes.ResultValidators, error) {
+func (p *RpcProvider) Validators(ctx context.Context, heightPtr *int64, pagePtr *int, perPagePtr *int) (*coretypes.ResultValidators, error) {
 	// Determine the height to query validators for.
 	// If height is nil or latest, use the current block height.
 	// Otherwise, use the specified height (if state for that height is available).
@@ -970,7 +969,7 @@ func (p *rpcProvider) Validators(ctx context.Context, heightPtr *int64, pagePtr 
 // as Rollkit doesn't handle evidence in the same way as Tendermint.
 // It returns a successful response with the evidence hash, mimicking Tendermint's behaviour
 // without actually processing or storing the evidence.
-func (p *rpcProvider) BroadcastEvidence(_ context.Context, evidence cmttypes.Evidence) (*coretypes.ResultBroadcastEvidence, error) {
+func (p *RpcProvider) BroadcastEvidence(_ context.Context, evidence cmttypes.Evidence) (*coretypes.ResultBroadcastEvidence, error) {
 	// Log that evidence broadcasting is not supported or is a no-op?
 	p.logger.Debug("BroadcastEvidence called, but evidence handling is not implemented in Rollkit RPC.")
 	return &coretypes.ResultBroadcastEvidence{
@@ -980,7 +979,7 @@ func (p *rpcProvider) BroadcastEvidence(_ context.Context, evidence cmttypes.Evi
 
 // Subscribe implements client.Client.
 // This functionality is currently not implemented.
-func (p *rpcProvider) Subscribe(ctx context.Context, subscriber string, query string, outCapacity ...int) (out <-chan coretypes.ResultEvent, err error) {
+func (p *RpcProvider) Subscribe(ctx context.Context, subscriber string, query string, outCapacity ...int) (out <-chan coretypes.ResultEvent, err error) {
 	// Check if EventBus is available
 	if p.adapter.EventBus == nil {
 		return nil, errors.New("event bus is not configured, cannot subscribe to events")
@@ -1010,7 +1009,7 @@ func (p *rpcProvider) Subscribe(ctx context.Context, subscriber string, query st
 
 // Unsubscribe implements client.Client.
 // This functionality is currently not implemented.
-func (p *rpcProvider) Unsubscribe(ctx context.Context, subscriber string, query string) error {
+func (p *RpcProvider) Unsubscribe(ctx context.Context, subscriber string, query string) error {
 	if p.adapter.EventBus == nil {
 		return errors.New("event bus is not configured, cannot unsubscribe")
 	}
@@ -1026,7 +1025,7 @@ func (p *rpcProvider) Unsubscribe(ctx context.Context, subscriber string, query 
 
 // UnsubscribeAll implements client.Client.
 // This functionality is currently not implemented.
-func (p *rpcProvider) UnsubscribeAll(ctx context.Context, subscriber string) error {
+func (p *RpcProvider) UnsubscribeAll(ctx context.Context, subscriber string) error {
 	if p.adapter.EventBus == nil {
 		return errors.New("event bus is not configured, cannot unsubscribe")
 	}
@@ -1038,7 +1037,7 @@ func (p *rpcProvider) UnsubscribeAll(ctx context.Context, subscriber string) err
 // ----------------------------------------------------------------------------
 // Helper methods
 
-func (p *rpcProvider) normalizeHeight(height *int64) uint64 {
+func (p *RpcProvider) normalizeHeight(height *int64) uint64 {
 	var heightValue uint64
 	if height == nil {
 		var err error
@@ -1066,7 +1065,7 @@ func (p *rpcProvider) normalizeHeight(height *int64) uint64 {
 	return heightValue
 }
 
-func (p *rpcProvider) getBlockMeta(ctx context.Context, n uint64) *cmtypes.BlockMeta {
+func (p *RpcProvider) getBlockMeta(ctx context.Context, n uint64) *cmtypes.BlockMeta {
 	header, data, err := p.adapter.Store.GetBlockData(ctx, n)
 	if err != nil {
 		p.logger.Error("Failed to get block data in getBlockMeta", "height", n, "err", err)

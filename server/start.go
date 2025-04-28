@@ -127,7 +127,7 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 		if svrCfg.API.Enable || svrCfg.GRPC.Enable {
 			// Re-assign for making the client available below do not use := to avoid
 			// shadowing the clientCtx variable.
-			clientCtx = clientCtx.WithClient(rpcServer)
+			clientCtx = clientCtx.WithClient(rpcServer.GetProvider())
 
 			app.RegisterTxService(clientCtx)
 			app.RegisterTendermintService(clientCtx)
@@ -392,7 +392,7 @@ func startNode(
 		return nil, nil, cleanupFn, err
 	}
 
-	rpcServer = rpc.NewRPCServer(executor, cfg.RPC, logger)
+	rpcServer = rpc.NewRPCServer(executor, cfg.RPC, logger, nil, nil)
 	err = rpcServer.Start()
 	if err != nil {
 		return nil, nil, cleanupFn, fmt.Errorf("failed to start abci rpc server: %w", err)

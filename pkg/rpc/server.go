@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"errors"
 	"net"
 	"net/http"
@@ -30,38 +31,42 @@ const (
 )
 
 var (
-	// ErrConsensusStateNotAvailable is returned because Rollkit doesn't use Tendermint consensus.
-	ErrConsensusStateNotAvailable = errors.New("consensus state not available in Rollkit")
-
+	// ErrConsensusStateNotAvailable moved to provider.go
 	subscribeTimeout = 5 * time.Second
 )
 
+// NewRPCServer creates a new RPC server.
 func NewRPCServer(
 	adapter *adapter.Adapter,
 	cfg *cmtcfg.RPCConfig,
 	logger log.Logger,
+	txIndexer txindex.TxIndexer,
+	blockIndexer indexer.BlockIndexer,
 ) *RPCServer {
+	cmtLogger := servercmtlog.CometLoggerWrapper{Logger: logger}
+	provider := NewRpcProvider(adapter, txIndexer, blockIndexer, cmtLogger)
 	return &RPCServer{
-		adapter: adapter,
-		config:  cfg,
-		logger:  servercmtlog.CometLoggerWrapper{Logger: logger},
+		config:   cfg,
+		provider: provider,
+		logger:   cmtLogger,
 	}
 }
 
-// RPCServer is a RPC server that implements the client.Client and client.CometRPC interfaces.
-// It provides functionality to interact with the node through RPC calls.
-// The server can be configured with different options such as CORS, connection limits,
-// and listen addresses.
+// RPCServer manages the HTTP server for RPC requests.
+// It delegates the actual RPC method implementations to an rpcProvider.
 type RPCServer struct {
-	adapter      *adapter.Adapter
-	txIndexer    txindex.TxIndexer
-	blockIndexer indexer.BlockIndexer
-	config       *cmtcfg.RPCConfig
-	server       http.Server
-	logger       cmtlog.Logger
+	config   *cmtcfg.RPCConfig
+	provider *rpcProvider
+	server   http.Server
+	logger   cmtlog.Logger
 }
 
-// Start implements client.Client.
+// GetProvider returns the underlying rpcProvider which implements the CometRPC interface.
+func (r *RPCServer) GetProvider() *rpcProvider {
+	return r.provider
+}
+
+// Start starts the RPC server.
 func (r *RPCServer) Start() error {
 	return r.startRPC()
 }
@@ -88,7 +93,7 @@ func (r *RPCServer) startRPC() error {
 		listener = netutil.LimitListener(listener, r.config.MaxOpenConnections)
 	}
 
-	handler, err := json.GetHTTPHandler(r, r.logger)
+	handler, err := json.GetHTTPHandler(r.provider, r.provider.logger)
 	if err != nil {
 		return err
 	}
@@ -129,39 +134,16 @@ func (r *RPCServer) serve(listener net.Listener, handler http.Handler) error {
 	return r.server.Serve(listener)
 }
 
-// ----------------------------------------------------------------------------
-// Client Lifecycle Methods
-
-// IsRunning implements client.Client.
-// Currently panics, consider implementing actual check if needed.
-func (r *RPCServer) IsRunning() bool {
-	panic("unimplemented")
-}
-
-// SetLogger implements client.Client.
-func (r *RPCServer) SetLogger(logger cmtlog.Logger) {
-	r.logger = logger
-}
-
-// OnStart implements client.Client.
-// Currently panics. Original Start() calls startRPC(), keep that behaviour?
-func (r *RPCServer) OnStart() error {
-	// If this should behave like the original Start(), call startRPC.
-	// return r.startRPC()
-	// panic("unimplemented")
-	return nil // Return nil to satisfy interface, actual logic unimplemented
-}
-
-// Quit implements client.Client.
-// Currently panics, implement if a quit channel mechanism is needed.
-func (r *RPCServer) Quit() <-chan struct{} {
-	panic("unimplemented") // Keep panic for non-error return types if unimplemented
-}
-
-// Stop implements client.Client.
-// Currently panics. Original OnStop handles shutdown. Should this call OnStop?
+// Stop stops the RPC server gracefully.
 func (r *RPCServer) Stop() error {
-	// r.OnStop() // Call the shutdown logic?
-	// panic("unimplemented")
-	return nil // Return nil to satisfy interface
+	r.logger.Info("Stopping RPC server")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := r.server.Shutdown(ctx); err != nil {
+		r.logger.Error("RPC server shutdown error", "err", err)
+		return err
+	}
+	r.logger.Info("RPC server stopped")
+	return nil
 }

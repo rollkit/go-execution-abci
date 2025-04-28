@@ -320,9 +320,9 @@ func startNode(
 		return nil, nil, cleanupFn, err
 	}
 
-	adapaterMetrics := adapter.NopMetrics()
+	adapterMetrics := adapter.NopMetrics()
 	if rollkitcfg.Instrumentation.IsPrometheusEnabled() {
-		adapaterMetrics = adapter.PrometheusMetrics(config.DefaultInstrumentationConfig().Namespace, "chain_id", cmtGenDoc.ChainID)
+		adapterMetrics = adapter.PrometheusMetrics(config.DefaultInstrumentationConfig().Namespace, "chain_id", cmtGenDoc.ChainID)
 	}
 
 	st := store.New(database)
@@ -335,7 +335,7 @@ func startNode(
 		logger,
 		cfg,
 		appGenesis,
-		adapaterMetrics,
+		adapterMetrics,
 	)
 
 	cmtApp := server.NewCometABCIWrapper(app)

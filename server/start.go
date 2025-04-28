@@ -386,7 +386,7 @@ func startNode(
 		return nil, nil, cleanupFn, err
 	}
 
-	rpcServer = rpc.NewRPCServer(executor, cfg.RPC, nil, nil, logger)
+	rpcServer = rpc.NewRPCServer(executor, cfg.RPC, logger)
 	err = rpcServer.Start()
 	if err != nil {
 		return nil, nil, cleanupFn, fmt.Errorf("failed to start abci rpc server: %w", err)

@@ -1,9 +1,7 @@
 package rpc
 
 import (
-	"context"
 	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -12,7 +10,6 @@ import (
 	"cosmossdk.io/log"
 	cmtcfg "github.com/cometbft/cometbft/config"
 	cmtlog "github.com/cometbft/cometbft/libs/log"
-	rpcclient "github.com/cometbft/cometbft/rpc/client"
 	"github.com/cometbft/cometbft/state/indexer"
 	"github.com/cometbft/cometbft/state/txindex"
 	servercmtlog "github.com/cosmos/cosmos-sdk/server/log"
@@ -39,23 +36,15 @@ var (
 	subscribeTimeout = 5 * time.Second
 )
 
-var (
-	_ rpcclient.Client = &RPCServer{}
-)
-
 func NewRPCServer(
 	adapter *adapter.Adapter,
 	cfg *cmtcfg.RPCConfig,
-	txIndexer txindex.TxIndexer,
-	blockIndexer indexer.BlockIndexer,
 	logger log.Logger,
 ) *RPCServer {
 	return &RPCServer{
-		adapter:      adapter,
-		txIndexer:    txIndexer,
-		blockIndexer: blockIndexer,
-		config:       cfg,
-		logger:       servercmtlog.CometLoggerWrapper{Logger: logger},
+		adapter: adapter,
+		config:  cfg,
+		logger:  servercmtlog.CometLoggerWrapper{Logger: logger},
 	}
 }
 
@@ -149,33 +138,9 @@ func (r *RPCServer) IsRunning() bool {
 	panic("unimplemented")
 }
 
-// OnStop implements client.Client.
-func (r *RPCServer) OnStop() {
-	// Use a timeout for graceful shutdown
-	shutdownTimeout := 5 * time.Second // TODO: Consider making this configurable
-	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-	defer cancel()
-
-	// server might be nil if startRPC wasn't called or failed early
-	if r.server.Handler != nil {
-		if err := r.server.Shutdown(ctx); err != nil {
-			r.logger.Error("error during RPC server shutdown", "error", err)
-		} else {
-			r.logger.Info("RPC server shut down gracefully")
-		}
-	}
-}
-
 // SetLogger implements client.Client.
 func (r *RPCServer) SetLogger(logger cmtlog.Logger) {
 	r.logger = logger
-}
-
-// OnReset implements client.Client.
-// Currently panics, implement if reset logic is required.
-func (r *RPCServer) OnReset() error {
-	// panic("unimplemented")
-	return nil // Return nil to satisfy interface, actual logic unimplemented
 }
 
 // OnStart implements client.Client.
@@ -191,22 +156,6 @@ func (r *RPCServer) OnStart() error {
 // Currently panics, implement if a quit channel mechanism is needed.
 func (r *RPCServer) Quit() <-chan struct{} {
 	panic("unimplemented") // Keep panic for non-error return types if unimplemented
-}
-
-// Reset implements client.Client.
-// Currently panics, implement if reset logic is required.
-func (r *RPCServer) Reset() error {
-	// panic("unimplemented")
-	return nil // Return nil to satisfy interface, actual logic unimplemented
-}
-
-// String implements client.Client.
-// Return a meaningful representation of the RPC server.
-func (r *RPCServer) String() string {
-	if r.config != nil && r.config.ListenAddress != "" {
-		return fmt.Sprintf("RPCServer(%s)", r.config.ListenAddress)
-	}
-	return "RPCServer(inactive)"
 }
 
 // Stop implements client.Client.

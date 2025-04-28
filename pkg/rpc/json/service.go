@@ -11,23 +11,22 @@ import (
 
 	cmjson "github.com/cometbft/cometbft/libs/json"
 	"github.com/cometbft/cometbft/libs/log"
-	rpcclient "github.com/cometbft/cometbft/rpc/client"
+	cometrpc "github.com/cometbft/cometbft/rpc/client"
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
 	"github.com/gorilla/rpc/v2"
 	"github.com/gorilla/rpc/v2/json2"
 )
 
 // RpcClient defines the interface needed by the service.
-// It's a subset of rpcclient.Client methods.
 type RpcClient interface {
-	rpcclient.ABCIClient
-	rpcclient.HistoryClient
-	rpcclient.NetworkClient
-	rpcclient.SignClient
-	rpcclient.StatusClient
-	rpcclient.EventsClient
-	rpcclient.EvidenceClient
-	rpcclient.MempoolClient
+	cometrpc.ABCIClient
+	cometrpc.HistoryClient
+	cometrpc.NetworkClient
+	cometrpc.SignClient
+	cometrpc.StatusClient
+	cometrpc.EventsClient
+	cometrpc.EvidenceClient
+	cometrpc.MempoolClient
 }
 
 // GetHTTPHandler returns handler configured to serve Tendermint-compatible RPC.
@@ -362,7 +361,7 @@ func (s *service) BroadcastTxAsync(req *http.Request, args *broadcastTxAsyncArgs
 
 // abci API
 func (s *service) ABCIQuery(req *http.Request, args *ABCIQueryArgs) (*ctypes.ResultABCIQuery, error) {
-	options := rpcclient.ABCIQueryOptions{}
+	options := cometrpc.ABCIQueryOptions{}
 
 	if args.Height != nil {
 		options.Height = int64(*args.Height)

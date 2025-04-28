@@ -20,7 +20,7 @@ import (
 	rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
 	"github.com/rollkit/rollkit/pkg/store"
 
-	"github.com/rollkit/go-execution-abci/p2p"
+	"github.com/rollkit/go-execution-abci/pkg/p2p"
 )
 
 var _ execution.Executor = &Adapter{}

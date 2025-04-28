@@ -14,8 +14,6 @@ import (
 	servercmtlog "github.com/cosmos/cosmos-sdk/server/log"
 	"github.com/rs/cors"
 	"golang.org/x/net/netutil"
-
-	"github.com/rollkit/go-execution-abci/pkg/rpc/json"
 )
 
 const (
@@ -34,30 +32,25 @@ var (
 
 // NewRPCServer creates a new RPC server.
 func NewRPCServer(
-	provider *RpcProvider,
+	httpHandler http.Handler,
 	cfg *cmtcfg.RPCConfig,
 	logger log.Logger,
 ) *RPCServer {
 	cmtLogger := servercmtlog.CometLoggerWrapper{Logger: logger}
 	return &RPCServer{
-		config:   cfg,
-		provider: provider,
-		logger:   cmtLogger,
+		config:      cfg,
+		httpHandler: httpHandler,
+		logger:      cmtLogger,
 	}
 }
 
 // RPCServer manages the HTTP server for RPC requests.
 // It delegates the actual RPC method implementations to an rpcProvider.
 type RPCServer struct {
-	config   *cmtcfg.RPCConfig
-	provider *RpcProvider
-	server   http.Server
-	logger   cmtlog.Logger
-}
-
-// GetProvider returns the underlying rpcProvider which implements the CometRPC interface.
-func (r *RPCServer) GetProvider() *RpcProvider {
-	return r.provider
+	config      *cmtcfg.RPCConfig
+	httpHandler http.Handler
+	server      http.Server
+	logger      cmtlog.Logger
 }
 
 // Start starts the RPC server.
@@ -87,10 +80,7 @@ func (r *RPCServer) startRPC() error {
 		listener = netutil.LimitListener(listener, r.config.MaxOpenConnections)
 	}
 
-	handler, err := json.GetHTTPHandler(r.provider, r.provider.logger)
-	if err != nil {
-		return err
-	}
+	handler := r.httpHandler
 
 	if r.config.IsCorsEnabled() {
 		r.logger.Debug("CORS enabled",

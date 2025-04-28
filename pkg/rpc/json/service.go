@@ -29,8 +29,8 @@ type RpcClient interface {
 	cometrpc.MempoolClient
 }
 
-// GetHTTPHandler returns handler configured to serve Tendermint-compatible RPC.
-func GetHTTPHandler(l RpcClient, logger log.Logger) (http.Handler, error) {
+// GetRPCHandler returns handler configured to serve Tendermint-compatible RPC.
+func GetRPCHandler(l RpcClient, logger log.Logger) (http.Handler, error) {
 	return newHandler(newService(l, logger), json2.NewCodec(), logger), nil
 }
 

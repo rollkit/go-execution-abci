@@ -44,6 +44,7 @@ import (
 
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
 	"github.com/rollkit/go-execution-abci/pkg/rpc"
+	rpcjson "github.com/rollkit/go-execution-abci/pkg/rpc/json"
 	execsigner "github.com/rollkit/go-execution-abci/pkg/signer"
 )
 
@@ -129,7 +130,7 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 		if svrCfg.API.Enable || svrCfg.GRPC.Enable {
 			// Re-assign for making the client available below do not use := to avoid
 			// shadowing the clientCtx variable.
-			clientCtx = clientCtx.WithClient(rpcServer.GetProvider())
+			clientCtx = clientCtx.WithClient(rpcServer)
 
 			app.RegisterTxService(clientCtx)
 			app.RegisterTendermintService(clientCtx)
@@ -258,7 +259,7 @@ func startNode(
 	srvCtx *server.Context,
 	cfg *cmtcfg.Config,
 	app sdktypes.Application,
-) (rolllkitNode node.Node, rpcServer *rpc.RPCServer, cleanupFn func(), err error) {
+) (rolllkitNode node.Node, grpcProvider rpc.RpcClient, cleanupFn func(), err error) {
 	logger := srvCtx.Logger.With("module", "rollkit")
 	logger.Info("starting node with Rollkit in-process")
 
@@ -400,8 +401,14 @@ func startNode(
 	blockIndexer := indexer.BlockIndexer(nil) // Placeholder for actual BlockIndexer (uses cometbft/state/indexer)
 	rpcProvider := rpc.NewRpcProvider(executor, txIndexer, blockIndexer, servercmtlog.CometLoggerWrapper{Logger: logger})
 
-	// Pass the created provider to the RPC server constructor
-	rpcServer = rpc.NewRPCServer(rpcProvider, cfg.RPC, logger)
+	// Create the HTTP handler using the provider
+	rpcHandler, err := rpcjson.GetRPCHandler(rpcProvider, servercmtlog.CometLoggerWrapper{Logger: logger})
+	if err != nil {
+		return nil, nil, cleanupFn, fmt.Errorf("failed to create http handler: %w", err)
+	}
+
+	// Pass the created handler to the RPC server constructor
+	rpcServer := rpc.NewRPCServer(rpcHandler, cfg.RPC, logger)
 	err = rpcServer.Start()
 	if err != nil {
 		return nil, nil, cleanupFn, fmt.Errorf("failed to start abci rpc server: %w", err)
@@ -422,7 +429,7 @@ func startNode(
 		return nil, nil, cleanupFn, fmt.Errorf("failed to start executor: %w", err)
 	}
 
-	return rolllkitNode, rpcServer, cleanupFn, nil
+	return rolllkitNode, rpcProvider, cleanupFn, nil
 }
 
 // getGenDocProvider returns a function which returns the genesis doc from the genesis file.

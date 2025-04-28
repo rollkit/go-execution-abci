@@ -41,13 +41,17 @@ type Adapter struct {
 	Store      store.Store
 	Mempool    mempool.Mempool
 	MempoolIDs *mempoolIDs
+
 	P2PClient  *rollkitp2p.Client
 	TxGossiper *p2p.Gossiper
+	p2pMetrics *rollkitp2p.Metrics
+
 	EventBus   *cmtypes.EventBus
 	CometCfg   *config.Config
 	AppGenesis *genutiltypes.AppGenesis
 
-	Logger log.Logger
+	Logger  log.Logger
+	Metrics *Metrics
 }
 
 // NewABCIExecutor creates a new Adapter instance that implements the go-execution.Executor interface.
@@ -56,18 +60,25 @@ func NewABCIExecutor(
 	app servertypes.ABCI,
 	store store.Store,
 	p2pClient *rollkitp2p.Client,
+	p2pMetrics *rollkitp2p.Metrics,
 	logger log.Logger,
 	cfg *config.Config,
 	appGenesis *genutiltypes.AppGenesis,
+	metrics *Metrics,
 ) *Adapter {
+	if metrics == nil {
+		metrics = NopMetrics()
+	}
 	a := &Adapter{
 		App:        app,
 		Store:      store,
 		Logger:     logger,
 		P2PClient:  p2pClient,
+		p2pMetrics: p2pMetrics,
 		CometCfg:   cfg,
 		AppGenesis: appGenesis,
 		MempoolIDs: newMempoolIDs(),
+		Metrics:    metrics,
 	}
 
 	return a
@@ -92,18 +103,19 @@ func (a *Adapter) Start(ctx context.Context) error {
 	return nil
 }
 
-// TODO: readd metrics
 func (a *Adapter) newTxValidator(ctx context.Context) p2p.GossipValidator {
 	return func(m *p2p.GossipMessage) bool {
+		a.Metrics.TxValidationTotal.Add(1)
 		a.Logger.Debug("transaction received", "bytes", len(m.Data))
-		// msgBytes := m.Data
-		// labels := []string{
-		// 	"peer_id", m.From.String(),
-		// 	"chID", n.genesis.ChainID,
-		// }
-		// metrics.PeerReceiveBytesTotal.With(labels...).Add(float64(len(msgBytes)))
-		// metrics.MessageReceiveBytesTotal.With("message_type", "tx").Add(float64(len(msgBytes)))
-		checkTxResCh := make(chan *abci.ResponseCheckTx, 1)
+
+		msgBytes := m.Data
+		labels := []string{
+			"peer_id", m.From.String(),
+		}
+		a.p2pMetrics.PeerReceiveBytesTotal.With(labels...).Add(float64(len(msgBytes)))
+		a.p2pMetrics.MessageReceiveBytesTotal.With("message_type", "tx").Add(float64(len(msgBytes)))
+		checkTxResCh := make(chan *abci.ResponseCheckTx, 2)
+		checkTxStart := time.Now()
 		err := a.Mempool.CheckTx(m.Data, func(resp *abci.ResponseCheckTx) {
 			select {
 			case <-ctx.Done():
@@ -114,39 +126,74 @@ func (a *Adapter) newTxValidator(ctx context.Context) p2p.GossipValidator {
 			SenderID:    a.MempoolIDs.GetForPeer(m.From),
 			SenderP2PID: corep2p.ID(m.From),
 		})
+		checkTxDuration := time.Since(checkTxStart).Seconds()
+		a.Metrics.CheckTxDurationSeconds.Observe(checkTxDuration)
+
 		switch {
 		case errors.Is(err, mempool.ErrTxInCache):
+			a.Metrics.TxValidationResultTotal.With("result", "rejected_in_cache").Add(1)
 			return true
 		case errors.Is(err, mempool.ErrMempoolIsFull{}):
+			a.Metrics.TxValidationResultTotal.With("result", "rejected_mempool_full").Add(1)
 			return true
 		case errors.Is(err, mempool.ErrTxTooLarge{}):
+			a.Metrics.TxValidationResultTotal.With("result", "rejected_too_large").Add(1)
 			return false
 		case errors.Is(err, mempool.ErrPreCheck{}):
+			a.Metrics.TxValidationResultTotal.With("result", "rejected_precheck").Add(1)
+			return false
+		case err != nil:
+			a.Metrics.TxValidationResultTotal.With("result", "rejected_checktx_error").Add(1)
+			a.Logger.Error("CheckTx failed with unexpected error", "err", err)
 			return false
 		default:
 		}
-		checkTxResp := <-checkTxResCh
 
-		return checkTxResp.Code == abci.CodeTypeOK
+		select {
+		case <-ctx.Done():
+			a.Metrics.TxValidationResultTotal.With("result", "rejected_context_canceled").Add(1)
+			return false
+		case checkTxResp := <-checkTxResCh:
+			if checkTxResp.Code == abci.CodeTypeOK {
+				a.Metrics.TxValidationResultTotal.With("result", "accepted").Add(1)
+				return true
+			}
+			a.Metrics.TxValidationResultTotal.With("result", "rejected_checktx").Add(1)
+			return false
+		case <-time.After(5 * time.Second):
+			a.Metrics.TxValidationResultTotal.With("result", "rejected_timeout").Add(1)
+			a.Logger.Error("CheckTx response timed out")
+			return false
+		}
 	}
 }
 
 // InitChain implements execution.Executor.
 func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialHeight uint64, chainID string) ([]byte, uint64, error) {
+	initChainStart := time.Now()
+	defer func() {
+		a.Metrics.InitChainDurationSeconds.Observe(time.Since(initChainStart).Seconds())
+	}()
+	a.Logger.Info("Initializing chain", "chainID", chainID, "initialHeight", initialHeight, "genesisTime", genesisTime)
+
 	if a.AppGenesis == nil {
-		return nil, 0, fmt.Errorf("app genesis not loaded")
+		err := fmt.Errorf("app genesis not loaded")
+		return nil, 0, err
 	}
 
 	if a.AppGenesis.GenesisTime != genesisTime {
-		return nil, 0, fmt.Errorf("genesis time mismatch: expected %s, got %s", a.AppGenesis.GenesisTime, genesisTime)
+		err := fmt.Errorf("genesis time mismatch: expected %s, got %s", a.AppGenesis.GenesisTime, genesisTime)
+		return nil, 0, err
 	}
 
 	if a.AppGenesis.ChainID != chainID {
-		return nil, 0, fmt.Errorf("chain ID mismatch: expected %s, got %s", a.AppGenesis.ChainID, chainID)
+		err := fmt.Errorf("chain ID mismatch: expected %s, got %s", a.AppGenesis.ChainID, chainID)
+		return nil, 0, err
 	}
 
 	if initialHeight != uint64(a.AppGenesis.InitialHeight) {
-		return nil, 0, fmt.Errorf("initial height mismatch: expected %d, got %d", a.AppGenesis.InitialHeight, initialHeight)
+		err := fmt.Errorf("initial height mismatch: expected %d, got %d", a.AppGenesis.InitialHeight, initialHeight)
+		return nil, 0, err
 	}
 
 	validators := make([]*cmtypes.Validator, len(a.AppGenesis.Consensus.Validators))
@@ -180,12 +227,11 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 		return nil, 0, err
 	}
 
-	// apply initchain valset change
 	nValSet := cmtypes.NewValidatorSet(vals)
 
-	// TODO: this should be removed, as we should not assume that there is only one validator
 	if len(nValSet.Validators) != 1 {
-		return nil, 0, fmt.Errorf("expected exactly one validator")
+		err := fmt.Errorf("expected exactly one validator")
+		return nil, 0, err
 	}
 
 	s.Validators = cmtypes.NewValidatorSet(nValSet.Validators)
@@ -198,12 +244,19 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 		return nil, 0, fmt.Errorf("failed to save initial state: %w", err)
 	}
 
-	return res.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), err
+	a.Logger.Info("Chain initialized successfully", "appHash", fmt.Sprintf("%X", res.AppHash))
+	return res.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
 }
 
 // ExecuteTxs implements execution.Executor.
 func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint64, timestamp time.Time, prevStateRoot []byte) ([]byte, uint64, error) {
-	// Load state from disk
+	execStart := time.Now()
+	defer func() {
+		a.Metrics.BlockExecutionDurationSeconds.Observe(time.Since(execStart).Seconds())
+	}()
+	a.Logger.Info("Executing block", "height", blockHeight, "num_txs", len(txs), "timestamp", timestamp)
+	a.Metrics.TxsExecutedPerBlock.Observe(float64(len(txs)))
+
 	s, err := a.LoadState(ctx)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to load state: %w", err)
@@ -226,7 +279,6 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 		return nil, 0, fmt.Errorf("proposal rejected by app")
 	}
 
-	// Then finalize block
 	fbResp, err := a.App.FinalizeBlock(&abci.RequestFinalizeBlock{
 		Txs:                txs,
 		Hash:               prevStateRoot,
@@ -239,12 +291,8 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 		return nil, 0, err
 	}
 
-	// Apply changes to the state (valset and params)
-
-	// next validators becomes current validators
 	nValSet := s.NextValidators.Copy()
 
-	// Update the validator set with the latest abciResponse.
 	validatorUpdates, err := cmtypes.PB2TM.ValidatorUpdates(fbResp.ValidatorUpdates)
 	if err != nil {
 		return nil, 0, err
@@ -252,18 +300,18 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 
 	lastHeightValsChanged := s.LastHeightValidatorsChanged
 	if len(validatorUpdates) > 0 {
+		a.Metrics.ValidatorUpdatesTotal.Add(float64(len(validatorUpdates)))
 		err := nValSet.UpdateWithChangeSet(validatorUpdates)
 		if err != nil {
 			return nil, 0, fmt.Errorf("changing validator set: %w", err)
 		}
-		// Change results from this height but only applies to the height + 2.
 		lastHeightValsChanged = int64(blockHeight) + 2
 	}
 
-	// Update validator proposer priority and set state variables.
 	nValSet.IncrementProposerPriority(1)
 
 	if fbResp.ConsensusParamUpdates != nil {
+		a.Metrics.ConsensusParamUpdatesTotal.Add(1)
 		nextParams := s.ConsensusParams.Update(fbResp.ConsensusParamUpdates)
 		err := nextParams.ValidateBasic()
 		if err != nil {
@@ -276,20 +324,18 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 		}
 
 		s.ConsensusParams = nextParams
-
-		// Change results from this height but only applies to the next height.
 		s.LastHeightConsensusParamsChanged = int64(blockHeight) + 1
 	}
 
 	s.LastValidators = s.Validators.Copy()
-	s.Validators = s.NextValidators.Copy()
+	s.Validators = nValSet.Copy()
+	s.NextValidators = nValSet.CopyIncrementProposerPriority(1)
 	s.LastHeightValidatorsChanged = lastHeightValsChanged
 
 	if err := a.SaveState(ctx, s); err != nil {
 		return nil, 0, fmt.Errorf("failed to save state: %w", err)
 	}
 
-	// Commit and update mempool
 	a.Mempool.Lock()
 	defer a.Mempool.Unlock()
 
@@ -305,7 +351,6 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 		return nil, 0, err
 	}
 
-	// Update mempool.
 	err = a.Mempool.Update(
 		int64(blockHeight),
 		cmtypes.ToTxs(txs),
@@ -318,19 +363,26 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 		return nil, 0, err
 	}
 
+	a.Logger.Info("Block executed successfully", "height", blockHeight, "appHash", fmt.Sprintf("%X", fbResp.AppHash))
 	return fbResp.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
 }
 
 // GetTxs calls PrepareProposal with the next height from the store and returns the transactions from the ABCI app
 func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
-	// Load state from disk
+	getTxsStart := time.Now()
+	defer func() {
+		a.Metrics.GetTxsDurationSeconds.Observe(time.Since(getTxsStart).Seconds())
+	}()
+	a.Logger.Debug("Getting transactions for proposal")
+
 	s, err := a.LoadState(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load state: %w", err)
+		return nil, fmt.Errorf("failed to load state for GetTxs: %w", err)
 	}
 
 	if a.Mempool == nil {
-		return nil, fmt.Errorf("mempool not initialized")
+		err := fmt.Errorf("mempool not initialized")
+		return nil, err
 	}
 
 	reapedTxs := a.Mempool.ReapMaxBytesMaxGas(int64(s.ConsensusParams.Block.MaxBytes), -1)
@@ -356,6 +408,7 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 		return nil, err
 	}
 
+	a.Metrics.TxsProposedTotal.Add(float64(len(resp.Txs)))
 	return resp.Txs, nil
 }
 

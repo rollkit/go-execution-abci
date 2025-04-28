@@ -312,12 +312,17 @@ func startNode(
 		return nil, nil, cleanupFn, err
 	}
 
-	metrics := node.DefaultMetricsProvider(config.DefaultInstrumentationConfig())
+	metrics := node.DefaultMetricsProvider(rollkitcfg.Instrumentation)
 
 	_, p2pMetrics := metrics(cmtGenDoc.ChainID)
 	p2pClient, err := p2p.NewClient(rollkitcfg, nodeKey, database, logger.With("module", "p2p"), p2pMetrics)
 	if err != nil {
 		return nil, nil, cleanupFn, err
+	}
+
+	adapterMetrics := adapter.NopMetrics()
+	if rollkitcfg.Instrumentation.IsPrometheusEnabled() {
+		adapterMetrics = adapter.PrometheusMetrics(config.DefaultInstrumentationConfig().Namespace, "chain_id", cmtGenDoc.ChainID)
 	}
 
 	st := store.New(database)
@@ -326,12 +331,13 @@ func startNode(
 		app,
 		st,
 		p2pClient,
+		p2pMetrics,
 		logger,
 		cfg,
 		appGenesis,
+		adapterMetrics,
 	)
 
-	// TODO: pass the metrics if needed
 	cmtApp := server.NewCometABCIWrapper(app)
 	clientCreator := proxy.NewLocalClientCreator(cmtApp)
 

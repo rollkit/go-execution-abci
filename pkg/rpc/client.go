@@ -4,9 +4,9 @@ import (
 	cometrpc "github.com/cometbft/cometbft/rpc/client"
 )
 
-// RpcClient defines the interface needed by various RPC services.
+// RpcProvider defines the interface needed by various RPC services.
 // It aggregates multiple client interfaces from CometBFT.
-type RpcClient interface {
+type RpcProvider interface {
 	cometrpc.ABCIClient
 	cometrpc.HistoryClient
 	cometrpc.NetworkClient

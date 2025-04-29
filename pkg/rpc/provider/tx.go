@@ -1,4 +1,4 @@
-package rpc
+package provider
 
 import (
 	"context"
@@ -11,6 +11,9 @@ import (
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"github.com/cometbft/cometbft/state/txindex/null"
 	cmttypes "github.com/cometbft/cometbft/types"
+	// Need to import utils if helper functions are used
+	// Assuming utils are still in pkg/rpc for now
+	// "github.com/rollkit/go-execution-abci/pkg/rpc"
 )
 
 // TODO: Make maxQueryLength configurable or use a constant from CometBFT if applicable
@@ -128,12 +131,12 @@ func (p *RpcProvider) TxSearch(ctx context.Context, query string, prove bool, pa
 
 	// Paginate results.
 	totalCount := len(txResults)
-	perPage := validatePerPage(perPagePtr)                  // Assumes validatePerPage is accessible
-	page, err := validatePage(pagePtr, perPage, totalCount) // Assumes validatePage is accessible
+	perPage := validatePerPage(perPagePtr)                  // Removed rpc. prefix
+	page, err := validatePage(pagePtr, perPage, totalCount) // Removed rpc. prefix
 	if err != nil {
 		return nil, err
 	}
-	skipCount := validateSkipCount(page, perPage) // Assumes validateSkipCount is accessible
+	skipCount := validateSkipCount(page, perPage) // Removed rpc. prefix
 	pageSize := cmtmath.MinInt(perPage, totalCount-skipCount)
 
 	apiResults := make([]*coretypes.ResultTx, 0, pageSize)

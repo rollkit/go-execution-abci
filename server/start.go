@@ -13,6 +13,8 @@ import (
 	cmtp2p "github.com/cometbft/cometbft/p2p"
 	pvm "github.com/cometbft/cometbft/privval"
 	"github.com/cometbft/cometbft/proxy"
+	"github.com/cometbft/cometbft/state/indexer"
+	"github.com/cometbft/cometbft/state/txindex"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/server"
@@ -29,8 +31,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/cometbft/cometbft/state/indexer"
-	"github.com/cometbft/cometbft/state/txindex"
 	"github.com/rollkit/rollkit/core/sequencer"
 	rollkitda "github.com/rollkit/rollkit/da"
 	"github.com/rollkit/rollkit/da/proxy/jsonrpc"
@@ -45,6 +45,7 @@ import (
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
 	"github.com/rollkit/go-execution-abci/pkg/rpc"
 	rpcjson "github.com/rollkit/go-execution-abci/pkg/rpc/json"
+	provider "github.com/rollkit/go-execution-abci/pkg/rpc/provider"
 	execsigner "github.com/rollkit/go-execution-abci/pkg/signer"
 )
 
@@ -259,7 +260,7 @@ func startNode(
 	srvCtx *server.Context,
 	cfg *cmtcfg.Config,
 	app sdktypes.Application,
-) (rolllkitNode node.Node, grpcProvider rpc.RpcClient, cleanupFn func(), err error) {
+) (rolllkitNode node.Node, rpcClient rpc.RpcProvider, cleanupFn func(), err error) {
 	logger := srvCtx.Logger.With("module", "rollkit")
 	logger.Info("starting node with Rollkit in-process")
 
@@ -399,18 +400,19 @@ func startNode(
 	// TODO: Pass actual indexers when implemented/available
 	txIndexer := txindex.TxIndexer(nil)       // Placeholder for actual TxIndexer (uses cometbft/state/txindex)
 	blockIndexer := indexer.BlockIndexer(nil) // Placeholder for actual BlockIndexer (uses cometbft/state/indexer)
-	rpcProvider := rpc.NewRpcProvider(executor, txIndexer, blockIndexer, servercmtlog.CometLoggerWrapper{Logger: logger})
+	rpcProvider := provider.NewRpcProvider(executor, txIndexer, blockIndexer, servercmtlog.CometLoggerWrapper{Logger: logger})
 
+	// Create the RPC handler using the provider
 	rpcHandler, err := rpcjson.GetRPCHandler(rpcProvider, servercmtlog.CometLoggerWrapper{Logger: logger})
 	if err != nil {
-		return nil, nil, cleanupFn, fmt.Errorf("failed to create http handler: %w", err)
+		return nil, nil, cleanupFn, fmt.Errorf("failed to create rpc handler: %w", err)
 	}
 
 	// Pass the created handler to the RPC server constructor
 	rpcServer := rpc.NewRPCServer(rpcHandler, cfg.RPC, logger)
 	err = rpcServer.Start()
 	if err != nil {
-		return nil, nil, cleanupFn, fmt.Errorf("failed to start abci rpc server: %w", err)
+		return nil, nil, cleanupFn, fmt.Errorf("failed to start rpc server: %w", err)
 	}
 
 	logger.Info("starting node")

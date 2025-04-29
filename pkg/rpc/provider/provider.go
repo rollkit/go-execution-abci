@@ -1,4 +1,4 @@
-package rpc
+package provider
 
 import (
 	"context"
@@ -13,7 +13,8 @@ import (
 )
 
 // ErrConsensusStateNotAvailable is returned because Rollkit doesn't use Tendermint consensus.
-var ErrConsensusStateNotAvailable = errors.New("consensus state not available in Rollkit")
+// Exported error.
+var ErrConsensusStateNotAvailable = errors.New("consensus state not available in Rollkit") // Changed to exported
 
 // RpcProvider implements the interfaces required by the JSON-RPC service,
 // primarily by delegating calls to the underlying adapter and indexers.
@@ -30,13 +31,18 @@ func NewRpcProvider(
 	txIndexer txindex.TxIndexer,
 	blockIndexer indexer.BlockIndexer,
 	logger cmtlog.Logger,
-) *RpcProvider {
+) *RpcProvider { // Corrected return type to local *RpcProvider
 	return &RpcProvider{
 		adapter:      adapter,
 		txIndexer:    txIndexer,
 		blockIndexer: blockIndexer,
 		logger:       logger,
 	}
+}
+
+// Logger returns the logger used by the RpcProvider.
+func (p *RpcProvider) Logger() cmtlog.Logger {
+	return p.logger
 }
 
 func (p *RpcProvider) normalizeHeight(height *int64) uint64 {
@@ -77,7 +83,8 @@ func (p *RpcProvider) getBlockMeta(ctx context.Context, n uint64) *cmtypes.Block
 		p.logger.Error("Nil header or data returned from GetBlockData", "height", n)
 		return nil
 	}
-	bmeta, err := ToABCIBlockMeta(header, data) // Assumes ToABCIBlockMeta is accessible (e.g., in utils.go)
+	// Assuming ToABCIBlockMeta is now in pkg/rpc/provider/provider_utils.go
+	bmeta, err := ToABCIBlockMeta(header, data) // Removed rpc. prefix
 	if err != nil {
 		p.logger.Error("Failed to convert block to ABCI block meta", "height", n, "err", err)
 		return nil

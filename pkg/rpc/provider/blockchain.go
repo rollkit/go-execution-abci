@@ -1,4 +1,4 @@
-package rpc
+package provider
 
 import (
 	"context"
@@ -47,7 +47,7 @@ func (p *RpcProvider) Block(ctx context.Context, height *int64) (*coretypes.Resu
 	}
 
 	hash := header.Hash()
-	abciBlock, err := ToABCIBlock(header, data) // Assumes ToABCIBlock is accessible (e.g., in utils.go)
+	abciBlock, err := ToABCIBlock(header, data) // Use local function
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +70,7 @@ func (p *RpcProvider) BlockByHash(ctx context.Context, hash []byte) (*coretypes.
 		return nil, err
 	}
 
-	abciBlock, err := ToABCIBlock(header, data) // Assumes ToABCIBlock is accessible (e.g., in utils.go)
+	abciBlock, err := ToABCIBlock(header, data) // Use local function
 	if err != nil {
 		return nil, err
 	}
@@ -130,9 +130,9 @@ func (p *RpcProvider) Commit(ctx context.Context, height *int64) (*coretypes.Res
 		return nil, errors.New("empty validator set found in block")
 	}
 
-	commit := getABCICommit(heightValue, header.Hash(), header.ProposerAddress, header.Time(), header.Signature) // Assumes getABCICommit is accessible (e.g., in utils.go)
+	commit := getABCICommit(heightValue, header.Hash(), header.ProposerAddress, header.Time(), header.Signature) // Use local function
 
-	block, err := ToABCIBlock(header, data) // Assumes ToABCIBlock is accessible (e.g., in utils.go)
+	block, err := ToABCIBlock(header, data) // Use local function
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +161,7 @@ func (p *RpcProvider) HeaderByHash(ctx context.Context, hash cmtbytes.HexBytes) 
 		return nil, err
 	}
 
-	blockMeta, err := ToABCIBlockMeta(header, data) // Assumes ToABCIBlockMeta is accessible (e.g., in utils.go)
+	blockMeta, err := ToABCIBlockMeta(header, data) // Use local function
 	if err != nil {
 		return nil, err
 	}
@@ -187,13 +187,13 @@ func (p *RpcProvider) BlockchainInfo(ctx context.Context, minHeight int64, maxHe
 	// Assuming base height is 1 as blocks are 1-indexed, adjust if base is different.
 	// The original filterMinMax used 0, but blockchain heights typically start at 1.
 	const baseHeight int64 = 1
-	minHeight, maxHeight, err = filterMinMax(
+	minHeight, maxHeight, err = filterMinMax( // Use local function
 		baseHeight,
 		int64(height),
 		minHeight,
 		maxHeight,
 		limit,
-	) // Assumes filterMinMax is accessible (e.g., in utils.go)
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -232,8 +232,7 @@ func (p *RpcProvider) BlockSearch(ctx context.Context, query string, pagePtr *in
 		return nil, errors.New("block indexing is disabled")
 	}
 
-	// TODO: Make maxQueryLength configurable or use a constant from CometBFT if applicable
-	const maxQueryLength = 256
+	// Use the locally defined maxQueryLength from provider_utils.go
 	if len(query) > maxQueryLength {
 		return nil, errors.New("maximum query length exceeded")
 	}
@@ -262,14 +261,14 @@ func (p *RpcProvider) BlockSearch(ctx context.Context, query string, pagePtr *in
 
 	// paginate results
 	totalCount := len(results)
-	perPage := validatePerPage(perPagePtr) // Assumes validatePerPage is accessible (e.g., in utils.go)
+	perPage := validatePerPage(perPagePtr) // Use local function
 
-	page, err := validatePage(pagePtr, perPage, totalCount) // Assumes validatePage is accessible (e.g., in utils.go)
+	page, err := validatePage(pagePtr, perPage, totalCount) // Use local function
 	if err != nil {
 		return nil, err
 	}
 
-	skipCount := validateSkipCount(page, perPage) // Assumes validateSkipCount is accessible (e.g., in utils.go)
+	skipCount := validateSkipCount(page, perPage) // Use local function
 	pageSize := cmtmath.MinInt(perPage, totalCount-skipCount)
 
 	apiResults := make([]*coretypes.ResultBlock, 0, pageSize)
@@ -284,7 +283,7 @@ func (p *RpcProvider) BlockSearch(ctx context.Context, query string, pagePtr *in
 		if header == nil || data == nil {
 			return nil, fmt.Errorf("nil header or data for height %d from store", height)
 		}
-		block, err := ToABCIBlock(header, data) // Assumes ToABCIBlock is accessible (e.g., in utils.go)
+		block, err := ToABCIBlock(header, data) // Use local function
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert block at height %d to ABCI block: %w", height, err)
 		}
@@ -325,13 +324,13 @@ func (p *RpcProvider) Validators(ctx context.Context, heightPtr *int64, pagePtr 
 	totalCount := len(validators)
 
 	// Handle pagination
-	perPage := validatePerPage(perPagePtr)                  // Assumes validatePerPage is accessible (e.g., in utils.go)
-	page, err := validatePage(pagePtr, perPage, totalCount) // Assumes validatePage is accessible (e.g., in utils.go)
+	perPage := validatePerPage(perPagePtr)                  // Use local function
+	page, err := validatePage(pagePtr, perPage, totalCount) // Use local function
 	if err != nil {
 		return nil, err
 	}
 
-	start := validateSkipCount(page, perPage) // Assumes validateSkipCount is accessible (e.g., in utils.go)
+	start := validateSkipCount(page, perPage) // Use local function
 	end := start + perPage
 	if end > totalCount {
 		end = totalCount

@@ -20,7 +20,7 @@ import (
 )
 
 // GetRPCHandler returns handler configured to serve Tendermint-compatible RPC.
-func GetRPCHandler(l rpctypes.RpcClient, logger log.Logger) (http.Handler, error) {
+func GetRPCHandler(l rpctypes.RpcProvider, logger log.Logger) (http.Handler, error) {
 	return newHandler(newService(l, logger), json2.NewCodec(), logger), nil
 }
 
@@ -43,12 +43,12 @@ func newMethod(m interface{}) *method {
 }
 
 type service struct {
-	client  rpctypes.RpcClient
+	client  rpctypes.RpcProvider
 	methods map[string]*method
 	logger  log.Logger
 }
 
-func newService(c rpctypes.RpcClient, l log.Logger) *service {
+func newService(c rpctypes.RpcProvider, l log.Logger) *service {
 	s := service{
 		client: c,
 		logger: l,

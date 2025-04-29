@@ -1,4 +1,4 @@
-package rpc
+package provider
 
 import (
 	"context"
@@ -15,8 +15,8 @@ import (
 	execp2p "github.com/rollkit/go-execution-abci/pkg/p2p"
 )
 
-// Assumes subscribeTimeout constant is defined elsewhere or passed via config if needed for BroadcastTxCommit
-// const subscribeTimeout = 5 * time.Second // Placeholder, adjust as necessary - REMOVED
+// Define timeout for waiting for TX commit event
+const subscribeTimeout = 5 * time.Second // TODO: Make configurable?
 
 // BroadcastTxAsync implements client.CometRPC.
 func (p *RpcProvider) BroadcastTxAsync(ctx context.Context, tx cmttypes.Tx) (*coretypes.ResultBroadcastTx, error) {

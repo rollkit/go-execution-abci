@@ -1,7 +1,8 @@
-package rpc
+package provider
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	cmbytes "github.com/cometbft/cometbft/libs/bytes"
@@ -10,6 +11,15 @@ import (
 	cmtypes "github.com/cometbft/cometbft/types"
 
 	"github.com/rollkit/rollkit/types"
+)
+
+const (
+	// Constants for pagination
+	// TODO: Make these configurable or derive from CometBFT config?
+	defaultPerPage = 30
+	maxPerPage     = 100
+	// Define query length limit here
+	maxQueryLength = 256
 )
 
 // ToABCIHeaderPB converts Rollkit header to Header format defined in ABCI.
@@ -144,4 +154,79 @@ func getABCICommit(height uint64, hash []byte, val cmtypes.Address, time time.Ti
 	tmCommit.Signatures[0] = commitSig
 
 	return &tmCommit
+}
+
+func filterMinMax(base, height, mini, maxi, limit int64) (int64, int64, error) {
+	// filter negatives
+	if mini < 0 || maxi < 0 {
+		return mini, maxi, errors.New("height must be greater than zero")
+	}
+
+	// adjust for default values
+	if mini == 0 {
+		mini = 1
+	}
+	if maxi == 0 {
+		maxi = height
+	}
+
+	// limit max to the height
+	maxi = min(height, maxi)
+
+	// limit min to the base
+	mini = max(base, mini)
+
+	// limit min to within `limit` of max
+	// so the total number of blocks returned will be `limit`
+	mini = max(mini, maxi-limit+1)
+
+	if mini > maxi {
+		return mini, maxi, fmt.Errorf("%w: min height %d can't be greater than max height %d",
+			errors.New("invalid request"), mini, maxi)
+	}
+	return mini, maxi, nil
+}
+
+func validateSkipCount(page, perPage int) int {
+	skipCount := (page - 1) * perPage
+	if skipCount < 0 {
+		return 0
+	}
+
+	return skipCount
+}
+
+func validatePerPage(perPagePtr *int) int {
+	if perPagePtr == nil { // no per_page parameter
+		return defaultPerPage
+	}
+
+	perPage := *perPagePtr
+	if perPage < 1 {
+		return defaultPerPage
+	} else if perPage > maxPerPage {
+		return maxPerPage
+	}
+	return perPage
+}
+
+func validatePage(pagePtr *int, perPage, totalCount int) (int, error) {
+	if perPage < 1 {
+		return 0, fmt.Errorf("invalid perPage parameter: %d (must be positive)", perPage)
+	}
+
+	if pagePtr == nil { // no page parameter
+		return 1, nil
+	}
+
+	pages := ((totalCount - 1) / perPage) + 1
+	if pages == 0 {
+		pages = 1 // one page (even if it's empty)
+	}
+	page := *pagePtr
+	if page <= 0 || page > pages {
+		return 1, fmt.Errorf("page should be within [1, %d] range, given %d", pages, page)
+	}
+
+	return page, nil
 }

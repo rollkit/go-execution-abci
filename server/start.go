@@ -14,6 +14,8 @@ import (
 	cmtp2p "github.com/cometbft/cometbft/p2p"
 	pvm "github.com/cometbft/cometbft/privval"
 	"github.com/cometbft/cometbft/proxy"
+	"github.com/cometbft/cometbft/state/indexer"
+	"github.com/cometbft/cometbft/state/txindex"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/server"
@@ -43,6 +45,8 @@ import (
 
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
 	"github.com/rollkit/go-execution-abci/pkg/rpc"
+	rpcjson "github.com/rollkit/go-execution-abci/pkg/rpc/json"
+	provider "github.com/rollkit/go-execution-abci/pkg/rpc/provider"
 	execsigner "github.com/rollkit/go-execution-abci/pkg/signer"
 )
 
@@ -428,8 +432,24 @@ func startNode(
 		return nil, nil, nil, cleanupFn, err
 	}
 
-	rpcServer = rpc.NewRPCServer(executor, cfg.RPC, nil, nil, logger)
-	// Note: rpcServer.Start() and executor.Start() will be called in startInProcess
+	// Create the RPC provider with necessary dependencies
+	// TODO: Pass actual indexers when implemented/available
+	txIndexer := txindex.TxIndexer(nil)       // Placeholder for actual TxIndexer (uses cometbft/state/txindex)
+	blockIndexer := indexer.BlockIndexer(nil) // Placeholder for actual BlockIndexer (uses cometbft/state/indexer)
+	rpcProvider := provider.NewRpcProvider(executor, txIndexer, blockIndexer, servercmtlog.CometLoggerWrapper{Logger: logger})
+
+	// Create the RPC handler using the provider
+	rpcHandler, err := rpcjson.GetRPCHandler(rpcProvider, servercmtlog.CometLoggerWrapper{Logger: logger})
+	if err != nil {
+		return nil, nil, nil, cleanupFn, fmt.Errorf("failed to create rpc handler: %w", err)
+	}
+
+	// Pass the created handler to the RPC server constructor
+	rpcServer = rpc.NewRPCServer(rpcHandler, cfg.RPC, logger)
+	err = rpcServer.Start()
+	if err != nil {
+		return nil, nil, nil, cleanupFn, fmt.Errorf("failed to start rpc server: %w", err)
+	}
 
 	// Return the initialized node, rpc server, and the executor adapter
 	// We need to return the executor so startInProcess can call Start on it.

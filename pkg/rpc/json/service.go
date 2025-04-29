@@ -11,14 +11,16 @@ import (
 
 	cmjson "github.com/cometbft/cometbft/libs/json"
 	"github.com/cometbft/cometbft/libs/log"
-	rpcclient "github.com/cometbft/cometbft/rpc/client"
+	cometrpc "github.com/cometbft/cometbft/rpc/client"
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
 	"github.com/gorilla/rpc/v2"
 	"github.com/gorilla/rpc/v2/json2"
+
+	rpctypes "github.com/rollkit/go-execution-abci/pkg/rpc"
 )
 
-// GetHTTPHandler returns handler configured to serve Tendermint-compatible RPC.
-func GetHTTPHandler(l rpcclient.Client, logger log.Logger) (http.Handler, error) {
+// GetRPCHandler returns handler configured to serve Tendermint-compatible RPC.
+func GetRPCHandler(l rpctypes.RpcProvider, logger log.Logger) (http.Handler, error) {
 	return newHandler(newService(l, logger), json2.NewCodec(), logger), nil
 }
 
@@ -41,12 +43,12 @@ func newMethod(m interface{}) *method {
 }
 
 type service struct {
-	client  rpcclient.Client
+	client  rpctypes.RpcProvider
 	methods map[string]*method
 	logger  log.Logger
 }
 
-func newService(c rpcclient.Client, l log.Logger) *service {
+func newService(c rpctypes.RpcProvider, l log.Logger) *service {
 	s := service{
 		client: c,
 		logger: l,
@@ -349,7 +351,7 @@ func (s *service) BroadcastTxAsync(req *http.Request, args *broadcastTxAsyncArgs
 
 // abci API
 func (s *service) ABCIQuery(req *http.Request, args *ABCIQueryArgs) (*ctypes.ResultABCIQuery, error) {
-	options := rpcclient.ABCIQueryOptions{}
+	options := cometrpc.ABCIQueryOptions{}
 
 	if args.Height != nil {
 		options.Height = int64(*args.Height)

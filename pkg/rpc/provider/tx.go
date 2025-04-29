@@ -11,13 +11,7 @@ import (
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"github.com/cometbft/cometbft/state/txindex/null"
 	cmttypes "github.com/cometbft/cometbft/types"
-	// Need to import utils if helper functions are used
-	// Assuming utils are still in pkg/rpc for now
-	// "github.com/rollkit/go-execution-abci/pkg/rpc"
 )
-
-// TODO: Make maxQueryLength configurable or use a constant from CometBFT if applicable
-// const maxQueryLength = 256 // Duplicated constant, consider defining centrally - REMOVED
 
 // Tx implements client.CometRPC.
 func (p *RpcProvider) Tx(ctx context.Context, hash []byte, prove bool) (*coretypes.ResultTx, error) {
@@ -146,17 +140,6 @@ func (p *RpcProvider) TxSearch(ctx context.Context, query string, prove bool, pa
 		if prove {
 			// Proof generation is currently not supported.
 			return nil, errors.New("transaction proof generation is not supported")
-			/* // Placeholder for future proof generation logic
-			blockRes, err := p.Block(ctx, &result.Height)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get block %d for proof: %w", result.Height, err)
-			}
-			if blockRes == nil || blockRes.Block == nil {
-				return nil, fmt.Errorf("block %d not found for proof", result.Height)
-			}
-			// Assuming blockRes.Block.Data.Txs implements Proof(index)
-			proof = blockRes.Block.Data.Txs.Proof(int(result.Index))
-			*/
 		}
 
 		apiResults = append(apiResults, &coretypes.ResultTx{

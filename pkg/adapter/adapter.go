@@ -15,6 +15,7 @@ import (
 	cmtypes "github.com/cometbft/cometbft/types"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
+	ds "github.com/ipfs/go-datastore"
 
 	"github.com/rollkit/rollkit/core/execution"
 	rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
@@ -37,10 +38,11 @@ func LoadGenesisDoc(cfg *config.Config) (*cmtypes.GenesisDoc, error) {
 
 // Adapter is a struct that will contain an ABCI Application, and will implement the go-execution interface
 type Adapter struct {
-	App        servertypes.ABCI
-	Store      store.Store
-	Mempool    mempool.Mempool
-	MempoolIDs *mempoolIDs
+	App          servertypes.ABCI
+	Store        ds.Batching
+	RollkitStore store.Store
+	Mempool      mempool.Mempool
+	MempoolIDs   *mempoolIDs
 
 	P2PClient  *rollkitp2p.Client
 	TxGossiper *p2p.Gossiper
@@ -58,7 +60,7 @@ type Adapter struct {
 // The Adapter wraps the provided ABCI application and delegates execution-related operations to it.
 func NewABCIExecutor(
 	app servertypes.ABCI,
-	store store.Store,
+	store ds.Batching,
 	p2pClient *rollkitp2p.Client,
 	p2pMetrics *rollkitp2p.Metrics,
 	logger log.Logger,
@@ -391,7 +393,7 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 		txsBytes[i] = tx
 	}
 
-	currentHeight, err := a.Store.Height(ctx)
+	currentHeight, err := a.RollkitStore.Height(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -417,7 +419,7 @@ func (a *Adapter) SetFinal(ctx context.Context, blockHeight uint64) error {
 	return nil
 }
 
-func NewAdapter(store store.Store) *Adapter {
+func NewAdapter(store ds.Batching) *Adapter {
 	return &Adapter{
 		Store: store,
 	}

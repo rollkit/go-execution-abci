@@ -11,8 +11,6 @@ import (
 	"github.com/cometbft/cometbft/mempool"
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	cmttypes "github.com/cometbft/cometbft/types"
-
-	execp2p "github.com/rollkit/go-execution-abci/pkg/p2p"
 )
 
 // Define timeout for waiting for TX commit event
@@ -124,7 +122,7 @@ func (p *RpcProvider) BroadcastTxCommit(ctx context.Context, tx cmttypes.Tx) (*c
 
 	// Broadcast tx gossip only if CheckTx passed
 	if p.adapter.TxGossiper == nil {
-		return nil, execp2p.ErrNotReady // Cannot gossip if gossiper is nil
+		return nil, errors.New("tx gossiper is not ready")
 	}
 	err = p.adapter.TxGossiper.Publish(ctx, tx)
 	if err != nil {
@@ -215,7 +213,6 @@ func (p *RpcProvider) BroadcastTxSync(ctx context.Context, tx cmttypes.Tx) (*cor
 	var res *abci.ResponseCheckTx
 	select {
 	case res = <-resCh:
-		// Got response
 	case <-ctx.Done():
 		return nil, fmt.Errorf("context cancelled waiting for CheckTx: %w", ctx.Err())
 	}
@@ -223,7 +220,7 @@ func (p *RpcProvider) BroadcastTxSync(ctx context.Context, tx cmttypes.Tx) (*cor
 	// Gossip the transaction if it passed CheckTx.
 	if res.Code == abci.CodeTypeOK {
 		if p.adapter.TxGossiper == nil {
-			return nil, execp2p.ErrNotReady // Cannot gossip if gossiper is not ready
+			return nil, errors.New("tx gossiper is not ready")
 		}
 
 		err = p.adapter.TxGossiper.Publish(ctx, tx)

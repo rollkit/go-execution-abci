@@ -112,9 +112,9 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 ) error {
 	cmtCfg := svrCtx.Config
 	gRPCOnly := svrCtx.Viper.GetBool(flagGRPCOnly)
-	g, ctx := getCtx(svrCtx, true) // Get errgroup and context
+	g, ctx := getCtx(svrCtx, true)
 
-	var rpcServer *rpc.RPCServer // Declare rpcServer variable
+	var rpcServer *rpc.RPCServer
 
 	if gRPCOnly {
 		// TODO: Generalize logic so that gRPC only is really in startStandAlone
@@ -436,10 +436,10 @@ func startNode(
 	// TODO: Pass actual indexers when implemented/available
 	txIndexer := txindex.TxIndexer(nil)       // Placeholder for actual TxIndexer (uses cometbft/state/txindex)
 	blockIndexer := indexer.BlockIndexer(nil) // Placeholder for actual BlockIndexer (uses cometbft/state/indexer)
-	rpcProvider := provider.NewRpcProvider(executor, txIndexer, blockIndexer, servercmtlog.CometLoggerWrapper{Logger: logger})
+	rpcProvider := provider.NewRpcProvider(executor, txIndexer, blockIndexer, logger)
 
 	// Create the RPC handler using the provider
-	rpcHandler, err := rpcjson.GetRPCHandler(rpcProvider, servercmtlog.CometLoggerWrapper{Logger: logger})
+	rpcHandler, err := rpcjson.GetRPCHandler(rpcProvider, logger)
 	if err != nil {
 		return nil, nil, nil, cleanupFn, fmt.Errorf("failed to create rpc handler: %w", err)
 	}

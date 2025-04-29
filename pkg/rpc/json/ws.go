@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/cometbft/cometbft/libs/log"
+	"cosmossdk.io/log"
 	"github.com/gorilla/rpc/v2"
 	"github.com/gorilla/websocket"
 )

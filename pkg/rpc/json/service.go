@@ -9,18 +9,29 @@ import (
 	"reflect"
 	"time"
 
+	"cosmossdk.io/log"
 	cmjson "github.com/cometbft/cometbft/libs/json"
-	"github.com/cometbft/cometbft/libs/log"
 	cometrpc "github.com/cometbft/cometbft/rpc/client"
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
 	"github.com/gorilla/rpc/v2"
 	"github.com/gorilla/rpc/v2/json2"
-
-	rpctypes "github.com/rollkit/go-execution-abci/pkg/rpc"
 )
 
+// RpcProvider defines the interface needed by various RPC services.
+// It aggregates multiple client interfaces from CometBFT.
+type RpcProvider interface {
+	cometrpc.ABCIClient
+	cometrpc.HistoryClient
+	cometrpc.NetworkClient
+	cometrpc.SignClient
+	cometrpc.StatusClient
+	cometrpc.EventsClient
+	cometrpc.EvidenceClient
+	cometrpc.MempoolClient
+}
+
 // GetRPCHandler returns handler configured to serve Tendermint-compatible RPC.
-func GetRPCHandler(l rpctypes.RpcProvider, logger log.Logger) (http.Handler, error) {
+func GetRPCHandler(l RpcProvider, logger log.Logger) (http.Handler, error) {
 	return newHandler(newService(l, logger), json2.NewCodec(), logger), nil
 }
 
@@ -42,13 +53,15 @@ func newMethod(m interface{}) *method {
 	}
 }
 
+var _ RpcProvider = (*service)(nil)
+
 type service struct {
-	client  rpctypes.RpcProvider
+	client  RpcProvider
 	methods map[string]*method
 	logger  log.Logger
 }
 
-func newService(c rpctypes.RpcProvider, l log.Logger) *service {
+func newService(c RpcProvider, l log.Logger) *service {
 	s := service{
 		client: c,
 		logger: l,

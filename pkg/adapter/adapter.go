@@ -19,7 +19,7 @@ import (
 
 	"github.com/rollkit/rollkit/core/execution"
 	rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
-	"github.com/rollkit/rollkit/pkg/store"
+	rstore "github.com/rollkit/rollkit/pkg/store"
 
 	"github.com/rollkit/go-execution-abci/pkg/p2p"
 )
@@ -40,7 +40,7 @@ func LoadGenesisDoc(cfg *config.Config) (*cmtypes.GenesisDoc, error) {
 type Adapter struct {
 	App          servertypes.ABCI
 	Store        ds.Batching
-	RollkitStore store.Store
+	RollkitStore rstore.Store
 	Mempool      mempool.Mempool
 	MempoolIDs   *mempoolIDs
 
@@ -71,16 +71,20 @@ func NewABCIExecutor(
 	if metrics == nil {
 		metrics = NopMetrics()
 	}
+
+	rollkitStore := rstore.New(store)
+
 	a := &Adapter{
-		App:        app,
-		Store:      store,
-		Logger:     logger,
-		P2PClient:  p2pClient,
-		p2pMetrics: p2pMetrics,
-		CometCfg:   cfg,
-		AppGenesis: appGenesis,
-		MempoolIDs: newMempoolIDs(),
-		Metrics:    metrics,
+		App:          app,
+		Store:        store,
+		RollkitStore: rollkitStore,
+		Logger:       logger,
+		P2PClient:    p2pClient,
+		p2pMetrics:   p2pMetrics,
+		CometCfg:     cfg,
+		AppGenesis:   appGenesis,
+		MempoolIDs:   newMempoolIDs(),
+		Metrics:      metrics,
 	}
 
 	return a
@@ -417,12 +421,6 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 // SetFinal implements execution.Executor.
 func (a *Adapter) SetFinal(ctx context.Context, blockHeight uint64) error {
 	return nil
-}
-
-func NewAdapter(store ds.Batching) *Adapter {
-	return &Adapter{
-		Store: store,
-	}
 }
 
 // LoadState loads the state from disk

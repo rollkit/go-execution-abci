@@ -114,7 +114,7 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 	gRPCOnly := svrCtx.Viper.GetBool(flagGRPCOnly)
 	g, ctx := getCtx(svrCtx, true)
 
-	var rpcServer *rpc.RPCServer
+	var rpcProvider rpc.RpcProvider
 
 	if gRPCOnly {
 		// TODO: Generalize logic so that gRPC only is really in startStandAlone
@@ -128,14 +128,7 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 			return err
 		}
 		defer cleanupFn()
-		rpcServer = localRpcServer
-
-		svrCtx.Logger.Info("Attempting to start RPC server")
-		if err := rpcServer.Start(); err != nil {
-			svrCtx.Logger.Error("Failed to start RPC server", "error", err)
-			return fmt.Errorf("failed to start abci rpc server: %w", err)
-		}
-		svrCtx.Logger.Info("RPC server started successfully")
+		rpcProvider = localRpcServer
 
 		g.Go(func() error {
 			svrCtx.Logger.Info("Attempting to start Rollkit node run loop")
@@ -170,7 +163,7 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 		// Add the tx service to the gRPC router.
 		if svrCfg.API.Enable || svrCfg.GRPC.Enable {
 			// Use the started rpcServer for the client context
-			clientCtx = clientCtx.WithClient(rpcServer)
+			clientCtx = clientCtx.WithClient(rpcProvider)
 
 			app.RegisterTxService(clientCtx)
 			app.RegisterTendermintService(clientCtx)
@@ -301,7 +294,7 @@ func startNode(
 	srvCtx *server.Context,
 	cfg *cmtcfg.Config,
 	app sdktypes.Application,
-) (rolllkitNode node.Node, rpcServer *rpc.RPCServer, executor *adapter.Adapter, cleanupFn func(), err error) {
+) (rolllkitNode node.Node, rpcProvider rpc.RpcProvider, executor *adapter.Adapter, cleanupFn func(), err error) {
 	logger := srvCtx.Logger.With("module", "rollkit")
 	logger.Info("starting node with Rollkit in-process")
 
@@ -434,9 +427,9 @@ func startNode(
 
 	// Create the RPC provider with necessary dependencies
 	// TODO: Pass actual indexers when implemented/available
-	txIndexer := txindex.TxIndexer(nil)       // Placeholder for actual TxIndexer (uses cometbft/state/txindex)
-	blockIndexer := indexer.BlockIndexer(nil) // Placeholder for actual BlockIndexer (uses cometbft/state/indexer)
-	rpcProvider := provider.NewRpcProvider(executor, txIndexer, blockIndexer, logger)
+	txIndexer := txindex.TxIndexer(nil)
+	blockIndexer := indexer.BlockIndexer(nil)
+	rpcProvider = provider.NewRpcProvider(executor, txIndexer, blockIndexer, logger)
 
 	// Create the RPC handler using the provider
 	rpcHandler, err := rpcjson.GetRPCHandler(rpcProvider, logger)
@@ -445,7 +438,7 @@ func startNode(
 	}
 
 	// Pass the created handler to the RPC server constructor
-	rpcServer = rpc.NewRPCServer(rpcHandler, cfg.RPC, logger)
+	rpcServer := rpc.NewRPCServer(rpcHandler, cfg.RPC, logger)
 	err = rpcServer.Start()
 	if err != nil {
 		return nil, nil, nil, cleanupFn, fmt.Errorf("failed to start rpc server: %w", err)
@@ -453,7 +446,7 @@ func startNode(
 
 	// Return the initialized node, rpc server, and the executor adapter
 	// We need to return the executor so startInProcess can call Start on it.
-	return rolllkitNode, rpcServer, executor, cleanupFn, nil
+	return rolllkitNode, rpcProvider, executor, cleanupFn, nil
 }
 
 // getGenDocProvider returns a function which returns the genesis doc from the genesis file.

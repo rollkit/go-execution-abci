@@ -18,15 +18,22 @@ const (
 	stateKey = "s"
 )
 
-// NewPrefixedStore creates a new datastore with the ABCI prefix
-func NewPrefixedStore(store ds.Batching) ds.Batching {
-	return kt.Wrap(store, &kt.PrefixTransform{
-		Prefix: ds.NewKey(KeyPrefix),
-	})
+// Store wraps a datastore with ABCI-specific functionality
+type Store struct {
+	ds.Batching
 }
 
-// loadState loads the state from disk
-func loadState(ctx context.Context, s ds.Batching) (*cmtstate.State, error) {
+// NewStore creates a new Store with the ABCI prefix
+func NewStore(store ds.Batching) *Store {
+	return &Store{
+		Batching: kt.Wrap(store, &kt.PrefixTransform{
+			Prefix: ds.NewKey(KeyPrefix),
+		}),
+	}
+}
+
+// LoadState loads the state from disk
+func (s *Store) LoadState(ctx context.Context) (*cmtstate.State, error) {
 	data, err := s.Get(ctx, ds.NewKey(stateKey))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get state metadata: %w", err)
@@ -43,8 +50,8 @@ func loadState(ctx context.Context, s ds.Batching) (*cmtstate.State, error) {
 	return cmtstate.FromProto(stateProto)
 }
 
-// saveState saves the state to disk
-func saveState(ctx context.Context, s ds.Batching, state *cmtstate.State) error {
+// SaveState saves the state to disk
+func (s *Store) SaveState(ctx context.Context, state *cmtstate.State) error {
 	stateProto, err := state.ToProto()
 	if err != nil {
 		return fmt.Errorf("failed to convert state to proto: %w", err)

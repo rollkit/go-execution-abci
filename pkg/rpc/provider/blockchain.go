@@ -307,7 +307,7 @@ func (p *RpcProvider) Validators(ctx context.Context, heightPtr *int64, pagePtr 
 	// depending on state pruning. The current implementation implicitly loads latest state.
 	height := p.normalizeHeight(heightPtr)
 
-	s, err := p.adapter.LoadState(ctx) // Loads the *latest* state
+	s, err := p.adapter.Store.LoadState(ctx) // Loads the *latest* state
 	if err != nil {
 		return nil, fmt.Errorf("failed to load current state: %w", err)
 	}

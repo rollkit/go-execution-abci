@@ -39,7 +39,7 @@ func LoadGenesisDoc(cfg *config.Config) (*cmtypes.GenesisDoc, error) {
 // Adapter is a struct that will contain an ABCI Application, and will implement the go-execution interface
 type Adapter struct {
 	App          servertypes.ABCI
-	Store        ds.Batching
+	Store        *Store
 	RollkitStore rstore.Store
 	Mempool      mempool.Mempool
 	MempoolIDs   *mempoolIDs
@@ -72,13 +72,13 @@ func NewABCIExecutor(
 		metrics = NopMetrics()
 	}
 
-	// Create a prefixed store for ABCI data
-	prefixedStore := NewPrefixedStore(store)
-	rollkitStore := rstore.New(store) // do not use prefixedStore for Rollkit
+	// Create a new Store with ABCI prefix
+	abciStore := NewStore(store)
+	rollkitStore := rstore.New(abciStore)
 
 	a := &Adapter{
 		App:          app,
-		Store:        prefixedStore,
+		Store:        abciStore,
 		RollkitStore: rollkitStore,
 		Logger:       logger,
 		P2PClient:    p2pClient,
@@ -248,7 +248,7 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 	s.LastHeightConsensusParamsChanged = int64(initialHeight)
 	s.LastHeightValidatorsChanged = int64(initialHeight)
 
-	if err := a.SaveState(ctx, s); err != nil {
+	if err := a.Store.SaveState(ctx, s); err != nil {
 		return nil, 0, fmt.Errorf("failed to save initial state: %w", err)
 	}
 
@@ -265,7 +265,7 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 	a.Logger.Info("Executing block", "height", blockHeight, "num_txs", len(txs), "timestamp", timestamp)
 	a.Metrics.TxsExecutedPerBlock.Observe(float64(len(txs)))
 
-	s, err := a.LoadState(ctx)
+	s, err := a.Store.LoadState(ctx)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to load state: %w", err)
 	}
@@ -340,7 +340,7 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 	s.NextValidators = nValSet.CopyIncrementProposerPriority(1)
 	s.LastHeightValidatorsChanged = lastHeightValsChanged
 
-	if err := a.SaveState(ctx, s); err != nil {
+	if err := a.Store.SaveState(ctx, s); err != nil {
 		return nil, 0, fmt.Errorf("failed to save state: %w", err)
 	}
 
@@ -383,7 +383,7 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 	}()
 	a.Logger.Debug("Getting transactions for proposal")
 
-	s, err := a.LoadState(ctx)
+	s, err := a.Store.LoadState(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load state for GetTxs: %w", err)
 	}
@@ -423,14 +423,4 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 // SetFinal implements execution.Executor.
 func (a *Adapter) SetFinal(ctx context.Context, blockHeight uint64) error {
 	return nil
-}
-
-// LoadState loads the state from disk
-func (a *Adapter) LoadState(ctx context.Context) (*cmtstate.State, error) {
-	return loadState(ctx, a.Store)
-}
-
-// SaveState saves the state to disk
-func (a *Adapter) SaveState(ctx context.Context, state *cmtstate.State) error {
-	return saveState(ctx, a.Store, state)
 }

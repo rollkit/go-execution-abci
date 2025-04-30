@@ -17,7 +17,7 @@ func (p *RpcProvider) Status(ctx context.Context) (*coretypes.ResultStatus, erro
 		return nil, err
 	}
 
-	s, err := p.adapter.LoadState(ctx)
+	s, err := p.adapter.Store.LoadState(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func (p *RpcProvider) Health(context.Context) (*coretypes.ResultHealth, error) {
 
 // ConsensusParams implements client.Client.
 func (p *RpcProvider) ConsensusParams(ctx context.Context, height *int64) (*coretypes.ResultConsensusParams, error) {
-	state, err := p.adapter.LoadState(ctx)
+	state, err := p.adapter.Store.LoadState(ctx)
 	if err != nil {
 		return nil, err
 	}

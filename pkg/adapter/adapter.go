@@ -114,6 +114,7 @@ func (a *Adapter) newTxValidator(ctx context.Context) p2p.GossipValidator {
 		}
 		a.p2pMetrics.PeerReceiveBytesTotal.With(labels...).Add(float64(len(msgBytes)))
 		a.p2pMetrics.MessageReceiveBytesTotal.With("message_type", "tx").Add(float64(len(msgBytes)))
+
 		checkTxResCh := make(chan *abci.ResponseCheckTx, 2)
 		checkTxStart := time.Now()
 		err := a.Mempool.CheckTx(m.Data, func(resp *abci.ResponseCheckTx) {

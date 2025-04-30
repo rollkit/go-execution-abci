@@ -41,7 +41,7 @@ func (p *RpcProvider) Block(ctx context.Context, height *int64) (*coretypes.Resu
 	default:
 		heightValue = p.normalizeHeight(height)
 	}
-	header, data, err := p.adapter.Store.GetBlockData(ctx, heightValue)
+	header, data, err := p.adapter.RollkitStore.GetBlockData(ctx, heightValue)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func (p *RpcProvider) Block(ctx context.Context, height *int64) (*coretypes.Resu
 
 // BlockByHash implements client.CometRPC.
 func (p *RpcProvider) BlockByHash(ctx context.Context, hash []byte) (*coretypes.ResultBlock, error) {
-	header, data, err := p.adapter.Store.GetBlockByHash(ctx, rlktypes.Hash(hash)) // Used types.Hash from rollkit/types
+	header, data, err := p.adapter.RollkitStore.GetBlockByHash(ctx, rlktypes.Hash(hash)) // Used types.Hash from rollkit/types
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func (p *RpcProvider) BlockResults(ctx context.Context, height *int64) (*coretyp
 // Commit implements client.CometRPC.
 func (p *RpcProvider) Commit(ctx context.Context, height *int64) (*coretypes.ResultCommit, error) {
 	heightValue := p.normalizeHeight(height)
-	header, data, err := p.adapter.Store.GetBlockData(ctx, heightValue)
+	header, data, err := p.adapter.RollkitStore.GetBlockData(ctx, heightValue)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func (p *RpcProvider) HeaderByHash(ctx context.Context, hash cmtbytes.HexBytes) 
 	// decoding logic in the HTTP service will correctly translate from JSON.
 	// See https://github.com/cometbft/cometbft/issues/6802 for context.
 
-	header, data, err := p.adapter.Store.GetBlockByHash(ctx, rlktypes.Hash(hash)) // Used types.Hash from rollkit/types
+	header, data, err := p.adapter.RollkitStore.GetBlockByHash(ctx, rlktypes.Hash(hash)) // Used types.Hash from rollkit/types
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +179,7 @@ func (p *RpcProvider) HeaderByHash(ctx context.Context, hash cmtbytes.HexBytes) 
 func (p *RpcProvider) BlockchainInfo(ctx context.Context, minHeight int64, maxHeight int64) (*coretypes.ResultBlockchainInfo, error) {
 	const limit int64 = 20 // Default limit used in the original code
 
-	height, err := p.adapter.Store.Height(ctx)
+	height, err := p.adapter.RollkitStore.Height(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current height: %w", err)
 	}
@@ -211,7 +211,7 @@ func (p *RpcProvider) BlockchainInfo(ctx context.Context, minHeight int64, maxHe
 
 	// Re-fetch height in case new blocks were added during the loop?
 	// The original code did this.
-	finalHeight, err := p.adapter.Store.Height(ctx)
+	finalHeight, err := p.adapter.RollkitStore.Height(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get final height: %w", err)
 	}
@@ -274,7 +274,7 @@ func (p *RpcProvider) BlockSearch(ctx context.Context, query string, pagePtr *in
 	apiResults := make([]*coretypes.ResultBlock, 0, pageSize)
 	for i := skipCount; i < skipCount+pageSize; i++ {
 		height := uint64(results[i])
-		header, data, err := p.adapter.Store.GetBlockData(ctx, height)
+		header, data, err := p.adapter.RollkitStore.GetBlockData(ctx, height)
 		if err != nil {
 			// If a block referenced by indexer is missing, should we error out or just skip?
 			// For now, error out.
@@ -307,7 +307,7 @@ func (p *RpcProvider) Validators(ctx context.Context, heightPtr *int64, pagePtr 
 	// depending on state pruning. The current implementation implicitly loads latest state.
 	height := p.normalizeHeight(heightPtr)
 
-	s, err := p.adapter.LoadState(ctx) // Loads the *latest* state
+	s, err := p.adapter.Store.LoadState(ctx) // Loads the *latest* state
 	if err != nil {
 		return nil, fmt.Errorf("failed to load current state: %w", err)
 	}

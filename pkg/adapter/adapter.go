@@ -15,10 +15,11 @@ import (
 	cmtypes "github.com/cometbft/cometbft/types"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
+	ds "github.com/ipfs/go-datastore"
 
 	"github.com/rollkit/rollkit/core/execution"
 	rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
-	"github.com/rollkit/rollkit/pkg/store"
+	rstore "github.com/rollkit/rollkit/pkg/store"
 
 	"github.com/rollkit/go-execution-abci/pkg/p2p"
 )
@@ -37,10 +38,11 @@ func LoadGenesisDoc(cfg *config.Config) (*cmtypes.GenesisDoc, error) {
 
 // Adapter is a struct that will contain an ABCI Application, and will implement the go-execution interface
 type Adapter struct {
-	App        servertypes.ABCI
-	Store      store.Store
-	Mempool    mempool.Mempool
-	MempoolIDs *mempoolIDs
+	App          servertypes.ABCI
+	Store        *Store
+	RollkitStore rstore.Store
+	Mempool      mempool.Mempool
+	MempoolIDs   *mempoolIDs
 
 	P2PClient  *rollkitp2p.Client
 	TxGossiper *p2p.Gossiper
@@ -58,7 +60,7 @@ type Adapter struct {
 // The Adapter wraps the provided ABCI application and delegates execution-related operations to it.
 func NewABCIExecutor(
 	app servertypes.ABCI,
-	store store.Store,
+	store ds.Batching,
 	p2pClient *rollkitp2p.Client,
 	p2pMetrics *rollkitp2p.Metrics,
 	logger log.Logger,
@@ -69,16 +71,22 @@ func NewABCIExecutor(
 	if metrics == nil {
 		metrics = NopMetrics()
 	}
+
+	// Create a new Store with ABCI prefix
+	abciStore := NewStore(store)
+	rollkitStore := rstore.New(abciStore)
+
 	a := &Adapter{
-		App:        app,
-		Store:      store,
-		Logger:     logger,
-		P2PClient:  p2pClient,
-		p2pMetrics: p2pMetrics,
-		CometCfg:   cfg,
-		AppGenesis: appGenesis,
-		MempoolIDs: newMempoolIDs(),
-		Metrics:    metrics,
+		App:          app,
+		Store:        abciStore,
+		RollkitStore: rollkitStore,
+		Logger:       logger,
+		P2PClient:    p2pClient,
+		p2pMetrics:   p2pMetrics,
+		CometCfg:     cfg,
+		AppGenesis:   appGenesis,
+		MempoolIDs:   newMempoolIDs(),
+		Metrics:      metrics,
 	}
 
 	return a
@@ -240,7 +248,7 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 	s.LastHeightConsensusParamsChanged = int64(initialHeight)
 	s.LastHeightValidatorsChanged = int64(initialHeight)
 
-	if err := a.SaveState(ctx, s); err != nil {
+	if err := a.Store.SaveState(ctx, s); err != nil {
 		return nil, 0, fmt.Errorf("failed to save initial state: %w", err)
 	}
 
@@ -257,7 +265,7 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 	a.Logger.Info("Executing block", "height", blockHeight, "num_txs", len(txs), "timestamp", timestamp)
 	a.Metrics.TxsExecutedPerBlock.Observe(float64(len(txs)))
 
-	s, err := a.LoadState(ctx)
+	s, err := a.Store.LoadState(ctx)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to load state: %w", err)
 	}
@@ -332,7 +340,7 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 	s.NextValidators = nValSet.CopyIncrementProposerPriority(1)
 	s.LastHeightValidatorsChanged = lastHeightValsChanged
 
-	if err := a.SaveState(ctx, s); err != nil {
+	if err := a.Store.SaveState(ctx, s); err != nil {
 		return nil, 0, fmt.Errorf("failed to save state: %w", err)
 	}
 
@@ -375,7 +383,7 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 	}()
 	a.Logger.Debug("Getting transactions for proposal")
 
-	s, err := a.LoadState(ctx)
+	s, err := a.Store.LoadState(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load state for GetTxs: %w", err)
 	}
@@ -391,7 +399,7 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 		txsBytes[i] = tx
 	}
 
-	currentHeight, err := a.Store.Height(ctx)
+	currentHeight, err := a.RollkitStore.Height(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -415,20 +423,4 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 // SetFinal implements execution.Executor.
 func (a *Adapter) SetFinal(ctx context.Context, blockHeight uint64) error {
 	return nil
-}
-
-func NewAdapter(store store.Store) *Adapter {
-	return &Adapter{
-		Store: store,
-	}
-}
-
-// LoadState loads the state from disk
-func (a *Adapter) LoadState(ctx context.Context) (*cmtstate.State, error) {
-	return loadState(ctx, a.Store)
-}
-
-// SaveState saves the state to disk
-func (a *Adapter) SaveState(ctx context.Context, state *cmtstate.State) error {
-	return saveState(ctx, a.Store, state)
 }

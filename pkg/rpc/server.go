@@ -10,25 +10,9 @@ import (
 
 	"cosmossdk.io/log"
 	cmtcfg "github.com/cometbft/cometbft/config"
-	cmtlog "github.com/cometbft/cometbft/libs/log"
-	servercmtlog "github.com/cosmos/cosmos-sdk/server/log"
 	"github.com/rs/cors"
 	"golang.org/x/net/netutil"
 )
-
-// NewRPCServer creates a new RPC server.
-func NewRPCServer(
-	httpHandler http.Handler,
-	cfg *cmtcfg.RPCConfig,
-	logger log.Logger,
-) *RPCServer {
-	cmtLogger := servercmtlog.CometLoggerWrapper{Logger: logger}
-	return &RPCServer{
-		config:      cfg,
-		httpHandler: httpHandler,
-		logger:      cmtLogger,
-	}
-}
 
 // RPCServer manages the HTTP server for RPC requests.
 // It delegates the actual RPC method implementations to an rpcProvider.
@@ -36,7 +20,20 @@ type RPCServer struct {
 	config      *cmtcfg.RPCConfig
 	httpHandler http.Handler
 	server      http.Server
-	logger      cmtlog.Logger
+	logger      log.Logger
+}
+
+// NewRPCServer creates a new RPC server.
+func NewRPCServer(
+	httpHandler http.Handler,
+	cfg *cmtcfg.RPCConfig,
+	logger log.Logger,
+) *RPCServer {
+	return &RPCServer{
+		config:      cfg,
+		httpHandler: httpHandler,
+		logger:      logger,
+	}
 }
 
 // Start starts the RPC server.

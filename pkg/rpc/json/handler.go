@@ -10,9 +10,9 @@ import (
 	"reflect"
 	"strconv"
 
+	"cosmossdk.io/log"
 	"github.com/cometbft/cometbft/libs/bytes"
 	cmjson "github.com/cometbft/cometbft/libs/json"
-	"github.com/cometbft/cometbft/libs/log"
 	"github.com/gorilla/rpc/v2"
 	"github.com/gorilla/rpc/v2/json2"
 )

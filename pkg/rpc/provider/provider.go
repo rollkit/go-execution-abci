@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	cmtlog "github.com/cometbft/cometbft/libs/log"
+	"cosmossdk.io/log"
 	"github.com/cometbft/cometbft/state/indexer"
 	"github.com/cometbft/cometbft/state/txindex"
 	cmtypes "github.com/cometbft/cometbft/types" // Keep for getBlockMeta
@@ -22,7 +22,7 @@ type RpcProvider struct {
 	adapter      *adapter.Adapter
 	txIndexer    txindex.TxIndexer
 	blockIndexer indexer.BlockIndexer
-	logger       cmtlog.Logger
+	logger       log.Logger
 }
 
 // NewRpcProvider creates a new instance of rpcProvider.
@@ -30,7 +30,7 @@ func NewRpcProvider(
 	adapter *adapter.Adapter,
 	txIndexer txindex.TxIndexer,
 	blockIndexer indexer.BlockIndexer,
-	logger cmtlog.Logger,
+	logger log.Logger,
 ) *RpcProvider { // Corrected return type to local *RpcProvider
 	return &RpcProvider{
 		adapter:      adapter,
@@ -41,7 +41,7 @@ func NewRpcProvider(
 }
 
 // Logger returns the logger used by the RpcProvider.
-func (p *RpcProvider) Logger() cmtlog.Logger {
+func (p *RpcProvider) Logger() log.Logger {
 	return p.logger
 }
 

@@ -329,11 +329,9 @@ func startNode(
 		adapterMetrics = adapter.PrometheusMetrics(config.DefaultInstrumentationConfig().Namespace, "chain_id", cmtGenDoc.ChainID)
 	}
 
-	st := store.New(database)
-
 	executor := adapter.NewABCIExecutor(
 		app,
-		st,
+		database,
 		p2pClient,
 		p2pMetrics,
 		logger,
@@ -350,7 +348,7 @@ func startNode(
 		panic(err)
 	}
 
-	height, err := st.Height(context.Background())
+	height, err := executor.RollkitStore.Height(context.Background())
 	if err != nil {
 		return nil, nil, cleanupFn, err
 	}

@@ -50,7 +50,7 @@ func (p *RpcProvider) normalizeHeight(height *int64) uint64 {
 	if height == nil {
 		var err error
 		// TODO: Decide how to handle context here. Using background for now.
-		heightValue, err = p.adapter.Store.Height(context.Background())
+		heightValue, err = p.adapter.RollkitStore.Height(context.Background())
 		if err != nil {
 			// TODO: Consider logging or returning error
 			p.logger.Error("Failed to get current height in normalizeHeight", "err", err)
@@ -61,7 +61,7 @@ func (p *RpcProvider) normalizeHeight(height *int64) uint64 {
 		// Currently, just treat them as 0 or latest, adjust as needed.
 		// For now, let's assume negative height means latest valid height.
 		var err error
-		heightValue, err = p.adapter.Store.Height(context.Background())
+		heightValue, err = p.adapter.RollkitStore.Height(context.Background())
 		if err != nil {
 			p.logger.Error("Failed to get current height for negative height in normalizeHeight", "err", err)
 			return 0
@@ -74,7 +74,7 @@ func (p *RpcProvider) normalizeHeight(height *int64) uint64 {
 }
 
 func (p *RpcProvider) getBlockMeta(ctx context.Context, n uint64) *cmtypes.BlockMeta {
-	header, data, err := p.adapter.Store.GetBlockData(ctx, n)
+	header, data, err := p.adapter.RollkitStore.GetBlockData(ctx, n)
 	if err != nil {
 		p.logger.Error("Failed to get block data in getBlockMeta", "height", n, "err", err)
 		return nil

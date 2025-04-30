@@ -254,13 +254,21 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 	defer func() {
 		a.Metrics.BlockExecutionDurationSeconds.Observe(time.Since(execStart).Seconds())
 	}()
-	a.Logger.Info("Executing block", "height", blockHeight, "num_txs", len(txs), "timestamp", timestamp)
+	a.Logger.Info("Starting ExecuteTxs",
+		"height", blockHeight,
+		"num_txs", len(txs),
+		"timestamp", timestamp,
+		"prev_state_root", fmt.Sprintf("%X", prevStateRoot))
 	a.Metrics.TxsExecutedPerBlock.Observe(float64(len(txs)))
 
 	s, err := a.LoadState(ctx)
 	if err != nil {
+		a.Logger.Error("Failed to load state", "error", err)
 		return nil, 0, fmt.Errorf("failed to load state: %w", err)
 	}
+	a.Logger.Info("State loaded successfully",
+		"validators_count", s.Validators.Size(),
+		"next_validators_hash", fmt.Sprintf("%X", s.NextValidators.Hash()))
 
 	ppResp, err := a.App.ProcessProposal(&abci.RequestProcessProposal{
 		Txs:                txs,
@@ -272,13 +280,19 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 		ProposerAddress:    s.Validators.Proposer.Address,
 	})
 	if err != nil {
+		a.Logger.Error("ProcessProposal failed", "error", err)
 		return nil, 0, err
 	}
+	a.Logger.Debug("ProcessProposal completed", "status", ppResp.Status)
 
 	if ppResp.Status != abci.ResponseProcessProposal_ACCEPT {
+		a.Logger.Error("Proposal rejected by app", "status", ppResp.Status)
 		return nil, 0, fmt.Errorf("proposal rejected by app")
 	}
 
+	a.Logger.Info("Starting FinalizeBlock",
+		"height", blockHeight,
+		"num_txs", len(txs))
 	fbResp, err := a.App.FinalizeBlock(&abci.RequestFinalizeBlock{
 		Txs:                txs,
 		Hash:               prevStateRoot,
@@ -288,8 +302,13 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 		ProposerAddress:    s.Validators.Proposer.Address,
 	})
 	if err != nil {
+		a.Logger.Error("FinalizeBlock failed", "error", err)
 		return nil, 0, err
 	}
+	a.Logger.Info("FinalizeBlock completed",
+		"app_hash", fmt.Sprintf("%X", fbResp.AppHash),
+		"num_validator_updates", len(fbResp.ValidatorUpdates),
+		"num_tx_results", len(fbResp.TxResults))
 
 	nValSet := s.NextValidators.Copy()
 
@@ -345,6 +364,7 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 		return nil, 0, err
 	}
 
+	a.Logger.Info("committing state")
 	_, err = a.App.Commit()
 	if err != nil {
 		a.Logger.Error("client error during proxyAppConn.CommitSync", "err", err)

@@ -118,10 +118,8 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 
 	if gRPCOnly {
 		// TODO: Generalize logic so that gRPC only is really in startStandAlone
-		svrCtx.Logger.Info("starting node in gRPC only mode; CometBFT is disabled")
 		svrCfg.GRPC.Enable = true
 	} else {
-		svrCtx.Logger.Info("starting node with ABCI CometBFT in-process")
 		// Call startNode to initialize components
 		rollkitNode, localRpcServer, executor, cleanupFn, err := startNode(ctx, svrCtx, cmtCfg, app)
 		if err != nil {
@@ -131,7 +129,6 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 		rpcProvider = localRpcServer
 
 		g.Go(func() error {
-			svrCtx.Logger.Info("Attempting to start Rollkit node run loop")
 			err := rollkitNode.Run(ctx)
 			if err != nil && err != context.Canceled {
 				svrCtx.Logger.Error("Rollkit node run loop failed", "error", err)
@@ -144,21 +141,16 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 			}
 			return nil // Return nil on graceful shutdown or normal completion
 		})
-		svrCtx.Logger.Info("Rollkit node run loop launched in background goroutine")
 
 		// Wait for the node to start p2p before attempting to start the gossiper
 		time.Sleep(1 * time.Second)
 
-		// Start the executor (Adapter) AFTER launching the node goroutine.
-		// Assumption: rollkitNode.Run initializes PubSub quickly enough.
-		svrCtx.Logger.Info("Attempting to start executor (Adapter.Start)")
 		if err := executor.Start(ctx); err != nil {
 			svrCtx.Logger.Error("Failed to start executor", "error", err)
 			// If this fails, the node goroutine might still be running.
 			// The errgroup context cancellation should handle shutdown.
 			return fmt.Errorf("failed to start executor: %w", err)
 		}
-		svrCtx.Logger.Info("Executor started successfully")
 
 		// Add the tx service to the gRPC router.
 		if svrCfg.API.Enable || svrCfg.GRPC.Enable {
@@ -365,7 +357,7 @@ func startNode(
 		st,
 		p2pClient,
 		p2pMetrics,
-		logger,
+		logger.With("module", "abci"),
 		cfg,
 		appGenesis,
 		adapterMetrics,

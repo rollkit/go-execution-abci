@@ -72,11 +72,13 @@ func NewABCIExecutor(
 		metrics = NopMetrics()
 	}
 
-	rollkitStore := rstore.New(store)
+	// Create a prefixed store for ABCI data
+	prefixedStore := NewPrefixedStore(store)
+	rollkitStore := rstore.New(store) // do not use prefixedStore for Rollkit
 
 	a := &Adapter{
 		App:          app,
-		Store:        store,
+		Store:        prefixedStore,
 		RollkitStore: rollkitStore,
 		Logger:       logger,
 		P2PClient:    p2pClient,

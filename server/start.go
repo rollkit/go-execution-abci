@@ -32,7 +32,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	rollkitda "github.com/rollkit/rollkit/da"
+	"github.com/rollkit/rollkit/da"
 	rollkitdaproxy "github.com/rollkit/rollkit/da/proxy"
 	"github.com/rollkit/rollkit/node"
 	"github.com/rollkit/rollkit/pkg/config"
@@ -397,8 +397,14 @@ func startNode(
 		return nil, nil, nil, cleanupFn, fmt.Errorf("failed to create DA client: %w", err)
 	}
 
-	// TODO(@facu): gas price and gas multiplier should be set by the node operator
-	rollkitda := rollkitda.NewDAClient(daJrpc, 1, 1, []byte(cmtGenDoc.ChainID), []byte{}, logger)
+	dac := da.NewDAClient(
+		daJrpc,
+		rollkitcfg.DA.GasPrice,
+		rollkitcfg.DA.GasMultiplier,
+		[]byte(rollkitcfg.DA.Namespace),
+		[]byte(rollkitcfg.DA.SubmitOptions),
+		logger,
+	)
 
 	singleMetrics, err := single.NopMetrics()
 	if err != nil {
@@ -411,7 +417,7 @@ func startNode(
 		database,
 		daJrpc,
 		[]byte(rollkitcfg.DA.Namespace),
-		[]byte(rollkitcfg.ChainID),
+		[]byte(cmtGenDoc.ChainID),
 		rollkitcfg.Node.BlockTime.Duration,
 		singleMetrics,
 		rollkitcfg.Node.Aggregator,
@@ -425,7 +431,7 @@ func startNode(
 		rollkitcfg,
 		executor,
 		sequencer,
-		rollkitda,
+		dac,
 		signer,
 		*nodeKey,
 		p2pClient,

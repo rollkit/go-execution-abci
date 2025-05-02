@@ -13,8 +13,6 @@ import (
 	cmtp2p "github.com/cometbft/cometbft/p2p"
 	pvm "github.com/cometbft/cometbft/privval"
 	"github.com/cometbft/cometbft/proxy"
-	"github.com/cometbft/cometbft/state/indexer"
-	"github.com/cometbft/cometbft/state/txindex"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/server"
@@ -44,8 +42,7 @@ import (
 
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
 	"github.com/rollkit/go-execution-abci/pkg/rpc"
-	rpcjson "github.com/rollkit/go-execution-abci/pkg/rpc/json"
-	provider "github.com/rollkit/go-execution-abci/pkg/rpc/provider"
+	"github.com/rollkit/go-execution-abci/pkg/rpc/core"
 	execsigner "github.com/rollkit/go-execution-abci/pkg/signer"
 )
 
@@ -119,7 +116,7 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 		svrCfg.GRPC.Enable = true
 	} else {
 		svrCtx.Logger.Info("starting node with ABCI CometBFT in-process")
-		_, rpcServer, cleanupFn, err := startNode(ctx, svrCtx, cmtCfg, app)
+		_, cleanupFn, err := startNode(ctx, svrCtx, cmtCfg, app)
 		if err != nil {
 			return err
 		}
@@ -131,7 +128,7 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 		if svrCfg.API.Enable || svrCfg.GRPC.Enable {
 			// Re-assign for making the client available below do not use := to avoid
 			// shadowing the clientCtx variable.
-			clientCtx = clientCtx.WithClient(rpcServer)
+			//clientCtx = clientCtx.WithClient(rpcServer)
 
 			app.RegisterTxService(clientCtx)
 			app.RegisterTendermintService(clientCtx)
@@ -260,7 +257,7 @@ func startNode(
 	srvCtx *server.Context,
 	cfg *cmtcfg.Config,
 	app sdktypes.Application,
-) (rolllkitNode node.Node, rpcClient rpc.RpcProvider, cleanupFn func(), err error) {
+) (rolllkitNode node.Node, cleanupFn func(), err error) {
 	logger := srvCtx.Logger.With("module", "rollkit")
 	logger.Info("starting node with Rollkit in-process")
 
@@ -271,14 +268,14 @@ func startNode(
 
 	signingKey, err := execsigner.GetNodeKey(&cmtp2p.NodeKey{PrivKey: pval.Key.PrivKey})
 	if err != nil {
-		return nil, nil, cleanupFn, err
+		return nil, cleanupFn, err
 	}
 
 	nodeKey := &key.NodeKey{PrivKey: signingKey, PubKey: signingKey.GetPublic()}
 
 	rollkitcfg, err := config.LoadFromViper(srvCtx.Viper)
 	if err != nil {
-		return nil, nil, cleanupFn, err
+		return nil, cleanupFn, err
 	}
 
 	// only load signer if rollkit.node.aggregator == true
@@ -286,7 +283,7 @@ func startNode(
 	if rollkitcfg.Node.Aggregator {
 		signer, err = execsigner.NewSignerWrapper(pval.Key.PrivKey)
 		if err != nil {
-			return nil, nil, cleanupFn, err
+			return nil, cleanupFn, err
 		}
 	}
 
@@ -297,23 +294,23 @@ func startNode(
 
 	genDoc, err := getGenDocProvider(cfg)()
 	if err != nil {
-		return nil, nil, cleanupFn, err
+		return nil, cleanupFn, err
 	}
 
 	cmtGenDoc, err := genDoc.ToGenesisDoc()
 	if err != nil {
-		return nil, nil, cleanupFn, err
+		return nil, cleanupFn, err
 	}
 
 	// Get AppGenesis before creating the executor
 	appGenesis, err := genutiltypes.AppGenesisFromFile(cfg.GenesisFile())
 	if err != nil {
-		return nil, nil, cleanupFn, err
+		return nil, cleanupFn, err
 	}
 
 	database, err := store.NewDefaultKVStore(cfg.RootDir, "data", "rollkit")
 	if err != nil {
-		return nil, nil, cleanupFn, err
+		return nil, cleanupFn, err
 	}
 
 	metrics := node.DefaultMetricsProvider(rollkitcfg.Instrumentation)
@@ -321,7 +318,7 @@ func startNode(
 	_, p2pMetrics := metrics(cmtGenDoc.ChainID)
 	p2pClient, err := p2p.NewClient(rollkitcfg, nodeKey, database, logger.With("module", "p2p"), p2pMetrics)
 	if err != nil {
-		return nil, nil, cleanupFn, err
+		return nil, cleanupFn, err
 	}
 
 	adapterMetrics := adapter.NopMetrics()
@@ -352,7 +349,7 @@ func startNode(
 
 	height, err := st.Height(context.Background())
 	if err != nil {
-		return nil, nil, cleanupFn, err
+		return nil, cleanupFn, err
 	}
 	mempool := mempool.NewCListMempool(cfg.Mempool, proxyApp.Mempool(), int64(height))
 	executor.SetMempool(mempool)
@@ -372,7 +369,7 @@ func startNode(
 	// create the DA client
 	daClient, err := jsonrpc.NewClient(ctx, logger, rollkitcfg.DA.Address, rollkitcfg.DA.AuthToken)
 	if err != nil {
-		return nil, nil, cleanupFn, fmt.Errorf("failed to create DA client: %w", err)
+		return nil, cleanupFn, fmt.Errorf("failed to create DA client: %w", err)
 	}
 
 	// TODO(@facu): gas price and gas multiplier should be set by the node operator
@@ -393,44 +390,37 @@ func startNode(
 		logger,
 	)
 	if err != nil {
-		return nil, nil, cleanupFn, err
+		return nil, cleanupFn, err
 	}
 
-	// Create the RPC provider with necessary dependencies
-	// TODO: Pass actual indexers when implemented/available
-	txIndexer := txindex.TxIndexer(nil)       // Placeholder for actual TxIndexer (uses cometbft/state/txindex)
-	blockIndexer := indexer.BlockIndexer(nil) // Placeholder for actual BlockIndexer (uses cometbft/state/indexer)
-	rpcProvider := provider.NewRpcProvider(executor, txIndexer, blockIndexer, servercmtlog.CometLoggerWrapper{Logger: logger})
-
-	// Create the RPC handler using the provider
-	rpcHandler, err := rpcjson.GetRPCHandler(rpcProvider, servercmtlog.CometLoggerWrapper{Logger: logger})
-	if err != nil {
-		return nil, nil, cleanupFn, fmt.Errorf("failed to create rpc handler: %w", err)
-	}
+	core.SetEnvironment(&core.Environment{
+		Logger:  servercmtlog.CometLoggerWrapper{Logger: logger},
+		Adapter: executor,
+	})
 
 	// Pass the created handler to the RPC server constructor
-	rpcServer := rpc.NewRPCServer(rpcHandler, cfg.RPC, logger)
+	rpcServer := rpc.NewRPCServer(cfg.RPC, logger)
 	err = rpcServer.Start()
 	if err != nil {
-		return nil, nil, cleanupFn, fmt.Errorf("failed to start rpc server: %w", err)
+		return nil, cleanupFn, fmt.Errorf("failed to start rpc server: %w", err)
 	}
 
 	logger.Info("starting node")
 	err = rolllkitNode.Run(ctx)
 	if err != nil {
 		if err == context.Canceled {
-			return nil, nil, cleanupFn, nil
+			return nil, cleanupFn, nil
 		}
-		return nil, nil, cleanupFn, fmt.Errorf("failed to start node: %w", err)
+		return nil, cleanupFn, fmt.Errorf("failed to start node: %w", err)
 	}
 
 	// executor must be started after the node is started
 	logger.Info("starting executor")
 	if err = executor.Start(ctx); err != nil {
-		return nil, nil, cleanupFn, fmt.Errorf("failed to start executor: %w", err)
+		return nil, cleanupFn, fmt.Errorf("failed to start executor: %w", err)
 	}
 
-	return rolllkitNode, rpcProvider, cleanupFn, nil
+	return rolllkitNode, cleanupFn, nil
 }
 
 // getGenDocProvider returns a function which returns the genesis doc from the genesis file.

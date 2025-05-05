@@ -7,7 +7,6 @@ require (
 	github.com/cosmos/cosmos-sdk v0.50.13
 	github.com/cosmos/gogoproto v1.7.0
 	github.com/go-kit/kit v0.13.0
-	github.com/gorilla/rpc v1.2.1
 	github.com/rollkit/rollkit v0.14.2-0.20250422111549-9f2f92ea5c6e
 	github.com/rollkit/rollkit/core v0.0.0-20250422111549-9f2f92ea5c6e
 	github.com/rollkit/rollkit/da v0.0.0-20250422111549-9f2f92ea5c6e
@@ -102,7 +101,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/handlers v1.5.1 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
-	github.com/gorilla/websocket v1.5.3
+	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect
 	github.com/gsterjov/go-libsecret v0.0.0-20161001094733-a6f4afe4910c // indirect

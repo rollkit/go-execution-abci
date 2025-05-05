@@ -13,6 +13,7 @@ import (
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 	rpcserver "github.com/cometbft/cometbft/rpc/jsonrpc/server"
 	servercmtlog "github.com/cosmos/cosmos-sdk/server/log"
+	"github.com/rollkit/go-execution-abci/pkg/rpc/core"
 	"github.com/rs/cors"
 	"golang.org/x/net/netutil"
 )
@@ -61,7 +62,7 @@ func (r *RPCServer) startRPC() error {
 	}
 
 	mux := http.NewServeMux()
-	rpcserver.RegisterRPCFuncs(mux, Routes, r.logger)
+	rpcserver.RegisterRPCFuncs(mux, core.Routes, r.logger)
 	r.httpHandler = mux
 
 	if r.config.MaxOpenConnections != 0 {

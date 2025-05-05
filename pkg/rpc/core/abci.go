@@ -30,11 +30,12 @@ func ABCIQuery(
 
 // ABCIInfo gets some info about the application.
 // More: https://docs.cometbft.com/v0.37/rpc/#/ABCI/abci_info
-// func ABCIInfo(ctx *rpctypes.Context) (*ctypes.ResultABCIInfo, error) {
-// 	resInfo, err := env.ProxyAppQuery.InfoSync(proxy.RequestInfo)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	return &ctypes.ResultABCIInfo{Response: *resInfo}, nil
-// }
+func ABCIInfo(ctx *rpctypes.Context) (*ctypes.ResultABCIInfo, error) {
+	info, err := env.Adapter.App.Info(&abci.RequestInfo{})
+	if err != nil {
+		return nil, err
+	}
+	return &ctypes.ResultABCIInfo{
+		Response: *info,
+	}, nil
+}

@@ -1,56 +1,17 @@
-package provider
+package core
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
 
 	cmbytes "github.com/cometbft/cometbft/libs/bytes"
-	cmproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	cmversion "github.com/cometbft/cometbft/proto/tendermint/version"
 	cmtypes "github.com/cometbft/cometbft/types"
 
 	"github.com/rollkit/rollkit/types"
 )
-
-const (
-	// Constants for pagination
-	// TODO: Make these configurable or derive from CometBFT config?
-	defaultPerPage = 30
-	maxPerPage     = 100
-	// Define query length limit here
-	maxQueryLength = 256
-)
-
-// ToABCIHeaderPB converts Rollkit header to Header format defined in ABCI.
-// Caller should fill all the fields that are not available in Rollkit header (like ChainID).
-func ToABCIHeaderPB(header *types.Header) (cmproto.Header, error) {
-	return cmproto.Header{
-		Version: cmversion.Consensus{
-			Block: header.Version.Block,
-			App:   header.Version.App,
-		},
-		Height: int64(header.Height()), //nolint:gosec
-		Time:   header.Time(),
-		LastBlockId: cmproto.BlockID{
-			Hash: header.LastHeaderHash[:],
-			PartSetHeader: cmproto.PartSetHeader{
-				Total: 0,
-				Hash:  nil,
-			},
-		},
-		LastCommitHash:     header.LastCommitHash[:],
-		DataHash:           header.DataHash[:],
-		ConsensusHash:      header.ConsensusHash[:],
-		AppHash:            header.AppHash[:],
-		LastResultsHash:    header.LastResultsHash[:],
-		EvidenceHash:       new(cmtypes.EvidenceData).Hash(),
-		ProposerAddress:    header.ProposerAddress,
-		ChainID:            header.ChainID(),
-		ValidatorsHash:     header.ValidatorHash,
-		NextValidatorsHash: header.ValidatorHash,
-	}, nil
-}
 
 // ToABCIHeader converts Rollkit header to Header format defined in ABCI.
 // Caller should fill all the fields that are not available in Rollkit header (like ChainID).
@@ -156,6 +117,54 @@ func getABCICommit(height uint64, hash []byte, val cmtypes.Address, time time.Ti
 	return &tmCommit
 }
 
+func normalizeHeight(height *int64) uint64 {
+	var heightValue uint64
+	if height == nil {
+		var err error
+		// TODO: Decide how to handle context here. Using background for now.
+		heightValue, err = env.Adapter.RollkitStore.Height(context.Background())
+		if err != nil {
+			// TODO: Consider logging or returning error
+			env.Logger.Error("Failed to get current height in normalizeHeight", "err", err)
+			return 0
+		}
+	} else if *height < 0 {
+		// Handle negative heights if they have special meaning (e.g., -1 for latest)
+		// Currently, just treat them as 0 or latest, adjust as needed.
+		// For now, let's assume negative height means latest valid height.
+		var err error
+		heightValue, err = env.Adapter.RollkitStore.Height(context.Background())
+		if err != nil {
+			env.Logger.Error("Failed to get current height for negative height in normalizeHeight", "err", err)
+			return 0
+		}
+	} else {
+		heightValue = uint64(*height)
+	}
+
+	return heightValue
+}
+
+func getBlockMeta(ctx context.Context, n uint64) *cmtypes.BlockMeta {
+	header, data, err := env.Adapter.RollkitStore.GetBlockData(ctx, n)
+	if err != nil {
+		env.Logger.Error("Failed to get block data in getBlockMeta", "height", n, "err", err)
+		return nil
+	}
+	if header == nil || data == nil {
+		env.Logger.Error("Nil header or data returned from GetBlockData", "height", n)
+		return nil
+	}
+	// Assuming ToABCIBlockMeta is now in pkg/rpc/provider/provider_utils.go
+	bmeta, err := ToABCIBlockMeta(header, data) // Removed rpc. prefix
+	if err != nil {
+		env.Logger.Error("Failed to convert block to ABCI block meta", "height", n, "err", err)
+		return nil
+	}
+
+	return bmeta
+}
+
 func filterMinMax(base, height, mini, maxi, limit int64) (int64, int64, error) {
 	// filter negatives
 	if mini < 0 || maxi < 0 {
@@ -185,48 +194,4 @@ func filterMinMax(base, height, mini, maxi, limit int64) (int64, int64, error) {
 			errors.New("invalid request"), mini, maxi)
 	}
 	return mini, maxi, nil
-}
-
-func validateSkipCount(page, perPage int) int {
-	skipCount := (page - 1) * perPage
-	if skipCount < 0 {
-		return 0
-	}
-
-	return skipCount
-}
-
-func validatePerPage(perPagePtr *int) int {
-	if perPagePtr == nil { // no per_page parameter
-		return defaultPerPage
-	}
-
-	perPage := *perPagePtr
-	if perPage < 1 {
-		return defaultPerPage
-	} else if perPage > maxPerPage {
-		return maxPerPage
-	}
-	return perPage
-}
-
-func validatePage(pagePtr *int, perPage, totalCount int) (int, error) {
-	if perPage < 1 {
-		return 0, fmt.Errorf("invalid perPage parameter: %d (must be positive)", perPage)
-	}
-
-	if pagePtr == nil { // no page parameter
-		return 1, nil
-	}
-
-	pages := ((totalCount - 1) / perPage) + 1
-	if pages == 0 {
-		pages = 1 // one page (even if it's empty)
-	}
-	page := *pagePtr
-	if page <= 0 || page > pages {
-		return 1, fmt.Errorf("page should be within [1, %d] range, given %d", pages, page)
-	}
-
-	return page, nil
 }

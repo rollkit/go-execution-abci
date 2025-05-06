@@ -1,17 +1,17 @@
-package provider
+package core
 
 import (
-	"context"
 	"errors"
 
-	coretypes "github.com/cometbft/cometbft/rpc/core/types"
+	ctypes "github.com/cometbft/cometbft/rpc/core/types"
+	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 )
 
-// Subscribe implements client.Client.
-// This functionality is currently not implemented.
-func (p *RpcProvider) Subscribe(ctx context.Context, subscriber string, query string, outCapacity ...int) (out <-chan coretypes.ResultEvent, err error) {
+// Subscribe for events via WebSocket.
+// More: https://docs.cometbft.com/v0.37/rpc/#/Websocket/subscribe
+func Subscribe(ctx *rpctypes.Context, query string) (*ctypes.ResultSubscribe, error) {
 	// Check if EventBus is available
-	if p.adapter.EventBus == nil {
+	if env.Adapter.EventBus == nil {
 		return nil, errors.New("event bus is not configured, cannot subscribe to events")
 	}
 	// TODO: Implement subscription logic using p.adapter.EventBus
@@ -37,11 +37,11 @@ func (p *RpcProvider) Subscribe(ctx context.Context, subscriber string, query st
 	return nil, errors.New("event subscription functionality is not yet implemented")
 }
 
-// Unsubscribe implements client.Client.
-// This functionality is currently not implemented.
-func (p *RpcProvider) Unsubscribe(ctx context.Context, subscriber string, query string) error {
-	if p.adapter.EventBus == nil {
-		return errors.New("event bus is not configured, cannot unsubscribe")
+// Unsubscribe from events via WebSocket.
+// More: https://docs.cometbft.com/v0.37/rpc/#/Websocket/unsubscribe
+func Unsubscribe(ctx *rpctypes.Context, query string) (*ctypes.ResultUnsubscribe, error) {
+	if env.Adapter.EventBus == nil {
+		return nil, errors.New("event bus is not configured, cannot unsubscribe")
 	}
 	// TODO: Implement unsubscription logic using p.adapter.EventBus
 	// Example structure:
@@ -50,16 +50,14 @@ func (p *RpcProvider) Unsubscribe(ctx context.Context, subscriber string, query 
 	// 	 return fmt.Errorf("failed to parse query: %w", err)
 	// }
 	// return p.adapter.EventBus.Unsubscribe(ctx, subscriber, q)
-	return errors.New("event unsubscription functionality is not yet implemented")
+	return nil, errors.New("event unsubscription functionality is not yet implemented")
 }
 
-// UnsubscribeAll implements client.Client.
-// This functionality is currently not implemented.
-func (p *RpcProvider) UnsubscribeAll(ctx context.Context, subscriber string) error {
-	if p.adapter.EventBus == nil {
-		return errors.New("event bus is not configured, cannot unsubscribe")
+func UnsubscribeAll(ctx *rpctypes.Context) (*ctypes.ResultUnsubscribe, error) {
+	if env.Adapter.EventBus == nil {
+		return nil, errors.New("event bus is not configured, cannot unsubscribe")
 	}
 	// TODO: Implement unsubscribe all logic using p.adapter.EventBus
 	// return p.adapter.EventBus.UnsubscribeAll(ctx, subscriber)
-	return errors.New("event unsubscribe all functionality is not yet implemented")
+	return nil, errors.New("event unsubscribe all functionality is not yet implemented")
 }

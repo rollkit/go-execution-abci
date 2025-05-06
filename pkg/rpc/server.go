@@ -13,9 +13,10 @@ import (
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 	rpcserver "github.com/cometbft/cometbft/rpc/jsonrpc/server"
 	servercmtlog "github.com/cosmos/cosmos-sdk/server/log"
-	"github.com/rollkit/go-execution-abci/pkg/rpc/core"
-	"github.com/rs/cors"
 	"golang.org/x/net/netutil"
+	"github.com/rs/cors"
+
+	"github.com/rollkit/go-execution-abci/pkg/rpc/core"
 )
 
 // NewRPCServer creates a new RPC server.

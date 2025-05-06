@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/cometbft/cometbft/libs/bytes"
 	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
 	cmtmath "github.com/cometbft/cometbft/libs/math"
 	cmtquery "github.com/cometbft/cometbft/libs/pubsub/query"
@@ -13,6 +12,7 @@ import (
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	blockidxnull "github.com/cometbft/cometbft/state/indexer/block/null"
 	cmttypes "github.com/cometbft/cometbft/types"
+
 	rlktypes "github.com/rollkit/rollkit/types"
 )
 

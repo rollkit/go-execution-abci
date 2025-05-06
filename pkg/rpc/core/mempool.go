@@ -9,10 +9,8 @@ import (
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtmath "github.com/cometbft/cometbft/libs/math"
 	"github.com/cometbft/cometbft/mempool"
-	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
-	"github.com/cometbft/cometbft/types"
 	cmttypes "github.com/cometbft/cometbft/types"
 
 	execp2p "github.com/rollkit/go-execution-abci/pkg/p2p"

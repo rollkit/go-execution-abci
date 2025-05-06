@@ -6,6 +6,7 @@ import (
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 	"github.com/cometbft/cometbft/state/indexer"
 	"github.com/cometbft/cometbft/state/txindex"
+
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
 )
 

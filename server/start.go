@@ -403,7 +403,7 @@ func startNode(
 		ctx,
 		logger,
 		database,
-		daClient,
+		&daClient.DA,
 		[]byte(cmtGenDoc.ChainID),
 		rollkitcfg.Node.BlockTime.Duration,
 		singleMetrics,

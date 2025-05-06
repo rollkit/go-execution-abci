@@ -12,7 +12,7 @@ import (
 	"github.com/cometbft/cometbft/mempool"
 	corep2p "github.com/cometbft/cometbft/p2p"
 	cmtstate "github.com/cometbft/cometbft/state"
-	cmtypes "github.com/cometbft/cometbft/types"
+	cmttypes "github.com/cometbft/cometbft/types"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	ds "github.com/ipfs/go-datastore"
@@ -29,9 +29,9 @@ import (
 var _ execution.Executor = &Adapter{}
 
 // LoadGenesisDoc returns the genesis document from the provided config file.
-func LoadGenesisDoc(cfg *config.Config) (*cmtypes.GenesisDoc, error) {
+func LoadGenesisDoc(cfg *config.Config) (*cmttypes.GenesisDoc, error) {
 	genesisFile := cfg.GenesisFile()
-	doc, err := cmtypes.GenesisDocFromFile(genesisFile)
+	doc, err := cmttypes.GenesisDocFromFile(genesisFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read genesis doc from file: %w", err)
 	}
@@ -50,8 +50,7 @@ type Adapter struct {
 	TxGossiper *p2p.Gossiper
 	p2pMetrics *rollkitp2p.Metrics
 
-	EventBus   *cmtypes.EventBus
-	CometCfg   *config.Config
+	EventBus   *cmttypes.EventBus
 	AppGenesis *genutiltypes.AppGenesis
 
 	Logger  log.Logger
@@ -89,7 +88,6 @@ func NewABCIExecutor(
 		Logger:       logger,
 		P2PClient:    p2pClient,
 		p2pMetrics:   p2pMetrics,
-		CometCfg:     cfg,
 		AppGenesis:   appGenesis,
 		MempoolIDs:   newMempoolIDs(),
 		Metrics:      metrics,
@@ -210,9 +208,9 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 		return nil, 0, err
 	}
 
-	validators := make([]*cmtypes.Validator, len(a.AppGenesis.Consensus.Validators))
+	validators := make([]*cmttypes.Validator, len(a.AppGenesis.Consensus.Validators))
 	for i, v := range a.AppGenesis.Consensus.Validators {
-		validators[i] = cmtypes.NewValidator(v.PubKey, v.Power)
+		validators[i] = cmttypes.NewValidator(v.PubKey, v.Power)
 	}
 
 	consensusParams := a.AppGenesis.Consensus.Params.ToProto()
@@ -221,7 +219,7 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 		Time:            genesisTime,
 		ChainId:         chainID,
 		ConsensusParams: &consensusParams,
-		Validators:      cmtypes.TM2PB.ValidatorUpdates(cmtypes.NewValidatorSet(validators)),
+		Validators:      cmttypes.TM2PB.ValidatorUpdates(cmttypes.NewValidatorSet(validators)),
 		AppStateBytes:   a.AppGenesis.AppState,
 		InitialHeight:   int64(initialHeight),
 	})
@@ -231,28 +229,29 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 
 	s := &cmtstate.State{}
 	if res.ConsensusParams != nil {
-		s.ConsensusParams = cmtypes.ConsensusParamsFromProto(*res.ConsensusParams)
+		s.ConsensusParams = cmttypes.ConsensusParamsFromProto(*res.ConsensusParams)
 	} else {
-		s.ConsensusParams = cmtypes.ConsensusParamsFromProto(consensusParams)
+		s.ConsensusParams = cmttypes.ConsensusParamsFromProto(consensusParams)
 	}
 
-	vals, err := cmtypes.PB2TM.ValidatorUpdates(res.Validators)
+	vals, err := cmttypes.PB2TM.ValidatorUpdates(res.Validators)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	nValSet := cmtypes.NewValidatorSet(vals)
+	nValSet := cmttypes.NewValidatorSet(vals)
 
 	if len(nValSet.Validators) != 1 {
 		err := fmt.Errorf("expected exactly one validator")
 		return nil, 0, err
 	}
 
-	s.Validators = cmtypes.NewValidatorSet(nValSet.Validators)
-	s.NextValidators = cmtypes.NewValidatorSet(nValSet.Validators).CopyIncrementProposerPriority(1)
-	s.LastValidators = cmtypes.NewValidatorSet(nValSet.Validators)
+	s.Validators = cmttypes.NewValidatorSet(nValSet.Validators)
+	s.NextValidators = cmttypes.NewValidatorSet(nValSet.Validators).CopyIncrementProposerPriority(1)
+	s.LastValidators = cmttypes.NewValidatorSet(nValSet.Validators)
 	s.LastHeightConsensusParamsChanged = int64(initialHeight)
 	s.LastHeightValidatorsChanged = int64(initialHeight)
+	s.AppHash = res.AppHash
 
 	if err := a.Store.SaveState(ctx, s); err != nil {
 		return nil, 0, fmt.Errorf("failed to save initial state: %w", err)
@@ -263,7 +262,13 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 }
 
 // ExecuteTxs implements execution.Executor.
-func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint64, timestamp time.Time, prevStateRoot []byte) ([]byte, uint64, error) {
+func (a *Adapter) ExecuteTxs(
+	ctx context.Context,
+	txs [][]byte,
+	blockHeight uint64,
+	timestamp time.Time,
+	prevStateRoot []byte,
+) ([]byte, uint64, error) {
 	execStart := time.Now()
 	defer func() {
 		a.Metrics.BlockExecutionDurationSeconds.Observe(time.Since(execStart).Seconds())
@@ -307,7 +312,7 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 
 	nValSet := s.NextValidators.Copy()
 
-	validatorUpdates, err := cmtypes.PB2TM.ValidatorUpdates(fbResp.ValidatorUpdates)
+	validatorUpdates, err := cmttypes.PB2TM.ValidatorUpdates(fbResp.ValidatorUpdates)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -345,40 +350,114 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 	s.Validators = nValSet.Copy()
 	s.NextValidators = nValSet.CopyIncrementProposerPriority(1)
 	s.LastHeightValidatorsChanged = lastHeightValsChanged
+	s.AppHash = fbResp.AppHash
 
 	if err := a.Store.SaveState(ctx, s); err != nil {
 		return nil, 0, fmt.Errorf("failed to save state: %w", err)
 	}
 
-	a.Mempool.Lock()
-	defer a.Mempool.Unlock()
+	err = func() error { // Lock mempool and commit
+		a.Mempool.Lock()
+		defer a.Mempool.Unlock()
 
-	err = a.Mempool.FlushAppConn()
+		err = a.Mempool.FlushAppConn()
+		if err != nil {
+			a.Logger.Error("client error during mempool.FlushAppConn", "err", err)
+			return err
+		}
+
+		_, err = a.App.Commit()
+		if err != nil {
+			a.Logger.Error("client error during proxyAppConn.CommitSync", "err", err)
+			return err
+		}
+
+		err = a.Mempool.Update(
+			int64(blockHeight),
+			cmttypes.ToTxs(txs),
+			fbResp.TxResults,
+			cmtstate.TxPreCheck(*s),
+			cmtstate.TxPostCheck(*s),
+		)
+		if err != nil {
+			a.Logger.Error("client error during mempool.Update", "err", err)
+			return err
+		}
+		return nil
+	}()
 	if err != nil {
-		a.Logger.Error("client error during mempool.FlushAppConn", "err", err)
 		return nil, 0, err
 	}
 
-	_, err = a.App.Commit()
-	if err != nil {
-		a.Logger.Error("client error during proxyAppConn.CommitSync", "err", err)
-		return nil, 0, err
+	cmtTxs := make(cmttypes.Txs, len(txs))
+	for i := range txs {
+		cmtTxs[i] = txs[i]
 	}
-
-	err = a.Mempool.Update(
-		int64(blockHeight),
-		cmtypes.ToTxs(txs),
-		fbResp.TxResults,
-		cmtstate.TxPreCheck(*s),
-		cmtstate.TxPostCheck(*s),
-	)
-	if err != nil {
-		a.Logger.Error("client error during mempool.Update", "err", err)
-		return nil, 0, err
-	}
+	block := s.MakeBlock(int64(blockHeight), cmtTxs, &cmttypes.Commit{Height: int64(blockHeight)}, nil, s.Validators.Proposer.Address)
+	fireEvents(a.Logger, a.EventBus, block, cmttypes.BlockID{}, fbResp, validatorUpdates)
 
 	a.Logger.Info("Block executed successfully", "height", blockHeight, "appHash", fmt.Sprintf("%X", fbResp.AppHash))
 	return fbResp.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
+}
+
+func fireEvents(
+	logger log.Logger,
+	eventBus cmttypes.BlockEventPublisher,
+	block *cmttypes.Block,
+	blockID cmttypes.BlockID,
+	abciResponse *abci.ResponseFinalizeBlock,
+	validatorUpdates []*cmttypes.Validator,
+) {
+	if err := eventBus.PublishEventNewBlock(cmttypes.EventDataNewBlock{
+		Block:               block,
+		BlockID:             blockID,
+		ResultFinalizeBlock: *abciResponse,
+	}); err != nil {
+		logger.Error("failed publishing new block", "err", err)
+	}
+
+	if err := eventBus.PublishEventNewBlockHeader(cmttypes.EventDataNewBlockHeader{
+		Header: block.Header,
+	}); err != nil {
+		logger.Error("failed publishing new block header", "err", err)
+	}
+
+	if err := eventBus.PublishEventNewBlockEvents(cmttypes.EventDataNewBlockEvents{
+		Height: block.Height,
+		Events: abciResponse.Events,
+		NumTxs: int64(len(block.Txs)),
+	}); err != nil {
+		logger.Error("failed publishing new block events", "err", err)
+	}
+
+	if len(block.Evidence.Evidence) != 0 {
+		for _, ev := range block.Evidence.Evidence {
+			if err := eventBus.PublishEventNewEvidence(cmttypes.EventDataNewEvidence{
+				Evidence: ev,
+				Height:   block.Height,
+			}); err != nil {
+				logger.Error("failed publishing new evidence", "err", err)
+			}
+		}
+	}
+
+	for i, tx := range block.Txs {
+		if err := eventBus.PublishEventTx(cmttypes.EventDataTx{TxResult: abci.TxResult{
+			Height: block.Height,
+			Index:  uint32(i),
+			Tx:     tx,
+			Result: *(abciResponse.TxResults[i]),
+		}}); err != nil {
+			logger.Error("failed publishing event TX", "err", err)
+		}
+	}
+
+	if len(validatorUpdates) > 0 {
+		if err := eventBus.PublishEventValidatorSetUpdates(
+			cmttypes.EventDataValidatorSetUpdates{ValidatorUpdates: validatorUpdates}); err != nil {
+			logger.Error("failed publishing event", "err", err)
+		}
+	}
 }
 
 // GetTxs calls PrepareProposal with the next height from the store and returns the transactions from the ABCI app

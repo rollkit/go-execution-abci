@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 
+	cmtcfg "github.com/cometbft/cometbft/config"
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 	"github.com/cometbft/cometbft/state/indexer"
 	"github.com/cometbft/cometbft/state/txindex"
@@ -28,6 +29,7 @@ type Environment struct {
 	TxIndexer    txindex.TxIndexer
 	BlockIndexer indexer.BlockIndexer
 	Logger       cmtlog.Logger
+	Config       cmtcfg.RPCConfig
 }
 
 func validateSkipCount(page, perPage int) int {

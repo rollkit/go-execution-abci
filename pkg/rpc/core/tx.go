@@ -1,47 +1,38 @@
-package provider
+package core
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"sort"
 
 	cmtmath "github.com/cometbft/cometbft/libs/math"
 	cmtquery "github.com/cometbft/cometbft/libs/pubsub/query"
-	coretypes "github.com/cometbft/cometbft/rpc/core/types"
+	ctypes "github.com/cometbft/cometbft/rpc/core/types"
+	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	"github.com/cometbft/cometbft/state/txindex/null"
-	cmttypes "github.com/cometbft/cometbft/types"
+	"github.com/cometbft/cometbft/types"
 )
 
-// Tx implements client.CometRPC.
-func (p *RpcProvider) Tx(ctx context.Context, hash []byte, prove bool) (*coretypes.ResultTx, error) {
-	// Check if tx indexing is disabled
-	if p.txIndexer == nil {
-		return nil, fmt.Errorf("transaction indexing is disabled")
-	}
-	if _, ok := p.txIndexer.(*null.TxIndex); ok {
+// Tx allows you to query the transaction results. `nil` could mean the
+// transaction is in the mempool, invalidated, or was not sent in the first
+// place.
+// More: https://docs.cometbft.com/v0.37/rpc/#/Info/tx
+func Tx(ctx *rpctypes.Context, hash []byte, prove bool) (*ctypes.ResultTx, error) {
+	// if index is disabled, return error
+	if _, ok := env.TxIndexer.(*null.TxIndex); ok {
 		return nil, fmt.Errorf("transaction indexing is disabled")
 	}
 
-	txResult, err := p.txIndexer.Get(hash)
+	r, err := env.TxIndexer.Get(hash)
 	if err != nil {
-		// If the tx is not found, return nil result without error, maintaining behaviour.
-		// This differs from some Tendermint versions that might return an error.
-		// TODO: Consider aligning error handling with target Tendermint version if necessary.
-		// A more robust check might involve type asserting the error if txIndexer returns a specific "not found" error type.
-		if txResult == nil { // Heuristic check if error implies not found
-			return nil, nil
-		}
-		// Return other errors encountered during Get
-		return nil, fmt.Errorf("error getting tx from indexer: %w", err)
+		return nil, err
 	}
 
-	if txResult == nil {
-		// Tx not found
-		return nil, nil
+	if r == nil {
+		return nil, fmt.Errorf("tx (%X) not found", hash)
 	}
 
-	var proof cmttypes.TxProof
+	var proof types.TxProof
 	if prove {
 		// Proof generation is currently not supported.
 		// When supported, logic to retrieve block and compute proof would go here.
@@ -58,25 +49,32 @@ func (p *RpcProvider) Tx(ctx context.Context, hash []byte, prove bool) (*coretyp
 			proof = blockRes.Block.Data.Txs.Proof(int(txResult.Index))
 		*/
 		return nil, errors.New("transaction proof generation is not supported") // Return error as proofs aren't supported
+		// block := env.BlockStore.LoadBlock(r.Height)
+		// proof = block.Data.Txs.Proof(int(r.Index))
 	}
 
-	return &coretypes.ResultTx{
+	return &ctypes.ResultTx{
 		Hash:     hash,
-		Height:   txResult.Height,
-		Index:    txResult.Index,
-		TxResult: txResult.Result,
-		Tx:       txResult.Tx,
-		Proof:    proof, // Will be empty if prove is false or unsupported
+		Height:   r.Height,
+		Index:    r.Index,
+		TxResult: r.Result,
+		Tx:       r.Tx,
+		Proof:    proof,
 	}, nil
 }
 
-// TxSearch implements client.CometRPC.
-func (p *RpcProvider) TxSearch(ctx context.Context, query string, prove bool, pagePtr *int, perPagePtr *int, orderBy string) (*coretypes.ResultTxSearch, error) {
+// TxSearch allows you to query for multiple transactions results. It returns a
+// list of transactions (maximum ?per_page entries) and the total count.
+// More: https://docs.cometbft.com/v0.37/rpc/#/Info/tx_search
+func TxSearch(
+	ctx *rpctypes.Context,
+	query string,
+	prove bool,
+	pagePtr, perPagePtr *int,
+	orderBy string,
+) (*ctypes.ResultTxSearch, error) {
 	// Check if tx indexing is disabled
-	if p.txIndexer == nil {
-		return nil, fmt.Errorf("transaction indexing is disabled")
-	}
-	if _, ok := p.txIndexer.(*null.TxIndex); ok {
+	if _, ok := env.TxIndexer.(*null.TxIndex); ok {
 		return nil, fmt.Errorf("transaction indexing is disabled")
 	}
 
@@ -89,7 +87,7 @@ func (p *RpcProvider) TxSearch(ctx context.Context, query string, prove bool, pa
 		return nil, fmt.Errorf("failed to parse query: %w", err)
 	}
 
-	txResults, err := p.txIndexer.Search(ctx, q)
+	txResults, err := env.TxIndexer.Search(ctx.Context(), q)
 	if err != nil {
 		return nil, fmt.Errorf("error searching txs: %w", err)
 	}
@@ -133,17 +131,17 @@ func (p *RpcProvider) TxSearch(ctx context.Context, query string, prove bool, pa
 	skipCount := validateSkipCount(page, perPage) // Removed rpc. prefix
 	pageSize := cmtmath.MinInt(perPage, totalCount-skipCount)
 
-	apiResults := make([]*coretypes.ResultTx, 0, pageSize)
+	apiResults := make([]*ctypes.ResultTx, 0, pageSize)
 	for i := skipCount; i < skipCount+pageSize; i++ {
 		result := txResults[i]
-		var proof cmttypes.TxProof
+		var proof types.TxProof
 		if prove {
 			// Proof generation is currently not supported.
 			return nil, errors.New("transaction proof generation is not supported")
 		}
 
-		apiResults = append(apiResults, &coretypes.ResultTx{
-			Hash:     cmttypes.Tx(result.Tx).Hash(), // Correctly calculate hash from []byte
+		apiResults = append(apiResults, &ctypes.ResultTx{
+			Hash:     types.Tx(result.Tx).Hash(), // Correctly calculate hash from []byte
 			Height:   result.Height,
 			Index:    result.Index,
 			TxResult: result.Result,
@@ -152,7 +150,7 @@ func (p *RpcProvider) TxSearch(ctx context.Context, query string, prove bool, pa
 		})
 	}
 
-	return &coretypes.ResultTxSearch{
+	return &ctypes.ResultTxSearch{
 		Txs:        apiResults,
 		TotalCount: totalCount,
 	}, nil

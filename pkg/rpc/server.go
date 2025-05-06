@@ -10,9 +10,26 @@ import (
 
 	"cosmossdk.io/log"
 	cmtcfg "github.com/cometbft/cometbft/config"
+	cmtlog "github.com/cometbft/cometbft/libs/log"
+	rpcserver "github.com/cometbft/cometbft/rpc/jsonrpc/server"
+	servercmtlog "github.com/cosmos/cosmos-sdk/server/log"
 	"github.com/rs/cors"
 	"golang.org/x/net/netutil"
+
+	"github.com/rollkit/go-execution-abci/pkg/rpc/core"
 )
+
+// NewRPCServer creates a new RPC server.
+func NewRPCServer(
+	cfg *cmtcfg.RPCConfig,
+	logger log.Logger,
+) *RPCServer {
+	cmtLogger := servercmtlog.CometLoggerWrapper{Logger: logger}
+	return &RPCServer{
+		config: cfg,
+		logger: cmtLogger,
+	}
+}
 
 // RPCServer manages the HTTP server for RPC requests.
 // It delegates the actual RPC method implementations to an rpcProvider.
@@ -20,20 +37,7 @@ type RPCServer struct {
 	config      *cmtcfg.RPCConfig
 	httpHandler http.Handler
 	server      http.Server
-	logger      log.Logger
-}
-
-// NewRPCServer creates a new RPC server.
-func NewRPCServer(
-	httpHandler http.Handler,
-	cfg *cmtcfg.RPCConfig,
-	logger log.Logger,
-) *RPCServer {
-	return &RPCServer{
-		config:      cfg,
-		httpHandler: httpHandler,
-		logger:      logger,
-	}
+	logger      cmtlog.Logger
 }
 
 // Start starts the RPC server.
@@ -58,12 +62,14 @@ func (r *RPCServer) startRPC() error {
 		return err
 	}
 
+	mux := http.NewServeMux()
+	rpcserver.RegisterRPCFuncs(mux, core.Routes, r.logger)
+	r.httpHandler = mux
+
 	if r.config.MaxOpenConnections != 0 {
 		r.logger.Debug("limiting number of connections", "limit", r.config.MaxOpenConnections)
 		listener = netutil.LimitListener(listener, r.config.MaxOpenConnections)
 	}
-
-	handler := r.httpHandler
 
 	if r.config.IsCorsEnabled() {
 		r.logger.Debug("CORS enabled",
@@ -76,11 +82,11 @@ func (r *RPCServer) startRPC() error {
 			AllowedMethods: r.config.CORSAllowedMethods,
 			AllowedHeaders: r.config.CORSAllowedHeaders,
 		})
-		handler = c.Handler(handler)
+		r.httpHandler = c.Handler(r.httpHandler)
 	}
 
 	go func() {
-		err := r.serve(listener, handler)
+		err := r.serve(listener, r.httpHandler)
 		if !errors.Is(err, http.ErrServerClosed) {
 			r.logger.Error("error while serving HTTP", "error", err)
 		}

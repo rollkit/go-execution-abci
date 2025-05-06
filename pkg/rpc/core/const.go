@@ -8,7 +8,3 @@ const (
 	defaultPerPage = 30
 	maxPerPage     = 100
 )
-
-const (
-// see README
-)

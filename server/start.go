@@ -33,8 +33,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/rollkit/rollkit/core/sequencer"
-	rollkitda "github.com/rollkit/rollkit/da"
-	"github.com/rollkit/rollkit/da/proxy/jsonrpc"
+	"github.com/rollkit/rollkit/da/jsonrpc"
 	"github.com/rollkit/rollkit/node"
 	"github.com/rollkit/rollkit/pkg/config"
 	"github.com/rollkit/rollkit/pkg/genesis"
@@ -46,7 +45,7 @@ import (
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
 	"github.com/rollkit/go-execution-abci/pkg/rpc"
 	rpcjson "github.com/rollkit/go-execution-abci/pkg/rpc/json"
-	provider "github.com/rollkit/go-execution-abci/pkg/rpc/provider"
+	"github.com/rollkit/go-execution-abci/pkg/rpc/provider"
 	execsigner "github.com/rollkit/go-execution-abci/pkg/signer"
 )
 
@@ -397,20 +396,17 @@ func startNode(
 	)
 
 	// create the DA client
-	daClient, err := jsonrpc.NewClient(ctx, logger, rollkitcfg.DA.Address, rollkitcfg.DA.AuthToken)
+	daClient, err := jsonrpc.NewClient(ctx, logger, rollkitcfg.DA.Address, rollkitcfg.DA.AuthToken, rollkitcfg.DA.Namespace)
 	if err != nil {
 		return nil, nil, nil, cleanupFn, fmt.Errorf("failed to create DA client: %w", err)
 	}
-
-	// TODO(@facu): gas price and gas multiplier should be set by the node operator
-	rollkitda := rollkitda.NewDAClient(&daClient.DA, 1, 1, []byte(cmtGenDoc.ChainID), []byte{}, logger)
 
 	rolllkitNode, err = node.NewNode(
 		ctxWithCancel,
 		rollkitcfg,
 		executor,
 		sequencer.NewDummySequencer(),
-		rollkitda,
+		&daClient.DA,
 		signer,
 		*nodeKey,
 		p2pClient,

@@ -7,8 +7,6 @@ import (
 	"time"
 
 	abci "github.com/cometbft/cometbft/abci/types"
-	"github.com/cometbft/cometbft/types"
-
 	cmtmath "github.com/cometbft/cometbft/libs/math"
 	"github.com/cometbft/cometbft/mempool"
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
@@ -27,7 +25,7 @@ const subscribeTimeout = 5 * time.Second // TODO: Make configurable?
 // BroadcastTxAsync returns right away, with no response. Does not wait for
 // CheckTx nor DeliverTx results.
 // More: https://docs.cometbft.com/v0.37/rpc/#/Tx/broadcast_tx_async
-func BroadcastTxAsync(ctx *rpctypes.Context, tx types.Tx) (*ctypes.ResultBroadcastTx, error) {
+func BroadcastTxAsync(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultBroadcastTx, error) {
 	unwrappedCtx := ctx.Context()
 
 	var res *abci.ResponseCheckTx
@@ -63,7 +61,7 @@ func BroadcastTxAsync(ctx *rpctypes.Context, tx types.Tx) (*ctypes.ResultBroadca
 // BroadcastTxSync returns with the response from CheckTx. Does not wait for
 // DeliverTx result.
 // More: https://docs.cometbft.com/v0.37/rpc/#/Tx/broadcast_tx_sync
-func BroadcastTxSync(ctx *rpctypes.Context, tx types.Tx) (*ctypes.ResultBroadcastTx, error) {
+func BroadcastTxSync(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultBroadcastTx, error) {
 	unwrappedCtx := ctx.Context()
 
 	resCh := make(chan *abci.ResponseCheckTx, 1)
@@ -116,7 +114,7 @@ func BroadcastTxSync(ctx *rpctypes.Context, tx types.Tx) (*ctypes.ResultBroadcas
 
 // BroadcastTxCommit returns with the responses from CheckTx and DeliverTx.
 // More: https://docs.cometbft.com/v0.37/rpc/#/Tx/broadcast_tx_commit
-func BroadcastTxCommit(ctx *rpctypes.Context, tx types.Tx) (*ctypes.ResultBroadcastTxCommit, error) {
+func BroadcastTxCommit(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultBroadcastTxCommit, error) {
 	unwrappedCtx := ctx.Context()
 
 	// This implementation corresponds to Tendermint's implementation from rpc/core/mempool.go.
@@ -301,7 +299,7 @@ func NumUnconfirmedTxs(ctx *rpctypes.Context) (*ctypes.ResultUnconfirmedTxs, err
 // CheckTx checks the transaction without executing it. The transaction won't
 // be added to the mempool either.
 // More: https://docs.cometbft.com/v0.37/rpc/#/Tx/check_tx
-func CheckTx(ctx *rpctypes.Context, tx types.Tx) (*ctypes.ResultCheckTx, error) {
+func CheckTx(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultCheckTx, error) {
 	unwrappedCtx := ctx.Context()
 
 	var res *abci.ResponseCheckTx

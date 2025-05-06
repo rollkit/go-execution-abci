@@ -13,8 +13,8 @@ import (
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 	rpcserver "github.com/cometbft/cometbft/rpc/jsonrpc/server"
 	servercmtlog "github.com/cosmos/cosmos-sdk/server/log"
-	"golang.org/x/net/netutil"
 	"github.com/rs/cors"
+	"golang.org/x/net/netutil"
 
 	"github.com/rollkit/go-execution-abci/pkg/rpc/core"
 )

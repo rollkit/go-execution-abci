@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/cometbft/cometbft/libs/bytes"
 	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
 	cmtmath "github.com/cometbft/cometbft/libs/math"
 	cmtquery "github.com/cometbft/cometbft/libs/pubsub/query"
@@ -229,7 +228,7 @@ func Header(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultHeader, erro
 
 // HeaderByHash gets header by hash.
 // More: https://docs.cometbft.com/v0.37/rpc/#/Info/header_by_hash
-func HeaderByHash(ctx *rpctypes.Context, hash bytes.HexBytes) (*ctypes.ResultHeader, error) {
+func HeaderByHash(ctx *rpctypes.Context, hash cmtbytes.HexBytes) (*ctypes.ResultHeader, error) {
 	// N.B. The hash parameter is HexBytes so that the reflective parameter
 	// decoding logic in the HTTP service will correctly translate from JSON.
 	// See https://github.com/cometbft/cometbft/issues/6802 for context.

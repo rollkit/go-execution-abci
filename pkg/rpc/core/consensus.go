@@ -23,7 +23,7 @@ func Validators(ctx *rpctypes.Context, heightPtr *int64, pagePtr, perPagePtr *in
 	// depending on state pruning. The current implementation implicitly loads latest state.
 	height := normalizeHeight(heightPtr)
 
-	s, err := env.Adapter.LoadState(ctx.Context()) // Loads the *latest* state
+	s, err := env.Adapter.Store.LoadState(ctx.Context()) // Loads the *latest* state
 	if err != nil {
 		return nil, fmt.Errorf("failed to load current state: %w", err)
 	}
@@ -86,7 +86,7 @@ func ConsensusState(ctx *rpctypes.Context) (*coretypes.ResultConsensusState, err
 // If no height is provided, it will fetch the latest consensus params.
 // More: https://docs.cometbft.com/v0.37/rpc/#/Info/consensus_params
 func ConsensusParams(ctx *rpctypes.Context, heightPtr *int64) (*coretypes.ResultConsensusParams, error) {
-	state, err := env.Adapter.LoadState(ctx.Context())
+	state, err := env.Adapter.Store.LoadState(ctx.Context())
 	if err != nil {
 		return nil, err
 	}

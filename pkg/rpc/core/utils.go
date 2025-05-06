@@ -122,7 +122,7 @@ func normalizeHeight(height *int64) uint64 {
 	if height == nil {
 		var err error
 		// TODO: Decide how to handle context here. Using background for now.
-		heightValue, err = env.Adapter.Store.Height(context.Background())
+		heightValue, err = env.Adapter.RollkitStore.Height(context.Background())
 		if err != nil {
 			// TODO: Consider logging or returning error
 			env.Logger.Error("Failed to get current height in normalizeHeight", "err", err)
@@ -133,7 +133,7 @@ func normalizeHeight(height *int64) uint64 {
 		// Currently, just treat them as 0 or latest, adjust as needed.
 		// For now, let's assume negative height means latest valid height.
 		var err error
-		heightValue, err = env.Adapter.Store.Height(context.Background())
+		heightValue, err = env.Adapter.RollkitStore.Height(context.Background())
 		if err != nil {
 			env.Logger.Error("Failed to get current height for negative height in normalizeHeight", "err", err)
 			return 0
@@ -146,7 +146,7 @@ func normalizeHeight(height *int64) uint64 {
 }
 
 func getBlockMeta(ctx context.Context, n uint64) *cmtypes.BlockMeta {
-	header, data, err := env.Adapter.Store.GetBlockData(ctx, n)
+	header, data, err := env.Adapter.RollkitStore.GetBlockData(ctx, n)
 	if err != nil {
 		env.Logger.Error("Failed to get block data in getBlockMeta", "height", n, "err", err)
 		return nil

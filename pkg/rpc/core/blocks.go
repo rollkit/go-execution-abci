@@ -74,7 +74,7 @@ func BlockSearch(
 	apiResults := make([]*ctypes.ResultBlock, 0, pageSize)
 	for i := skipCount; i < skipCount+pageSize; i++ {
 		height := uint64(results[i])
-		header, data, err := env.Adapter.Store.GetBlockData(ctx.Context(), height)
+		header, data, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), height)
 		if err != nil {
 			// If a block referenced by indexer is missing, should we error out or just skip?
 			// For now, error out.
@@ -113,7 +113,7 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 	default:
 		heightValue = normalizeHeight(heightPtr)
 	}
-	header, data, err := env.Adapter.Store.GetBlockData(ctx.Context(), heightValue)
+	header, data, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), heightValue)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +138,7 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 // BlockByHash gets block by hash.
 // More: https://docs.cometbft.com/v0.37/rpc/#/Info/block_by_hash
 func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error) {
-	header, data, err := env.Adapter.Store.GetBlockByHash(ctx.Context(), rlktypes.Hash(hash)) // Used types.Hash from rollkit/types
+	header, data, err := env.Adapter.RollkitStore.GetBlockByHash(ctx.Context(), rlktypes.Hash(hash)) // Used types.Hash from rollkit/types
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +164,7 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 // More: https://docs.cometbft.com/main/rpc/#/Info/commit
 func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, error) {
 	heightValue := normalizeHeight(heightPtr)
-	header, data, err := env.Adapter.Store.GetBlockData(ctx.Context(), heightValue)
+	header, data, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), heightValue)
 	if err != nil {
 		return nil, err
 	}
@@ -233,7 +233,7 @@ func HeaderByHash(ctx *rpctypes.Context, hash bytes.HexBytes) (*ctypes.ResultHea
 	// decoding logic in the HTTP service will correctly translate from JSON.
 	// See https://github.com/cometbft/cometbft/issues/6802 for context.
 
-	header, data, err := env.Adapter.Store.GetBlockByHash(ctx.Context(), rlktypes.Hash(hash)) // Used types.Hash from rollkit/types
+	header, data, err := env.Adapter.RollkitStore.GetBlockByHash(ctx.Context(), rlktypes.Hash(hash)) // Used types.Hash from rollkit/types
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +258,7 @@ func HeaderByHash(ctx *rpctypes.Context, hash bytes.HexBytes) (*ctypes.ResultHea
 func BlockchainInfo(ctx *rpctypes.Context, minHeight, maxHeight int64) (*ctypes.ResultBlockchainInfo, error) {
 	const limit int64 = 20 // Default limit used in the original code
 
-	height, err := env.Adapter.Store.Height(ctx.Context())
+	height, err := env.Adapter.RollkitStore.Height(ctx.Context())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current height: %w", err)
 	}
@@ -290,7 +290,7 @@ func BlockchainInfo(ctx *rpctypes.Context, minHeight, maxHeight int64) (*ctypes.
 
 	// Re-fetch height in case new blocks were added during the loop?
 	// The original code did this.
-	finalHeight, err := env.Adapter.Store.Height(ctx.Context())
+	finalHeight, err := env.Adapter.RollkitStore.Height(ctx.Context())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get final height: %w", err)
 	}

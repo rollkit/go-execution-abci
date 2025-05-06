@@ -17,7 +17,7 @@ func Status(ctx *rpctypes.Context) (*ctypes.ResultStatus, error) {
 		return nil, err
 	}
 
-	s, err := env.Adapter.LoadState(ctx.Context())
+	s, err := env.Adapter.Store.LoadState(ctx.Context())
 	if err != nil {
 		return nil, err
 	}

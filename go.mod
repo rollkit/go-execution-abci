@@ -16,7 +16,7 @@ require (
 	github.com/rollkit/rollkit/da v0.0.0-20250422111549-9f2f92ea5c6e
 	github.com/rs/cors v1.11.1
 	golang.org/x/net v0.38.0
-	golang.org/x/sync v0.12.0
+	golang.org/x/sync v0.14.0
 	google.golang.org/grpc v1.72.0
 )
 

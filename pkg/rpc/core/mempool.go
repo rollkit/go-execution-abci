@@ -7,6 +7,8 @@ import (
 	"time"
 
 	abci "github.com/cometbft/cometbft/abci/types"
+	"github.com/cometbft/cometbft/types"
+
 	cmtmath "github.com/cometbft/cometbft/libs/math"
 	"github.com/cometbft/cometbft/mempool"
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
@@ -49,7 +51,7 @@ func BroadcastTxAsync(ctx *rpctypes.Context, tx types.Tx) (*ctypes.ResultBroadca
 	// Note: Original code didn't gossip on async. If gossiping is desired here,
 	// it should be added similarly to BroadcastTxSync, potentially after checking res.Code.
 
-	return &coretypes.ResultBroadcastTx{
+	return &ctypes.ResultBroadcastTx{
 		Code:      res.Code,
 		Data:      res.Data,
 		Log:       res.Log,
@@ -103,7 +105,7 @@ func BroadcastTxSync(ctx *rpctypes.Context, tx types.Tx) (*ctypes.ResultBroadcas
 		}
 	}
 
-	return &coretypes.ResultBroadcastTx{
+	return &ctypes.ResultBroadcastTx{
 		Code:      res.Code,
 		Data:      res.Data,
 		Log:       res.Log,
@@ -180,7 +182,7 @@ func BroadcastTxCommit(ctx *rpctypes.Context, tx types.Tx) (*ctypes.ResultBroadc
 	}
 
 	if checkTxRes.Code != abci.CodeTypeOK {
-		return &coretypes.ResultBroadcastTxCommit{
+		return &ctypes.ResultBroadcastTxCommit{
 			CheckTx:  *checkTxRes,
 			TxResult: abci.ExecTxResult{}, // Included for consistency, though tx didn't make it to a block
 			Hash:     tx.Hash(),
@@ -207,7 +209,7 @@ func BroadcastTxCommit(ctx *rpctypes.Context, tx types.Tx) (*ctypes.ResultBroadc
 			err = fmt.Errorf("subscription channel closed unexpectedly: %w", deliverTxSub.Err())
 			env.Logger.Error("Error on broadcastTxCommit", "err", err)
 			// Return the CheckTx result as the tx wasn't confirmed in a block
-			return &coretypes.ResultBroadcastTxCommit{
+			return &ctypes.ResultBroadcastTxCommit{
 				CheckTx:  *checkTxRes,
 				TxResult: abci.ExecTxResult{},
 				Hash:     tx.Hash(),
@@ -217,13 +219,13 @@ func BroadcastTxCommit(ctx *rpctypes.Context, tx types.Tx) (*ctypes.ResultBroadc
 		if !ok {
 			err = fmt.Errorf("unexpected event data type: got %T, expected %T", msg.Data(), cmttypes.EventDataTx{})
 			env.Logger.Error("Error on broadcastTxCommit", "err", err)
-			return &coretypes.ResultBroadcastTxCommit{
+			return &ctypes.ResultBroadcastTxCommit{
 				CheckTx:  *checkTxRes,
 				TxResult: abci.ExecTxResult{},
 				Hash:     tx.Hash(),
 			}, err
 		}
-		return &coretypes.ResultBroadcastTxCommit{
+		return &ctypes.ResultBroadcastTxCommit{
 			CheckTx:  *checkTxRes,
 			TxResult: deliverTxRes.Result,
 			Hash:     tx.Hash(),
@@ -238,7 +240,7 @@ func BroadcastTxCommit(ctx *rpctypes.Context, tx types.Tx) (*ctypes.ResultBroadc
 		}
 		err = fmt.Errorf("subscription was cancelled (reason: %s)", reason)
 		env.Logger.Error("Error on broadcastTxCommit", "err", err)
-		return &coretypes.ResultBroadcastTxCommit{
+		return &ctypes.ResultBroadcastTxCommit{
 			CheckTx:  *checkTxRes,
 			TxResult: abci.ExecTxResult{},
 			Hash:     tx.Hash(),
@@ -246,7 +248,7 @@ func BroadcastTxCommit(ctx *rpctypes.Context, tx types.Tx) (*ctypes.ResultBroadc
 	case <-time.After(commitTimeout):
 		err = errors.New("timed out waiting for tx to be included in a block")
 		env.Logger.Error("Error on broadcastTxCommit", "err", err)
-		return &coretypes.ResultBroadcastTxCommit{
+		return &ctypes.ResultBroadcastTxCommit{
 			CheckTx:  *checkTxRes,
 			TxResult: abci.ExecTxResult{},
 			Hash:     tx.Hash(),
@@ -255,7 +257,7 @@ func BroadcastTxCommit(ctx *rpctypes.Context, tx types.Tx) (*ctypes.ResultBroadc
 		// Parent context cancelled
 		err = fmt.Errorf("context cancelled while waiting for tx commit event: %w", unwrappedCtx.Err())
 		env.Logger.Error("Error on broadcastTxCommit", "err", err)
-		return &coretypes.ResultBroadcastTxCommit{
+		return &ctypes.ResultBroadcastTxCommit{
 			CheckTx:  *checkTxRes,
 			TxResult: abci.ExecTxResult{},
 			Hash:     tx.Hash(),
@@ -278,7 +280,7 @@ func UnconfirmedTxs(ctx *rpctypes.Context, limitPtr *int) (*ctypes.ResultUnconfi
 	}
 	paginatedTxs := txs[:limit]
 
-	return &coretypes.ResultUnconfirmedTxs{
+	return &ctypes.ResultUnconfirmedTxs{
 		Count:      len(paginatedTxs),
 		Total:      env.Adapter.Mempool.Size(),
 		TotalBytes: env.Adapter.Mempool.SizeBytes(),
@@ -289,7 +291,7 @@ func UnconfirmedTxs(ctx *rpctypes.Context, limitPtr *int) (*ctypes.ResultUnconfi
 // NumUnconfirmedTxs gets number of unconfirmed transactions.
 // More: https://docs.cometbft.com/v0.37/rpc/#/Info/num_unconfirmed_txs
 func NumUnconfirmedTxs(ctx *rpctypes.Context) (*ctypes.ResultUnconfirmedTxs, error) {
-	return &coretypes.ResultUnconfirmedTxs{
+	return &ctypes.ResultUnconfirmedTxs{
 		Count:      env.Adapter.Mempool.Size(),
 		Total:      env.Adapter.Mempool.Size(), // Assuming Total means current size
 		TotalBytes: env.Adapter.Mempool.SizeBytes(),
@@ -319,7 +321,7 @@ func CheckTx(ctx *rpctypes.Context, tx types.Tx) (*ctypes.ResultCheckTx, error) 
 	// Wait for the callback to be called or context cancellation
 	select {
 	case res = <-responseCh:
-		return &coretypes.ResultCheckTx{ResponseCheckTx: *res}, nil
+		return &ctypes.ResultCheckTx{ResponseCheckTx: *res}, nil
 	case <-unwrappedCtx.Done():
 		return nil, fmt.Errorf("context cancelled while waiting for CheckTx response: %w", unwrappedCtx.Err())
 	}

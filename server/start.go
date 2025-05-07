@@ -30,7 +30,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/rollkit/rollkit/core/sequencer"
 	"github.com/rollkit/rollkit/da/jsonrpc"
 	"github.com/rollkit/rollkit/node"
 	"github.com/rollkit/rollkit/pkg/config"
@@ -39,6 +38,7 @@ import (
 	"github.com/rollkit/rollkit/pkg/p2p/key"
 	"github.com/rollkit/rollkit/pkg/signer"
 	"github.com/rollkit/rollkit/pkg/store"
+	"github.com/rollkit/rollkit/sequencers/single"
 
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
 	"github.com/rollkit/go-execution-abci/pkg/rpc"
@@ -394,11 +394,37 @@ func startNode(
 		return nil, nil, cleanupFn, fmt.Errorf("failed to create DA client: %w", err)
 	}
 
+	singleMetrics, err := single.NopMetrics()
+	if err != nil {
+		return nil, nil, cleanupFn, err
+	}
+
+	if rollkitcfg.Instrumentation.IsPrometheusEnabled() {
+		singleMetrics, err = single.PrometheusMetrics(config.DefaultInstrumentationConfig().Namespace, "chain_id", cmtGenDoc.ChainID)
+		if err != nil {
+			return nil, nil, cleanupFn, err
+		}
+	}
+
+	sequencer, err := single.NewSequencer(
+		ctx,
+		logger,
+		database,
+		&daClient.DA,
+		[]byte(cmtGenDoc.ChainID),
+		rollkitcfg.Node.BlockTime.Duration,
+		singleMetrics,
+		rollkitcfg.Node.Aggregator,
+	)
+	if err != nil {
+		return nil, nil, cleanupFn, err
+	}
+
 	rolllkitNode, err = node.NewNode(
 		ctxWithCancel,
 		rollkitcfg,
 		executor,
-		sequencer.NewDummySequencer(),
+		sequencer,
 		&daClient.DA,
 		signer,
 		*nodeKey,

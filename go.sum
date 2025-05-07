@@ -903,6 +903,8 @@ github.com/rollkit/rollkit/core v0.0.0-20250506085607-c574d7c79224 h1:ErmsHI4Fm/
 github.com/rollkit/rollkit/core v0.0.0-20250506085607-c574d7c79224/go.mod h1:0RhbqC8Is970KRhr6zPUQOZkmKt6/WqPRDQWfd2P7P0=
 github.com/rollkit/rollkit/da v0.0.0-20250506085607-c574d7c79224 h1:a6415aJL7CFT+cJOoUrbfSlB2nLJ+bBs/l2UGy1zwpk=
 github.com/rollkit/rollkit/da v0.0.0-20250506085607-c574d7c79224/go.mod h1:q8bKmx6nrv039JMA8jhyPVFpgHyPmYC4yP+HUCEoTBg=
+github.com/rollkit/rollkit/sequencers/single v0.0.0-20250506085607-c574d7c79224 h1:k3pqr7EbOg96lnjACfobcanTbihe2gfyyFt4rj47kd4=
+github.com/rollkit/rollkit/sequencers/single v0.0.0-20250506085607-c574d7c79224/go.mod h1:Fm0zLvZiOnVooYFIuZWJcZeeQIMjEeHyfOs/kyPf5Qw=
 github.com/rs/cors v1.7.0/go.mod h1:gFx+x8UowdsKA9AchylcLynDq+nNFfI8FkUZdN/jGCU=
 github.com/rs/cors v1.11.1 h1:eU3gRzXLRK57F5rKMGMZURNdIG4EoAmX8k94r9wXWHA=
 github.com/rs/cors v1.11.1/go.mod h1:XyqrcTp5zjWr1wsJ8PIRZssZ8b/WMcMf71DJnit4EMU=

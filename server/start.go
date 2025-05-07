@@ -122,7 +122,7 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 		svrCfg.GRPC.Enable = true
 	} else {
 		svrCtx.Logger.Info("starting node with ABCI CometBFT in-process")
-		rollkitNode, executor, cleanupFn, err := startNode(ctx, svrCtx, cmtCfg, app)
+		rollkitNode, executor, cleanupFn, err := setupNodeAndExecutor(ctx, svrCtx, cmtCfg, app)
 		if err != nil {
 			return err
 		}
@@ -287,7 +287,7 @@ func startTelemetry(cfg serverconfig.Config) (*telemetry.Metrics, error) {
 	return telemetry.New(cfg.Telemetry)
 }
 
-func startNode(
+func setupNodeAndExecutor(
 	ctx context.Context,
 	srvCtx *server.Context,
 	cfg *cmtcfg.Config,

@@ -28,7 +28,7 @@ jobs:
 
       - name: Install Ignite CLI
         run: |
-          curl -sSL https://get.ignite.com/cli! | bash
+          curl -sSL https://get.ignite.com/cli@v28.10.0! | bash
 
       - name: Start Local DA
         run: |
@@ -49,7 +49,7 @@ jobs:
           cd gm
 
           # install rollkit app
-          ignite app install github.com/ignite/apps/rollkit@9d51c52305be37356a1ecadab8733b77842e1c37
+          ignite app install github.com/ignite/apps/rollkit@8dc24c9585058ac1b80ba1d3705f041d4d4a4639
 
           # add rollkit to the chain
           ignite rollkit add

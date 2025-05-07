@@ -53,7 +53,13 @@ const (
 )
 
 // StartCommandHandler is the type that must implement nova to match Cosmos SDK start logic.
-type StartCommandHandler = func(svrCtx *server.Context, clientCtx client.Context, appCreator sdktypes.AppCreator, withCmt bool, opts server.StartCmdOptions) error
+type StartCommandHandler = func(
+	svrCtx *server.Context,
+	clientCtx client.Context,
+	appCreator sdktypes.AppCreator,
+	withCmt bool,
+	opts server.StartCmdOptions,
+) error
 
 // StartHandler starts the Rollkit server with the provided application and options.
 func StartHandler() StartCommandHandler {
@@ -448,21 +454,6 @@ func startNode(
 	err = rpcServer.Start()
 	if err != nil {
 		return nil, nil, cleanupFn, fmt.Errorf("failed to start rpc server: %w", err)
-	}
-
-	logger.Info("starting node")
-	err = rolllkitNode.Run(ctx)
-	if err != nil {
-		if err == context.Canceled {
-			return nil, nil, cleanupFn, nil
-		}
-		return nil, nil, cleanupFn, fmt.Errorf("failed to start node: %w", err)
-	}
-
-	// executor must be started after the node is started
-	logger.Info("starting executor")
-	if err = executor.Start(ctx); err != nil {
-		return nil, nil, cleanupFn, fmt.Errorf("failed to start executor: %w", err)
 	}
 
 	return rolllkitNode, executor, cleanupFn, nil

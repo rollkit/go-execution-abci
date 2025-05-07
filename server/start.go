@@ -399,6 +399,13 @@ func startNode(
 		return nil, nil, cleanupFn, err
 	}
 
+	if rollkitcfg.Instrumentation.IsPrometheusEnabled() {
+		singleMetrics, err = single.PrometheusMetrics(config.DefaultInstrumentationConfig().Namespace, "chain_id", cmtGenDoc.ChainID)
+		if err != nil {
+			return nil, nil, cleanupFn, err
+		}
+	}
+
 	sequencer, err := single.NewSequencer(
 		ctx,
 		logger,

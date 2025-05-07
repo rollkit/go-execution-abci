@@ -13,6 +13,7 @@ require (
 	github.com/rollkit/rollkit v0.14.2-0.20250506085607-c574d7c79224
 	github.com/rollkit/rollkit/core v0.0.0-20250506085607-c574d7c79224
 	github.com/rollkit/rollkit/da v0.0.0-20250506085607-c574d7c79224
+	github.com/rollkit/rollkit/sequencers/single v0.0.0-20250506085607-c574d7c79224
 	github.com/rs/cors v1.11.1
 	golang.org/x/net v0.40.0
 	golang.org/x/sync v0.14.0

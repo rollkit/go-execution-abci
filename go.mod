@@ -2,6 +2,8 @@ module github.com/rollkit/go-execution-abci
 
 go 1.24.1
 
+replace github.com/rollkit/rollkit => ../rollkit
+
 require (
 	cosmossdk.io/log v1.5.1
 	github.com/cometbft/cometbft v0.38.17

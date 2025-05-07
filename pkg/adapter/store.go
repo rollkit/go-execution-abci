@@ -8,12 +8,11 @@ import (
 	cmtstate "github.com/cometbft/cometbft/state"
 	proto "github.com/cosmos/gogoproto/proto"
 	ds "github.com/ipfs/go-datastore"
-	kt "github.com/ipfs/go-datastore/keytransform"
 )
 
 const (
 	// KeyPrefix is the prefix used for all ABCI-related keys in the datastore
-	KeyPrefix = "abci"
+	keyPrefix = "abci"
 	// stateKey is the key used for storing state
 	stateKey = "s"
 )
@@ -26,15 +25,13 @@ type Store struct {
 // NewStore creates a new Store with the ABCI prefix
 func NewStore(store ds.Batching) *Store {
 	return &Store{
-		Batching: kt.Wrap(store, &kt.PrefixTransform{
-			Prefix: ds.NewKey(KeyPrefix),
-		}),
+		Batching: store,
 	}
 }
 
 // LoadState loads the state from disk
 func (s *Store) LoadState(ctx context.Context) (*cmtstate.State, error) {
-	data, err := s.Get(ctx, ds.NewKey(stateKey))
+	data, err := s.Get(ctx, ds.NewKey(keyPrefix).Child(ds.NewKey(stateKey)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get state metadata: %w", err)
 	}
@@ -46,7 +43,6 @@ func (s *Store) LoadState(ctx context.Context) (*cmtstate.State, error) {
 	if err := proto.Unmarshal(data, stateProto); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal state: %w", err)
 	}
-
 	return cmtstate.FromProto(stateProto)
 }
 
@@ -62,5 +58,5 @@ func (s *Store) SaveState(ctx context.Context, state *cmtstate.State) error {
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 
-	return s.Put(ctx, ds.NewKey(stateKey), data)
+	return s.Put(ctx, ds.NewKey(keyPrefix).Child(ds.NewKey(stateKey)), data)
 }

@@ -49,7 +49,7 @@ jobs:
           cd gm
 
           # install rollkit app
-          ignite app install github.com/ignite/apps/rollkit@8dc24c9585058ac1b80ba1d3705f041d4d4a4639
+          ignite app install github.com/ignite/apps/rollkit@6df1530c06cd6c19f74f85c3b6c428ca449d6f4d
 
           # add rollkit to the chain
           ignite rollkit add
@@ -65,7 +65,8 @@ jobs:
 
           # replace the github.com/rollkit/rollkit module with latest main
           # TODO(@julienrbrt) this should be replaced with a specific commit hash
-          go mod edit -replace github.com/rollkit/rollkit=github.com/rollkit/rollkit@v0.14.2-0.20250506155912-dccebc0cab3e
+          go get github.com/rollkit/rollkit@main
+          go mod edit -replace github.com/rollkit/rollkit=github.com/rollkit/rollkit@main
 
           # replace the github.com/rollkit/go-execution-abci module with the local version
           go mod edit -replace github.com/rollkit/go-execution-abci=$GO_EXECUTION_ABCI_DIR

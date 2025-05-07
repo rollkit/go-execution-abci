@@ -65,7 +65,7 @@ jobs:
 
           # replace the github.com/rollkit/rollkit module with latest main
           # TODO(@julienrbrt) this should be replaced with a specific commit hash
-          go mod edit -replace github.com/rollkit/rollkit=github.com/rollkit/rollkit@main
+          go mod edit -replace github.com/rollkit/rollkit=github.com/rollkit/rollkit@v0.14.2-0.20250506155912-dccebc0cab3e
 
           # replace the github.com/rollkit/go-execution-abci module with the local version
           go mod edit -replace github.com/rollkit/go-execution-abci=$GO_EXECUTION_ABCI_DIR

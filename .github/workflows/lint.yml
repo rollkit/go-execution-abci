@@ -30,12 +30,6 @@ jobs:
           github-token: ${{ secrets.github_token }}
         if: env.GIT_DIFF
 
-  yamllint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: rollkit/.github/.github/actions/yamllint@v0.5.0
-
   markdown-lint:
     runs-on: ubuntu-latest
     steps:

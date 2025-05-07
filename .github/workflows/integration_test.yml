@@ -49,7 +49,7 @@ jobs:
           cd gm
 
           # install rollkit app
-          ignite app install github.com/ignite/apps/rollkit@6df1530c06cd6c19f74f85c3b6c428ca449d6f4d
+          ignite app install github.com/ignite/apps/rollkit@main
 
           # add rollkit to the chain
           ignite rollkit add

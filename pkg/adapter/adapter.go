@@ -74,7 +74,7 @@ func NewABCIExecutor(
 
 	// Create a new Store with ABCI prefix
 	abciStore := NewStore(store)
-	rollkitStore := rstore.New(abciStore)
+	rollkitStore := rstore.New(store)
 
 	a := &Adapter{
 		App:          app,

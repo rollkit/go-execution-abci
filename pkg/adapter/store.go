@@ -12,29 +12,29 @@ import (
 )
 
 const (
-	// KeyPrefix is the prefix used for all ABCI-related keys in the datastore
-	KeyPrefix = "abci"
+	// keyPrefix is the prefix used for all ABCI-related keys in the datastore
+	keyPrefix = "abci"
 	// stateKey is the key used for storing state
 	stateKey = "s"
 )
 
 // Store wraps a datastore with ABCI-specific functionality
 type Store struct {
-	ds.Batching
+	prefixedStore ds.Batching
 }
 
 // NewStore creates a new Store with the ABCI prefix
 func NewStore(store ds.Batching) *Store {
 	return &Store{
-		Batching: kt.Wrap(store, &kt.PrefixTransform{
-			Prefix: ds.NewKey(KeyPrefix),
+		prefixedStore: kt.Wrap(store, &kt.PrefixTransform{
+			Prefix: ds.NewKey(keyPrefix),
 		}),
 	}
 }
 
 // LoadState loads the state from disk
 func (s *Store) LoadState(ctx context.Context) (*cmtstate.State, error) {
-	data, err := s.Get(ctx, ds.NewKey(stateKey))
+	data, err := s.prefixedStore.Get(ctx, ds.NewKey(stateKey))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get state metadata: %w", err)
 	}
@@ -62,5 +62,5 @@ func (s *Store) SaveState(ctx context.Context, state *cmtstate.State) error {
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 
-	return s.Put(ctx, ds.NewKey(stateKey), data)
+	return s.prefixedStore.Put(ctx, ds.NewKey(stateKey), data)
 }

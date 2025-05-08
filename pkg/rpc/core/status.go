@@ -78,11 +78,11 @@ func Status(ctx *rpctypes.Context) (*ctypes.ResultStatus, error) {
 			DefaultNodeID:   corep2p.ID(id),
 			ListenAddr:      addr,
 			Network:         network,
-			//Version:         version.TMCoreSemVer, // TODO: add this
-			Moniker: config.DefaultBaseConfig().Moniker,
+			Version:         version.TMCoreSemVer,
+			Moniker:         config.DefaultBaseConfig().Moniker,
 			Other: corep2p.DefaultNodeInfoOther{
 				TxIndex:    txIndexerStatus,
-				RPCAddress: env.Adapter.CometCfg.PrivValidatorListenAddr,
+				RPCAddress: env.Adapter.CometCfg.RPC.ListenAddress,
 			},
 		},
 		SyncInfo: ctypes.SyncInfo{

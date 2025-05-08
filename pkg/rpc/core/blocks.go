@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"sort"
 
+	cmbytes "github.com/cometbft/cometbft/libs/bytes"
 	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
 	cmquery "github.com/cometbft/cometbft/libs/pubsub/query"
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
-	cmttypes "github.com/cometbft/cometbft/types"
 	cmtypes "github.com/cometbft/cometbft/types"
 	rlktypes "github.com/rollkit/rollkit/types"
 )
@@ -91,7 +91,8 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 	switch {
 	// block tag = included
 	case heightPtr != nil && *heightPtr == -1:
-		return nil, errors.New("DA included height not implemented")
+		panic("not implemented") // TODO: implement this, we dont have access to the block manager
+		// heightValue = env.Adapter.BlockManager.GetDAIncludedHeight()
 	default:
 		heightValue = normalizeHeight(heightPtr)
 	}
@@ -99,18 +100,16 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 	if err != nil {
 		return nil, err
 	}
-	if header == nil || data == nil { // Added nil check for safety
-		return nil, fmt.Errorf("nil header or data for height %d from store", heightValue)
-	}
 
+	hash := header.Hash()
 	abciBlock, err := ToABCIBlock(header, data)
 	if err != nil {
 		return nil, err
 	}
 	return &ctypes.ResultBlock{
-		BlockID: cmttypes.BlockID{
-			Hash: cmtbytes.HexBytes(header.Hash()), // header.Hash() is []byte, needs conversion
-			PartSetHeader: cmttypes.PartSetHeader{
+		BlockID: cmtypes.BlockID{
+			Hash: cmbytes.HexBytes(hash),
+			PartSetHeader: cmtypes.PartSetHeader{
 				Total: 0,
 				Hash:  nil,
 			},
@@ -126,18 +125,15 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 	if err != nil {
 		return nil, err
 	}
-	if header == nil || data == nil {
-		return nil, fmt.Errorf("nil header or data for hash %X from store", hash)
-	}
 
 	abciBlock, err := ToABCIBlock(header, data)
 	if err != nil {
 		return nil, err
 	}
 	return &ctypes.ResultBlock{
-		BlockID: cmttypes.BlockID{
-			Hash: cmtbytes.HexBytes(hash), // hash is []byte, needs conversion
-			PartSetHeader: cmttypes.PartSetHeader{
+		BlockID: cmtypes.BlockID{
+			Hash: hash,
+			PartSetHeader: cmtypes.PartSetHeader{
 				Total: 0,
 				Hash:  nil,
 			},
@@ -150,13 +146,11 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 // If no height is provided, it will fetch the commit for the latest block.
 // More: https://docs.cometbft.com/main/rpc/#/Info/commit
 func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, error) {
+	wrappedCtx := ctx.Context()
 	heightValue := normalizeHeight(heightPtr)
-	header, data, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), heightValue)
+	header, data, err := env.Adapter.RollkitStore.GetBlockData(wrappedCtx, heightValue)
 	if err != nil {
 		return nil, err
-	}
-	if header == nil || data == nil { // Added nil check for safety
-		return nil, fmt.Errorf("nil header or data for height %d from store", heightValue)
 	}
 
 	// we should have a single validator
@@ -164,40 +158,48 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 		return nil, errors.New("empty proposer address found in block header")
 	}
 
-	commitSigs := []cmttypes.CommitSig{
-		{
-			BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-			ValidatorAddress: header.ProposerAddress,
-			Timestamp:        header.Time(),
-			Signature:        header.Signature,
-		},
-	}
+	val := header.ProposerAddress
+	commit := GetABCICommit(heightValue, header.Hash(), val, header.Time(), header.Signature)
 
-	commit := &cmttypes.Commit{
-		Height:     int64(heightValue),
-		Round:      0, // Round information is not typically in rlktypes.Header, default to 0
-		BlockID:    cmttypes.BlockID{Hash: cmtbytes.HexBytes(header.Hash())},
-		Signatures: commitSigs,
-	}
-
-	abciBlockForCommit, err := ToABCIBlock(header, data)
+	block, err := ToABCIBlock(header, data)
 	if err != nil {
 		return nil, err
 	}
 
-	return ctypes.NewResultCommit(&abciBlockForCommit.Header, commit, true), nil
+	return ctypes.NewResultCommit(&block.Header, commit, true), nil
 }
 
 // BlockResults is not fully implemented as in FullClient because
 // env.Adapter.RollkitStore (pkg/store.Store) does not provide GetBlockResponses method.
 func BlockResults(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlockResults, error) {
-	_ = normalizeHeight(heightPtr) // Use height to avoid unused variable error
-	// To fully implement this like FullClient, env.Adapter.RollkitStore would need a method
-	// equivalent to GetBlockResponses(ctx, height) -> (*rlktypes.BlockResponses, error)
-	// and rlktypes.BlockResponses would need fields like TxResults, Events, etc.
-	return &ctypes.ResultBlockResults{
-		// Height: int64(normalizeHeight(heightPtr)) // Could set height, but other fields are empty.
-	}, nil
+	// var h uint64
+	// var err error
+	// if heightPtr == nil {
+	// 	h, err = env.Adapter.RollkitStore.Height(ctx.Context())
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// } else {
+	// 	h = uint64(*heightPtr)
+	// }
+	// header, _, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), h)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	// resp, err := env.Adapter.Store.GetBlockResponses(ctx.Context(), h)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// return &ctypes.ResultBlockResults{
+	// 	Height:                int64(h), //nolint:gosec
+	// 	TxsResults:            resp.TxResults,
+	// 	FinalizeBlockEvents:   resp.Events,
+	// 	ValidatorUpdates:      resp.ValidatorUpdates,
+	// 	ConsensusParamUpdates: resp.ConsensusParamUpdates,
+	// 	AppHash:               header.Header.AppHash,
+	// }, nil
+	return nil, nil // TODO: implement GetBlockResponses
 }
 
 // Header gets block header at a given height.
@@ -215,12 +217,13 @@ func Header(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultHeader, erro
 // HeaderByHash gets header by hash.
 // More: https://docs.cometbft.com/v0.37/rpc/#/Info/header_by_hash
 func HeaderByHash(ctx *rpctypes.Context, hash cmtbytes.HexBytes) (*ctypes.ResultHeader, error) {
+	// N.B. The hash parameter is HexBytes so that the reflective parameter
+	// decoding logic in the HTTP service will correctly translate from JSON.
+	// See https://github.com/cometbft/cometbft/issues/6802 for context.
+
 	header, data, err := env.Adapter.RollkitStore.GetBlockByHash(ctx.Context(), rlktypes.Hash(hash))
 	if err != nil {
 		return nil, err
-	}
-	if header == nil || data == nil {
-		return nil, fmt.Errorf("nil header or data for hash %X from store", hash)
 	}
 
 	blockMeta, err := ToABCIBlockMeta(header, data)
@@ -239,40 +242,42 @@ func HeaderByHash(ctx *rpctypes.Context, hash cmtbytes.HexBytes) (*ctypes.Result
 // Block headers are returned in descending order (highest first).
 // More: https://docs.cometbft.com/v0.37/rpc/#/Info/blockchain
 func BlockchainInfo(ctx *rpctypes.Context, minHeight, maxHeight int64) (*ctypes.ResultBlockchainInfo, error) {
-	const limit int64 = 20 // Default limit used in the original code
+	const limit int64 = 20
 
 	height, err := env.Adapter.RollkitStore.Height(ctx.Context())
-	if err != nil {
-		return nil, fmt.Errorf("failed to get current height: %w", err)
-	}
-
-	const baseHeight int64 = 0                // Kept change: baseHeight to 0
-	minHeight, maxHeight, err = filterMinMax( // Use local function
-		baseHeight,
-		int64(height),
-		minHeight,
-		maxHeight,
-		limit,
-	)
 	if err != nil {
 		return nil, err
 	}
 
-	blocks := make([]*cmttypes.BlockMeta, 0, maxHeight-minHeight+1)
-	for h := maxHeight; h >= minHeight; h-- {
-		bMeta := getBlockMeta(ctx.Context(), uint64(h))
-		if bMeta != nil {
-			blocks = append(blocks, bMeta)
+	// Currently blocks are not pruned and are synced linearly so the base height is 0
+	minHeight, maxHeight, err = filterMinMax(
+		0,
+		int64(height), //nolint:gosec
+		minHeight,
+		maxHeight,
+		limit)
+	if err != nil {
+		return nil, err
+	}
+	env.Logger.Debug("BlockchainInfo", "maxHeight", maxHeight, "minHeight", minHeight)
+
+	blocks := make([]*cmtypes.BlockMeta, 0, maxHeight-minHeight+1)
+	for height := maxHeight; height >= minHeight; height-- {
+		header, data, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), uint64(height))
+		if err != nil {
+			return nil, err
+		}
+		if header != nil && data != nil {
+			cmblockmeta, err := ToABCIBlockMeta(header, data)
+			if err != nil {
+				return nil, err
+			}
+			blocks = append(blocks, cmblockmeta)
 		}
 	}
 
-	finalHeight, err := env.Adapter.RollkitStore.Height(ctx.Context())
-	if err != nil {
-		return nil, fmt.Errorf("failed to get final height: %w", err)
-	}
-
 	return &ctypes.ResultBlockchainInfo{
-		LastHeight: int64(finalHeight), //nolint:gosec
+		LastHeight: int64(height), //nolint:gosec
 		BlockMetas: blocks,
 	}, nil
 }

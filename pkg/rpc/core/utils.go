@@ -10,13 +10,12 @@ import (
 	cmversion "github.com/cometbft/cometbft/proto/tendermint/version"
 	cmtypes "github.com/cometbft/cometbft/types"
 
-	"github.com/rollkit/rollkit/types"
 	rlktypes "github.com/rollkit/rollkit/types"
 )
 
 // ToABCIHeader converts Rollkit header to Header format defined in ABCI.
 // Caller should fill all the fields that are not available in Rollkit header (like ChainID).
-func ToABCIHeader(header *types.Header) (cmtypes.Header, error) {
+func ToABCIHeader(header *rlktypes.Header) (cmtypes.Header, error) {
 	return cmtypes.Header{
 		Version: cmversion.Consensus{
 			Block: header.Version.Block,
@@ -46,7 +45,7 @@ func ToABCIHeader(header *types.Header) (cmtypes.Header, error) {
 
 // ToABCIBlock converts Rolkit block into block format defined by ABCI.
 // Returned block should pass `ValidateBasic`.
-func ToABCIBlock(header *types.SignedHeader, data *types.Data) (*cmtypes.Block, error) {
+func ToABCIBlock(header *rlktypes.SignedHeader, data *rlktypes.Data) (*cmtypes.Block, error) {
 	abciHeader, err := ToABCIHeader(&header.Header)
 	if err != nil {
 		return nil, err
@@ -80,7 +79,7 @@ func ToABCIBlock(header *types.SignedHeader, data *types.Data) (*cmtypes.Block, 
 }
 
 // ToABCIBlockMeta converts Rollkit block into BlockMeta format defined by ABCI
-func ToABCIBlockMeta(header *types.SignedHeader, data *types.Data) (*cmtypes.BlockMeta, error) {
+func ToABCIBlockMeta(header *rlktypes.SignedHeader, data *rlktypes.Data) (*cmtypes.BlockMeta, error) {
 	cmblock, err := ToABCIBlock(header, data)
 	if err != nil {
 		return nil, err

@@ -29,15 +29,15 @@ func Tx(ctx *rpctypes.Context, hash []byte, prove bool) (*ctypes.ResultTx, error
 	index := res.Index
 
 	var proof types.TxProof
-	if prove {
-		//_, data, _ := env.Adapter.RollkitStore.GetBlockData(unwrappedCtx, uint64(height))
-		//blockProof := data.Txs.Proof(int(index)) // TODO: Add proof method to Txs
-		// proof = types.TxProof{
-		// 	RootHash: blockProof.RootHash,
-		// 	Data:     types.Tx(blockProof.Data),
-		// 	Proof:    blockProof.Proof,
-		// }
-	}
+	// if prove {
+	// 	//_, data, _ := env.Adapter.RollkitStore.GetBlockData(unwrappedCtx, uint64(height))
+	// 	//blockProof := data.Txs.Proof(int(index)) // TODO: Add proof method to Txs
+	// 	// proof = types.TxProof{
+	// 	// 	RootHash: blockProof.RootHash,
+	// 	// 	Data:     types.Tx(blockProof.Data),
+	// 	// 	Proof:    blockProof.Proof,
+	// 	// }
+	// }
 
 	return &ctypes.ResultTx{
 		Hash:     hash,
@@ -107,7 +107,7 @@ func TxSearch(
 		r := results[i]
 
 		var proof types.TxProof
-		/*if prove {
+		/*if prove { // Comentando el bloque if entero
 			block := nil                               //env.BlockStore.GetBlock(r.Height)
 			proof = block.Data.Txs.Proof(int(r.Index)) // XXX: overflow on 32-bit machines
 		}*/

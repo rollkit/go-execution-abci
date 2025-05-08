@@ -23,9 +23,12 @@ func Status(ctx *rpctypes.Context) (*ctypes.ResultStatus, error) {
 		latestBlockHash cmbytes.HexBytes
 		latestAppHash   cmbytes.HexBytes
 		latestBlockTime time.Time
-
-		latestHeight, err = env.Adapter.RollkitStore.Height(ctx.Context())
 	)
+
+	latestHeight, err := env.Adapter.RollkitStore.Height(ctx.Context())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get latest height: %w", err)
+	}
 
 	if latestHeight != 0 {
 		header, _, err := env.Adapter.RollkitStore.GetBlockData(unwrappedCtx, latestHeight)

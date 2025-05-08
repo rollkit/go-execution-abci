@@ -121,6 +121,55 @@ jobs:
 
           echo "Success! Chain produced at least 5 blocks."
 
+      - name: Test Transaction Submission and Query
+        run: |
+          cd gm
+
+          # get bob's address
+          BOB_ADDRESS=$(gmd keys show bob -a)
+          ALICE_ADDRESS=$(gmd keys show alice -a)
+          echo "Bob's address: $BOB_ADDRESS"
+          echo "Alice's address: $ALICE_ADDRESS"
+
+          # query bob's initial balance
+          echo "Querying Bob's initial balance..."
+          INITIAL_BALANCE=$(gmd query bank balances $BOB_ADDRESS --output json | jq '.balances[0].amount' -r)
+          echo "Bob's initial balance: $INITIAL_BALANCE stake"
+
+          # check that bob has funds
+          if [ "$INITIAL_BALANCE" == "" ] || [ "$INITIAL_BALANCE" == "null" ] || [ "$INITIAL_BALANCE" -lt 100 ]; then
+            echo "Error: Bob's account not properly funded"
+            exit 1
+          fi
+
+          # send transaction from bob to alice and get tx hash
+          echo "Sending 100stake from Bob to Alice..."
+          TX_HASH=$(gmd tx bank send $BOB_ADDRESS $ALICE_ADDRESS 100stake -y --output json | jq -r .txhash)
+
+          sleep 3
+
+          # query the transaction (TODO: uncomment after tx indexer is fixed)
+          #TX_RESULT=$(gmd query tx $TX_HASH --output json)
+          #TX_CODE=$(echo $TX_RESULT | jq -r '.code')
+          #if [ "$TX_CODE" != "0" ]; then
+          #  echo "Error: Transaction failed with code $TX_CODE"
+          #  echo $TX_RESULT | jq
+          #  exit 1
+          #fi
+
+          # query bob's balance after transaction
+          FINAL_BALANCE=$(gmd query bank balances $BOB_ADDRESS --output json | jq '.balances[0].amount' -r)
+          echo "Bob's final balance: $FINAL_BALANCE"
+
+          # calculate and verify the expected balance
+          EXPECTED_BALANCE=$((INITIAL_BALANCE - 100))
+          if [ "$FINAL_BALANCE" != "$EXPECTED_BALANCE" ]; then
+            echo "Error: Balance mismatch. Expected: $EXPECTED_BALANCE, Actual: $FINAL_BALANCE"
+            exit 1
+          fi
+
+          echo "✅ Transaction test successful! Balance correctly updated."
+
       - name: Cleanup Processes
         if: always()
         run: |

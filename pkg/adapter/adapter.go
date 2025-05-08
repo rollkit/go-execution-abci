@@ -340,16 +340,6 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 	s.NextValidators = nValSet.CopyIncrementProposerPriority(1)
 	s.LastHeightValidatorsChanged = lastHeightValsChanged
 
-	// Construct BlockID from passed-in hashes and update state
-	blockID := cmtypes.BlockID{
-		//	Hash: currentBlockHash,
-		PartSetHeader: cmtypes.PartSetHeader{
-			Total: 1, // Assuming blocks are not split into parts for BlockID purposes in Rollkit
-			//	Hash:  currentBlockPartsHash,
-		},
-	}
-	s.LastBlockID = blockID
-
 	if err := a.Store.SaveState(ctx, s); err != nil {
 		return nil, 0, fmt.Errorf("failed to save state: %w", err)
 	}

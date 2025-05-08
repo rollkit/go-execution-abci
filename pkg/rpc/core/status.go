@@ -1,63 +1,109 @@
 package core
 
 import (
-	abci "github.com/cometbft/cometbft/abci/types"
-	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
-	"github.com/cometbft/cometbft/p2p"
+	"fmt"
+	"time"
+
+	"github.com/cometbft/cometbft/config"
+	cmbytes "github.com/cometbft/cometbft/libs/bytes"
+	corep2p "github.com/cometbft/cometbft/p2p"
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
+	cmtypes "github.com/cometbft/cometbft/types"
+	"github.com/cometbft/cometbft/version"
 )
 
 // Status returns CometBFT status including node info, pubkey, latest block
 // hash, app hash, block height and time.
 // More: https://docs.cometbft.com/v0.37/rpc/#/Info/status
 func Status(ctx *rpctypes.Context) (*ctypes.ResultStatus, error) {
-	info, err := env.Adapter.App.Info(&abci.RequestInfo{})
+	unwrappedCtx := ctx.Context()
+
+	var (
+		latestBlockHash cmbytes.HexBytes
+		latestAppHash   cmbytes.HexBytes
+		latestBlockTime time.Time
+
+		latestHeight, err = env.Adapter.RollkitStore.Height(ctx.Context())
+	)
+
+	if latestHeight != 0 {
+		header, _, err := env.Adapter.RollkitStore.GetBlockData(unwrappedCtx, latestHeight)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find latest block: %w", err)
+		}
+		latestBlockHash = cmbytes.HexBytes(header.DataHash)
+		latestAppHash = cmbytes.HexBytes(header.AppHash)
+		latestBlockTime = header.Time()
+	}
+
+	initialHeader, _, err := env.Adapter.RollkitStore.GetBlockData(unwrappedCtx, uint64(env.Adapter.AppGenesis.InitialHeight))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to find earliest block: %w", err)
 	}
 
-	s, err := env.Adapter.Store.LoadState(ctx.Context())
+	genesisValidators := env.Adapter.AppGenesis.Consensus.Validators
+
+	if len(genesisValidators) != 1 {
+		return nil, fmt.Errorf("there should be exactly one validator in genesis")
+	}
+
+	// Changed behavior to get this from genesis
+	genesisValidator := genesisValidators[0]
+	validator := cmtypes.Validator{
+		Address:          genesisValidator.Address,
+		PubKey:           genesisValidator.PubKey,
+		VotingPower:      int64(1),
+		ProposerPriority: int64(1),
+	}
+
+	state, err := env.Adapter.RollkitStore.GetState(unwrappedCtx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to load the last saved state: %w", err)
 	}
-
-	// TODO: Populate NodeInfo properly
-	nodeInfo := p2p.DefaultNodeInfo{
-		// ProtocolVersion: p2p.NewProtocolVersion(
-		// 	// Assuming these are accessible or definable constants/config values
-		// 	version.P2PProtocol, // Assuming 'version' package or similar imported
-		// 	version.BlockProtocol,
-		// 	version.AppProtocol,
-		// ),
-		// DefaultNodeID: // Needs node key -> p.nodeKey.ID() ? Requires passing nodeKey to RpcProvider
-		// ListenAddr: // Needs listener address -> listener.Addr().String() ? Requires access to listener
-		// Network:    // Needs network/chain ID -> p.config.ChainID ? Requires access to config
-		// Version:    // Needs application version -> version.TMCoreSemVer ?
-		// Channels:   // Needs channel info -> p.channels // Requires access to p2p channels
-		// Moniker:    // Needs moniker -> p.config.Moniker ?
-		// Other fields like Moniker, Version might be available too
+	defaultProtocolVersion := corep2p.NewProtocolVersion(
+		version.P2PProtocol,
+		state.Version.Block,
+		state.Version.App,
+	)
+	id, addr, network, err := env.Adapter.P2PClient.Info()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load node p2p2 info: %w", err)
 	}
-	// Check if the node key info is readily available in adapter or needs to be passed separately.
-	// If p.adapter.P2PClient is accessible and has NodeInfo:
-	// nodeKey := p.adapter.P2PClient.NodeInfo() // Hypothetical method
-	// if nodeKey != nil {
-	//    nodeInfo = *nodeKey
-	// }
+	txIndexerStatus := "on"
 
-	return &ctypes.ResultStatus{
-		NodeInfo: nodeInfo, // Use the populated or default NodeInfo
+	result := &ctypes.ResultStatus{
+		NodeInfo: corep2p.DefaultNodeInfo{
+			ProtocolVersion: defaultProtocolVersion,
+			DefaultNodeID:   corep2p.ID(id),
+			ListenAddr:      addr,
+			Network:         network,
+			//Version:         version.TMCoreSemVer, // TODO: add this
+			Moniker: config.DefaultBaseConfig().Moniker,
+			Other: corep2p.DefaultNodeInfoOther{
+				TxIndex:    txIndexerStatus,
+				RPCAddress: env.Adapter.CometCfg.PrivValidatorListenAddr,
+			},
+		},
 		SyncInfo: ctypes.SyncInfo{
-			// LatestBlockHash:   // Need block meta -> latestBlockMeta.BlockID.Hash
-			LatestAppHash:     cmtbytes.HexBytes(info.LastBlockAppHash),
-			LatestBlockHeight: info.LastBlockHeight,
-			LatestBlockTime:   s.LastBlockTime,
-			// CatchingUp: // Requires sync status logic
+			LatestBlockHash:     latestBlockHash,
+			LatestAppHash:       latestAppHash,
+			LatestBlockHeight:   int64(latestHeight),
+			LatestBlockTime:     latestBlockTime,
+			EarliestBlockHash:   cmbytes.HexBytes(initialHeader.DataHash),
+			EarliestAppHash:     cmbytes.HexBytes(initialHeader.AppHash),
+			EarliestBlockHeight: int64(initialHeader.Height()),
+			EarliestBlockTime:   initialHeader.Time(),
+			CatchingUp:          false, // hard-code this to "false" to pass Go IBC relayer's legacy encoding check
 		},
-		ValidatorInfo: ctypes.ValidatorInfo{ // Assumes single validator/sequencer model
-			Address:     s.Validators.Proposer.Address,
-			PubKey:      s.Validators.Proposer.PubKey,
-			VotingPower: s.Validators.Proposer.VotingPower,
+		ValidatorInfo: ctypes.ValidatorInfo{
+			Address:     validator.Address,
+			PubKey:      validator.PubKey,
+			VotingPower: validator.VotingPower,
 		},
-	}, nil
+	}
+
+	fmt.Println("result", result)
+
+	return result, nil
 }

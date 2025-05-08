@@ -16,10 +16,8 @@ import (
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	ds "github.com/ipfs/go-datastore"
-	kt "github.com/ipfs/go-datastore/keytransform"
 
 	"github.com/rollkit/rollkit/core/execution"
-	rollnode "github.com/rollkit/rollkit/node"
 	rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
 	rstore "github.com/rollkit/rollkit/pkg/store"
 
@@ -74,13 +72,9 @@ func NewABCIExecutor(
 		metrics = NopMetrics()
 	}
 
-	// create rollkit prefix
-	rollkitPrefixStore := kt.Wrap(store, &kt.PrefixTransform{
-		Prefix: ds.NewKey(rollnode.RollkitPrefix),
-	})
-	rollkitStore := rstore.New(rollkitPrefixStore)
 	// Create a new Store with ABCI prefix
 	abciStore := NewStore(store)
+	rollkitStore := rstore.New(store)
 
 	a := &Adapter{
 		App:          app,
@@ -263,7 +257,7 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 }
 
 // ExecuteTxs implements execution.Executor.
-func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint64, timestamp time.Time, prevStateRoot []byte, currentBlockHash []byte, currentBlockPartsHash []byte) ([]byte, uint64, error) {
+func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint64, timestamp time.Time, prevStateRoot []byte) ([]byte, uint64, error) {
 	execStart := time.Now()
 	defer func() {
 		a.Metrics.BlockExecutionDurationSeconds.Observe(time.Since(execStart).Seconds())
@@ -348,10 +342,10 @@ func (a *Adapter) ExecuteTxs(ctx context.Context, txs [][]byte, blockHeight uint
 
 	// Construct BlockID from passed-in hashes and update state
 	blockID := cmtypes.BlockID{
-		Hash: currentBlockHash,
+		//	Hash: currentBlockHash,
 		PartSetHeader: cmtypes.PartSetHeader{
 			Total: 1, // Assuming blocks are not split into parts for BlockID purposes in Rollkit
-			Hash:  currentBlockPartsHash,
+			//	Hash:  currentBlockPartsHash,
 		},
 	}
 	s.LastBlockID = blockID

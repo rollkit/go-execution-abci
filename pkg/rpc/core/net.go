@@ -1,11 +1,23 @@
 package core
 
 import (
-	"errors"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
 
 	"github.com/cometbft/cometbft/p2p"
 	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
+)
+
+// env is assumed to be a package-level variable or accessible through ctx
+// as it is used by other functions in this file (e.g., Genesis).
+
+const (
+	// genesisChunkSize is the maximum size, in bytes, of each
+	// chunk in the genesis structure for the chunked API.
+	// This value is taken from the provided reference node/full_node.go.
+	genesisChunkSize = 16 * 1024 * 1024 // 16 MiB
 )
 
 func NetInfo(ctx *rpctypes.Context) (*coretypes.ResultNetInfo, error) {
@@ -46,11 +58,76 @@ func NetInfo(ctx *rpctypes.Context) (*coretypes.ResultNetInfo, error) {
 }
 
 func Genesis(ctx *rpctypes.Context) (*coretypes.ResultGenesis, error) {
-	// Returning unimplemented as per the original code.
-	// Consider implementing or returning a more specific error if needed.
-	panic("unimplemented")
+	genesisDoc, err := env.Adapter.AppGenesis.ToGenesisDoc()
+	if err != nil {
+		return nil, err
+	}
+
+	return &coretypes.ResultGenesis{Genesis: genesisDoc}, nil
 }
 
-func GenesisChunked(ctx *rpctypes.Context, chunk uint) (*coretypes.ResultGenesisChunk, error) {
-	return nil, errors.New("GenesisChunked RPC method is not yet implemented")
+func GenesisChunked(_ *rpctypes.Context, chunk uint) (*coretypes.ResultGenesisChunk, error) {
+	allChunks, err := getGenesisChunks()
+	if err != nil {
+		return nil, fmt.Errorf("error preparing genesis chunks: %w", err)
+	}
+
+	numChunks := len(allChunks)
+
+	if numChunks == 0 {
+		// This means the genesis document was empty or resulted in no chunks.
+		// If chunk is 0, it's a request for chunk 0 of 0, which is invalid.
+		return nil, fmt.Errorf("genesis document is empty or yields no chunks")
+	}
+
+	if int(chunk) >= numChunks {
+		return nil, fmt.Errorf("requested chunk index %d is out of bounds (total chunks: %d, valid indices: 0 to %d)", chunk, numChunks, numChunks-1)
+	}
+
+	return &coretypes.ResultGenesisChunk{ // Corrected from ctypes to coretypes
+		TotalChunks: numChunks,
+		ChunkNumber: int(chunk),
+		Data:        allChunks[chunk],
+	}, nil
+}
+
+// getGenesisChunks fetches the genesis document, marshals it to JSON,
+// and then splits it into base64-encoded chunks.
+// This function is based on the initGenesisChunks logic from the provided example node/full_node.go.
+func getGenesisChunks() ([]string, error) {
+	// Assuming 'env' provides access to the adapter, similar to the Genesis function.
+	if env == nil || env.Adapter == nil || env.Adapter.AppGenesis == nil {
+		return nil, fmt.Errorf("environment or adapter not initialized correctly for genesis access")
+	}
+
+	genesisDoc, err := env.Adapter.AppGenesis.ToGenesisDoc()
+	if err != nil {
+		return nil, fmt.Errorf("error getting genesis doc: %w", err)
+	}
+	if genesisDoc == nil {
+		// If genesisDoc is nil, it implies no genesis content.
+		// Return an empty list of chunks.
+		return []string{}, nil
+	}
+
+	data, err := json.Marshal(genesisDoc)
+	if err != nil {
+		return nil, fmt.Errorf("error marshalling genesis doc to json: %w", err)
+	}
+
+	if len(data) == 0 {
+		// If JSON data is empty, return an empty list of chunks.
+		return []string{}, nil
+	}
+
+	var chunks []string
+	for i := 0; i < len(data); i += genesisChunkSize {
+		end := i + genesisChunkSize
+		if end > len(data) {
+			end = len(data)
+		}
+		chunks = append(chunks, base64.StdEncoding.EncodeToString(data[i:end]))
+	}
+
+	return chunks, nil
 }

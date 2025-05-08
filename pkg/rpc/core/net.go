@@ -75,8 +75,6 @@ func GenesisChunked(_ *rpctypes.Context, chunk uint) (*coretypes.ResultGenesisCh
 	numChunks := len(allChunks)
 
 	if numChunks == 0 {
-		// This means the genesis document was empty or resulted in no chunks.
-		// If chunk is 0, it's a request for chunk 0 of 0, which is invalid.
 		return nil, fmt.Errorf("genesis document is empty or yields no chunks")
 	}
 
@@ -95,7 +93,6 @@ func GenesisChunked(_ *rpctypes.Context, chunk uint) (*coretypes.ResultGenesisCh
 // and then splits it into base64-encoded chunks.
 // This function is based on the initGenesisChunks logic from the provided example node/full_node.go.
 func getGenesisChunks() ([]string, error) {
-	// Assuming 'env' provides access to the adapter, similar to the Genesis function.
 	if env == nil || env.Adapter == nil || env.Adapter.AppGenesis == nil {
 		return nil, fmt.Errorf("environment or adapter not initialized correctly for genesis access")
 	}
@@ -116,7 +113,6 @@ func getGenesisChunks() ([]string, error) {
 	}
 
 	if len(data) == 0 {
-		// If JSON data is empty, return an empty list of chunks.
 		return []string{}, nil
 	}
 

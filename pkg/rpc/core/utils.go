@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -12,6 +13,8 @@ import (
 
 	rlktypes "github.com/rollkit/rollkit/types"
 )
+
+const NodeIDByteLength = 20
 
 // ToABCIHeader converts Rollkit header to Header format defined in ABCI.
 // Caller should fill all the fields that are not available in Rollkit header (like ChainID).
@@ -217,4 +220,17 @@ func GetABCICommit(height uint64, hash rlktypes.Hash, val cmtypes.Address, time 
 	tmCommit.Signatures[0] = commitSig
 
 	return &tmCommit
+}
+
+// TruncateNodeID from rollkit we receive a 32 bytes node id, but we only need the first 20 bytes
+// to be compatible with the ABCI node info
+func TruncateNodeID(idStr string) (string, error) {
+	idBytes, err := hex.DecodeString(idStr)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode node ID: %w", err)
+	}
+	if len(idBytes) < NodeIDByteLength {
+		return "", fmt.Errorf("node ID too short, expected at least %d bytes, got %d", NodeIDByteLength, len(idBytes))
+	}
+	return hex.EncodeToString(idBytes[:NodeIDByteLength]), nil
 }

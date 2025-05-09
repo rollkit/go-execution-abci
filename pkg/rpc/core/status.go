@@ -73,6 +73,13 @@ func Status(ctx *rpctypes.Context) (*ctypes.ResultStatus, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load node p2p2 info: %w", err)
 	}
+
+	processedID, err := TruncateNodeID(id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to process node ID: %w", err)
+	}
+	id = processedID
+
 	txIndexerStatus := "on"
 
 	result := &ctypes.ResultStatus{

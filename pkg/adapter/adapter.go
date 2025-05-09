@@ -16,6 +16,8 @@ import (
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	ds "github.com/ipfs/go-datastore"
+	kt "github.com/ipfs/go-datastore/keytransform"
+	rollnode "github.com/rollkit/rollkit/node"
 
 	"github.com/rollkit/rollkit/core/execution"
 	rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
@@ -72,9 +74,13 @@ func NewABCIExecutor(
 		metrics = NopMetrics()
 	}
 
+	// create rollkit prefix
+	rollkitPrefixStore := kt.Wrap(store, &kt.PrefixTransform{
+		Prefix: ds.NewKey(rollnode.RollkitPrefix),
+	})
+	rollkitStore := rstore.New(rollkitPrefixStore)
 	// Create a new Store with ABCI prefix
 	abciStore := NewStore(store)
-	rollkitStore := rstore.New(store)
 
 	a := &Adapter{
 		App:          app,

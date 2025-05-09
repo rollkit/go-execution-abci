@@ -129,9 +129,9 @@ func BroadcastTxCommit(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultBro
 
 	// Use CometBFT config values directly if available
 	// TODO: Access these config values properly, perhaps via RpcProvider struct if needed
-	maxSubs := 100                                                     // Placeholder
-	maxClients := 100                                                  // Placeholder
-	commitTimeout := env.Adapter.CometCfg.RPC.TimeoutBroadcastTxCommit // Assuming CometCfg is accessible
+	maxSubs := 100                                       // Placeholder
+	maxClients := 100                                    // Placeholder
+	commitTimeout := env.Config.TimeoutBroadcastTxCommit // Assuming CometCfg is accessible
 
 	if env.Adapter.EventBus.NumClients() >= maxClients {
 		return nil, fmt.Errorf("max_subscription_clients %d reached", maxClients)

@@ -20,6 +20,8 @@ require (
 	google.golang.org/grpc v1.72.0
 )
 
+require github.com/stretchr/objx v0.5.2 // indirect
+
 replace github.com/btcsuite/btcd => github.com/btcsuite/btcd v0.22.0-beta
 
 exclude github.com/btcsuite/btcd/chaincfg/chainhash v1.0.2

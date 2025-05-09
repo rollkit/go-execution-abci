@@ -426,7 +426,8 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 	return resp.Txs, nil
 }
 
-// SetFinal implements execution.Executor.
+// SetFinal normally sets the finality of the block.
+// In the case of the SDK, execution has already happened so it is a no-op.
 func (a *Adapter) SetFinal(ctx context.Context, blockHeight uint64) error {
 	return nil
 }

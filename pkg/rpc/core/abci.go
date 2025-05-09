@@ -17,8 +17,10 @@ func ABCIQuery(
 	prove bool,
 ) (*ctypes.ResultABCIQuery, error) {
 	resp, err := env.Adapter.App.Query(ctx.Context(), &abci.RequestQuery{
-		Data: data,
-		Path: path,
+		Data:   data,
+		Path:   path,
+		Height: height,
+		Prove:  prove,
 	})
 	if err != nil {
 		return nil, err

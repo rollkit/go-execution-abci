@@ -17,9 +17,9 @@ import (
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	ds "github.com/ipfs/go-datastore"
 	kt "github.com/ipfs/go-datastore/keytransform"
+	rollnode "github.com/rollkit/rollkit/node"
 
 	"github.com/rollkit/rollkit/core/execution"
-	rollnode "github.com/rollkit/rollkit/node"
 	rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
 	rstore "github.com/rollkit/rollkit/pkg/store"
 

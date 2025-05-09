@@ -1,7 +1,6 @@
 package core
 
 import (
-	"errors"
 	"fmt"
 	"sort"
 
@@ -48,7 +47,7 @@ func Tx(ctx *rpctypes.Context, hash []byte, prove bool) (*ctypes.ResultTx, error
 			// Assuming blockRes.Block.Data.Txs implements some `Proof(index)` method
 			proof = blockRes.Block.Data.Txs.Proof(int(txResult.Index))
 		*/
-		return nil, errors.New("transaction proof generation is not supported") // Return error as proofs aren't supported
+		//return nil, errors.New("transaction proof generation is not supported") // Return error as proofs aren't supported
 		// block := env.BlockStore.LoadBlock(r.Height)
 		// proof = block.Data.Txs.Proof(int(r.Index))
 	}
@@ -137,7 +136,7 @@ func TxSearch(
 		var proof types.TxProof
 		if prove {
 			// Proof generation is currently not supported.
-			return nil, errors.New("transaction proof generation is not supported")
+			//return nil, errors.New("transaction proof generation is not supported")
 		}
 
 		apiResults = append(apiResults, &ctypes.ResultTx{

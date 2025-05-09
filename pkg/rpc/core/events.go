@@ -54,8 +54,9 @@ func Subscribe(ctx *rpctypes.Context, query string) (*ctypes.ResultSubscribe, er
 						resp        = rpctypes.NewRPCSuccessResponse(subscriptionID, resultEvent)
 					)
 					writeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-					defer cancel()
-					if err := ctx.WSConn.WriteRPCResponse(writeCtx, resp); err != nil {
+					err := ctx.WSConn.WriteRPCResponse(writeCtx, resp)
+					cancel()
+					if err != nil {
 						env.Logger.Info("Can't write response (slow client)",
 							"to", addr, "subscriptionID", subscriptionID, "err", err)
 
@@ -72,7 +73,7 @@ func Subscribe(ctx *rpctypes.Context, query string) (*ctypes.ResultSubscribe, er
 						}
 					}
 				case <-sub.Canceled():
-					if sub.Err() != cmtpubsub.ErrUnsubscribed {
+					if !errors.Is(sub.Err(), cmtpubsub.ErrUnsubscribed) {
 						var reason string
 						if sub.Err() == nil {
 							reason = "CometBFT exited"

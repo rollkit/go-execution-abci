@@ -107,7 +107,7 @@ func TxSearch(
 		r := results[i]
 
 		var proof types.TxProof
-		/*if prove { // Comentando el bloque if entero
+		/*if prove {
 			block := nil                               //env.BlockStore.GetBlock(r.Height)
 			proof = block.Data.Txs.Proof(int(r.Index)) // XXX: overflow on 32-bit machines
 		}*/

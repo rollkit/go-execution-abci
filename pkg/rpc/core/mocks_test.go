@@ -7,6 +7,11 @@ import (
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 	cmquery "github.com/cometbft/cometbft/libs/pubsub/query"
 	"github.com/cometbft/cometbft/state/txindex"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/host"
+	ma "github.com/multiformats/go-multiaddr"
+	"github.com/rollkit/go-execution-abci/pkg/adapter"
+	rlkp2p "github.com/rollkit/rollkit/pkg/p2p"
 	"github.com/stretchr/testify/mock"
 
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
@@ -17,6 +22,7 @@ import (
 var _ txindex.TxIndexer = (*MockTxIndexer)(nil)
 var _ rstore.Store = (*MockRollkitStore)(nil)
 var _ servertypes.ABCI = (*MockApp)(nil)
+var _ adapter.P2PClientInfo = (*MockP2PClient)(nil)
 
 // MockTxIndexer is a mock for txindex.TxIndexer
 type MockTxIndexer struct {
@@ -286,4 +292,31 @@ func (m *MockApp) ApplySnapshotChunk(req *abci.RequestApplySnapshotChunk) (*abci
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*abci.ResponseApplySnapshotChunk), args.Error(1)
+}
+
+// MockP2PClient is a mock for adapter.P2PClientInfo
+type MockP2PClient struct {
+	mock.Mock
+}
+
+func (m *MockP2PClient) Info() (string, string, string, error) {
+	args := m.Called()
+	return args.String(0), args.String(1), args.String(2), args.Error(3)
+}
+
+func (m *MockP2PClient) Host() host.Host {
+	return nil // Stub implementation
+}
+
+func (m *MockP2PClient) PubSub() *pubsub.PubSub {
+	return nil // Stub implementation
+}
+
+func (m *MockP2PClient) Addrs() []ma.Multiaddr {
+	addr, _ := ma.NewMultiaddr("/ip4/127.0.0.1/tcp/1234") // Example stub
+	return []ma.Multiaddr{addr}
+}
+
+func (m *MockP2PClient) Peers() []rlkp2p.PeerConnection {
+	return []rlkp2p.PeerConnection{} // Stub implementation
 }

@@ -23,10 +23,24 @@ import (
 	rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
 	rstore "github.com/rollkit/rollkit/pkg/store"
 
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	host "github.com/libp2p/go-libp2p/core/host"
+	ma "github.com/multiformats/go-multiaddr"
 	"github.com/rollkit/go-execution-abci/pkg/p2p"
 )
 
 var _ execution.Executor = &Adapter{}
+
+// P2PClientInfo permite inyectar mocks en tests y usar el cliente real en producción
+//
+//go:generate mockery --name=P2PClientInfo --output=../rpc/core --outpkg=core --case=underscore
+type P2PClientInfo interface {
+	Info() (string, string, string, error)
+	Host() host.Host
+	PubSub() *pubsub.PubSub
+	Addrs() []ma.Multiaddr
+	Peers() []rollkitp2p.PeerConnection
+}
 
 // LoadGenesisDoc returns the genesis document from the provided config file.
 func LoadGenesisDoc(cfg *config.Config) (*cmtypes.GenesisDoc, error) {
@@ -46,7 +60,7 @@ type Adapter struct {
 	Mempool      mempool.Mempool
 	MempoolIDs   *mempoolIDs
 
-	P2PClient  *rollkitp2p.Client
+	P2PClient  P2PClientInfo
 	TxGossiper *p2p.Gossiper
 	p2pMetrics *rollkitp2p.Metrics
 

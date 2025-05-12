@@ -9,7 +9,7 @@ import (
 	cmquery "github.com/cometbft/cometbft/libs/pubsub/query"
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
-	cmtypes "github.com/cometbft/cometbft/types"
+	cmttypes "github.com/cometbft/cometbft/types"
 	rlktypes "github.com/rollkit/rollkit/types"
 )
 
@@ -72,7 +72,7 @@ func BlockSearch(
 		}
 		blocks = append(blocks, &ctypes.ResultBlock{
 			Block: block,
-			BlockID: cmtypes.BlockID{
+			BlockID: cmttypes.BlockID{
 				Hash: block.Hash(),
 			},
 		})
@@ -106,9 +106,9 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 		return nil, err
 	}
 	return &ctypes.ResultBlock{
-		BlockID: cmtypes.BlockID{
+		BlockID: cmttypes.BlockID{
 			Hash: cmbytes.HexBytes(hash),
-			PartSetHeader: cmtypes.PartSetHeader{
+			PartSetHeader: cmttypes.PartSetHeader{
 				Total: 0,
 				Hash:  nil,
 			},
@@ -130,9 +130,9 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 		return nil, err
 	}
 	return &ctypes.ResultBlock{
-		BlockID: cmtypes.BlockID{
+		BlockID: cmttypes.BlockID{
 			Hash: cmbytes.HexBytes(hash),
-			PartSetHeader: cmtypes.PartSetHeader{
+			PartSetHeader: cmttypes.PartSetHeader{
 				Total: 0,
 				Hash:  nil,
 			},
@@ -260,7 +260,7 @@ func BlockchainInfo(ctx *rpctypes.Context, minHeight, maxHeight int64) (*ctypes.
 	}
 	env.Logger.Debug("BlockchainInfo", "maxHeight", maxHeight, "minHeight", minHeight)
 
-	blocks := make([]*cmtypes.BlockMeta, 0, maxHeight-minHeight+1)
+	blocks := make([]*cmttypes.BlockMeta, 0, maxHeight-minHeight+1)
 	for height := maxHeight; height >= minHeight; height-- {
 		header, data, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), uint64(height))
 		if err != nil {

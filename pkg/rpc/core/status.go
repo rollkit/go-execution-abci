@@ -9,7 +9,7 @@ import (
 	corep2p "github.com/cometbft/cometbft/p2p"
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
-	cmtypes "github.com/cometbft/cometbft/types"
+	cmttypes "github.com/cometbft/cometbft/types"
 	"github.com/cometbft/cometbft/version"
 )
 
@@ -53,7 +53,7 @@ func Status(ctx *rpctypes.Context) (*ctypes.ResultStatus, error) {
 
 	// Changed behavior to get this from genesis
 	genesisValidator := genesisValidators[0]
-	validator := cmtypes.Validator{
+	validator := cmttypes.Validator{
 		Address:          genesisValidator.Address,
 		PubKey:           genesisValidator.PubKey,
 		VotingPower:      int64(1),

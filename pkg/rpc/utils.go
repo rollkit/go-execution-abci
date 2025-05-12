@@ -7,7 +7,7 @@ import (
 	cmbytes "github.com/cometbft/cometbft/libs/bytes"
 	cmproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	cmversion "github.com/cometbft/cometbft/proto/tendermint/version"
-	cmtypes "github.com/cometbft/cometbft/types"
+	cmttypes "github.com/cometbft/cometbft/types"
 
 	"github.com/rollkit/rollkit/types"
 )
@@ -34,7 +34,7 @@ func ToABCIHeaderPB(header *types.Header) (cmproto.Header, error) {
 		ConsensusHash:      header.ConsensusHash[:],
 		AppHash:            header.AppHash[:],
 		LastResultsHash:    header.LastResultsHash[:],
-		EvidenceHash:       new(cmtypes.EvidenceData).Hash(),
+		EvidenceHash:       new(cmttypes.EvidenceData).Hash(),
 		ProposerAddress:    header.ProposerAddress,
 		ChainID:            header.ChainID(),
 		ValidatorsHash:     header.ValidatorHash,
@@ -44,17 +44,17 @@ func ToABCIHeaderPB(header *types.Header) (cmproto.Header, error) {
 
 // ToABCIHeader converts Rollkit header to Header format defined in ABCI.
 // Caller should fill all the fields that are not available in Rollkit header (like ChainID).
-func ToABCIHeader(header *types.Header) (cmtypes.Header, error) {
-	return cmtypes.Header{
+func ToABCIHeader(header *types.Header) (cmttypes.Header, error) {
+	return cmttypes.Header{
 		Version: cmversion.Consensus{
 			Block: header.Version.Block,
 			App:   header.Version.App,
 		},
 		Height: int64(header.Height()), //nolint:gosec
 		Time:   header.Time(),
-		LastBlockID: cmtypes.BlockID{
+		LastBlockID: cmttypes.BlockID{
 			Hash: cmbytes.HexBytes(header.LastHeaderHash[:]),
-			PartSetHeader: cmtypes.PartSetHeader{
+			PartSetHeader: cmttypes.PartSetHeader{
 				Total: 0,
 				Hash:  nil,
 			},
@@ -64,7 +64,7 @@ func ToABCIHeader(header *types.Header) (cmtypes.Header, error) {
 		ConsensusHash:      cmbytes.HexBytes(header.ConsensusHash),
 		AppHash:            cmbytes.HexBytes(header.AppHash),
 		LastResultsHash:    cmbytes.HexBytes(header.LastResultsHash),
-		EvidenceHash:       new(cmtypes.EvidenceData).Hash(),
+		EvidenceHash:       new(cmttypes.EvidenceData).Hash(),
 		ProposerAddress:    header.ProposerAddress,
 		ChainID:            header.ChainID(),
 		ValidatorsHash:     cmbytes.HexBytes(header.ValidatorHash),
@@ -74,7 +74,7 @@ func ToABCIHeader(header *types.Header) (cmtypes.Header, error) {
 
 // ToABCIBlock converts Rolkit block into block format defined by ABCI.
 // Returned block should pass `ValidateBasic`.
-func ToABCIBlock(header *types.SignedHeader, data *types.Data) (*cmtypes.Block, error) {
+func ToABCIBlock(header *types.SignedHeader, data *types.Data) (*cmttypes.Block, error) {
 	abciHeader, err := ToABCIHeader(&header.Header)
 	if err != nil {
 		return nil, err
@@ -91,16 +91,16 @@ func ToABCIBlock(header *types.SignedHeader, data *types.Data) (*cmtypes.Block, 
 	if len(abciCommit.Signatures) == 1 {
 		abciCommit.Signatures[0].ValidatorAddress = header.ProposerAddress
 	}
-	abciBlock := cmtypes.Block{
+	abciBlock := cmttypes.Block{
 		Header: abciHeader,
-		Evidence: cmtypes.EvidenceData{
+		Evidence: cmttypes.EvidenceData{
 			Evidence: nil,
 		},
 		LastCommit: abciCommit,
 	}
-	abciBlock.Txs = make([]cmtypes.Tx, len(data.Txs))
+	abciBlock.Txs = make([]cmttypes.Tx, len(data.Txs))
 	for i := range data.Txs {
-		abciBlock.Txs[i] = cmtypes.Tx(data.Txs[i])
+		abciBlock.Txs[i] = cmttypes.Tx(data.Txs[i])
 	}
 	abciBlock.DataHash = cmbytes.HexBytes(header.DataHash)
 
@@ -108,14 +108,14 @@ func ToABCIBlock(header *types.SignedHeader, data *types.Data) (*cmtypes.Block, 
 }
 
 // ToABCIBlockMeta converts Rollkit block into BlockMeta format defined by ABCI
-func ToABCIBlockMeta(header *types.SignedHeader, data *types.Data) (*cmtypes.BlockMeta, error) {
+func ToABCIBlockMeta(header *types.SignedHeader, data *types.Data) (*cmttypes.BlockMeta, error) {
 	cmblock, err := ToABCIBlock(header, data)
 	if err != nil {
 		return nil, err
 	}
-	blockID := cmtypes.BlockID{Hash: cmblock.Hash()}
+	blockID := cmttypes.BlockID{Hash: cmblock.Hash()}
 
-	return &cmtypes.BlockMeta{
+	return &cmttypes.BlockMeta{
 		BlockID:   blockID,
 		BlockSize: cmblock.Size(),
 		Header:    cmblock.Header,
@@ -125,18 +125,18 @@ func ToABCIBlockMeta(header *types.SignedHeader, data *types.Data) (*cmtypes.Blo
 
 // getABCICommit returns a commit format defined by ABCI.
 // Other fields (especially ValidatorAddress and Timestamp of Signature) have to be filled by caller.
-func getABCICommit(height uint64, hash []byte, val cmtypes.Address, time time.Time, signature []byte) *cmtypes.Commit {
-	tmCommit := cmtypes.Commit{
+func getABCICommit(height uint64, hash []byte, val cmttypes.Address, time time.Time, signature []byte) *cmttypes.Commit {
+	tmCommit := cmttypes.Commit{
 		Height: int64(height), //nolint:gosec
 		Round:  0,
-		BlockID: cmtypes.BlockID{
+		BlockID: cmttypes.BlockID{
 			Hash:          cmbytes.HexBytes(hash),
-			PartSetHeader: cmtypes.PartSetHeader{},
+			PartSetHeader: cmttypes.PartSetHeader{},
 		},
-		Signatures: make([]cmtypes.CommitSig, 1),
+		Signatures: make([]cmttypes.CommitSig, 1),
 	}
-	commitSig := cmtypes.CommitSig{
-		BlockIDFlag:      cmtypes.BlockIDFlagCommit,
+	commitSig := cmttypes.CommitSig{
+		BlockIDFlag:      cmttypes.BlockIDFlagCommit,
 		Signature:        signature,
 		ValidatorAddress: val,
 		Timestamp:        time,

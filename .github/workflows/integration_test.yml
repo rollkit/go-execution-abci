@@ -149,13 +149,13 @@ jobs:
           sleep 3
 
           # query the transaction (TODO: uncomment after tx indexer is fixed)
-          #TX_RESULT=$(gmd query tx $TX_HASH --output json)
-          #TX_CODE=$(echo $TX_RESULT | jq -r '.code')
-          #if [ "$TX_CODE" != "0" ]; then
-          #  echo "Error: Transaction failed with code $TX_CODE"
-          #  echo $TX_RESULT | jq
-          #  exit 1
-          #fi
+          TX_RESULT=$(gmd query tx $TX_HASH --output json)
+          TX_CODE=$(echo $TX_RESULT | jq -r '.code')
+          if [ "$TX_CODE" != "0" ]; then
+            echo "Error: Transaction failed with code $TX_CODE"
+            echo $TX_RESULT | jq
+            exit 1
+          fi
 
           # query bob's balance after transaction
           FINAL_BALANCE=$(gmd query bank balances $BOB_ADDRESS --output json | jq '.balances[0].amount' -r)

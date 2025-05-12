@@ -1,7 +1,6 @@
 package core
 
 import (
-	"errors"
 	"fmt"
 	"sort"
 
@@ -33,25 +32,25 @@ func Tx(ctx *rpctypes.Context, hash []byte, prove bool) (*ctypes.ResultTx, error
 	}
 
 	var proof types.TxProof
-	if prove {
-		// Proof generation is currently not supported.
-		// When supported, logic to retrieve block and compute proof would go here.
-		// Example (requires block fetching and a Prove method on block.Data.Txs):
-		/*
-			blockRes, err := p.Block(ctx, &txResult.Height)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get block %d for proof: %w", txResult.Height, err)
-			}
-			if blockRes == nil || blockRes.Block == nil {
-				return nil, fmt.Errorf("block %d not found for proof", txResult.Height)
-			}
-			// Assuming blockRes.Block.Data.Txs implements some `Proof(index)` method
-			proof = blockRes.Block.Data.Txs.Proof(int(txResult.Index))
-		*/
-		return nil, errors.New("transaction proof generation is not supported") // Return error as proofs aren't supported
-		// block := env.BlockStore.LoadBlock(r.Height)
-		// proof = block.Data.Txs.Proof(int(r.Index))
-	}
+	//if prove {
+	// Proof generation is currently not supported.
+	// When supported, logic to retrieve block and compute proof would go here.
+	// Example (requires block fetching and a Prove method on block.Data.Txs):
+	/*
+		blockRes, err := p.Block(ctx, &txResult.Height)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get block %d for proof: %w", txResult.Height, err)
+		}
+		if blockRes == nil || blockRes.Block == nil {
+			return nil, fmt.Errorf("block %d not found for proof", txResult.Height)
+		}
+		// Assuming blockRes.Block.Data.Txs implements some `Proof(index)` method
+		proof = blockRes.Block.Data.Txs.Proof(int(txResult.Index))
+	*/
+	//return nil, errors.New("transaction proof generation is not supported") // Return error as proofs aren't supported
+	// block := env.BlockStore.LoadBlock(r.Height)
+	// proof = block.Data.Txs.Proof(int(r.Index))
+	//}
 
 	return &ctypes.ResultTx{
 		Hash:     hash,
@@ -135,10 +134,10 @@ func TxSearch(
 	for i := skipCount; i < skipCount+pageSize; i++ {
 		result := txResults[i]
 		var proof types.TxProof
-		if prove {
-			// Proof generation is currently not supported.
-			return nil, errors.New("transaction proof generation is not supported")
-		}
+		//if prove {
+		// Proof generation is currently not supported.
+		//return nil, errors.New("transaction proof generation is not supported")
+		//}
 
 		apiResults = append(apiResults, &ctypes.ResultTx{
 			Hash:     types.Tx(result.Tx).Hash(), // Correctly calculate hash from []byte

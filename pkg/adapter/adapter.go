@@ -505,7 +505,8 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 	return resp.Txs, nil
 }
 
-// SetFinal implements execution.Executor.
+// SetFinal handles extra logic once the block has been finalized (posted to DA).
+// For a Cosmos SDK app, this is a no-op we do not need to do anything to mark the block as finalized.
 func (a *Adapter) SetFinal(ctx context.Context, blockHeight uint64) error {
 	return nil
 }

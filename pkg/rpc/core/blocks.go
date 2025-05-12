@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"sort"
@@ -13,6 +14,7 @@ import (
 	blockidxnull "github.com/cometbft/cometbft/state/indexer/block/null"
 	cmttypes "github.com/cometbft/cometbft/types"
 
+	"github.com/rollkit/rollkit/block"
 	rlktypes "github.com/rollkit/rollkit/types"
 )
 
@@ -107,9 +109,19 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 	switch {
 	// block tag = included
 	case heightPtr != nil && *heightPtr == -1:
-		// heightValue = p.adapter.store.GetDAIncludedHeight()
-		// TODO: implement
-		return nil, errors.New("DA included height not implemented")
+		rawVal, err := env.Adapter.RollkitStore.GetMetadata(
+			ctx.Context(),
+			block.DAIncludedHeightKey,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get DA included height: %w", err)
+		}
+
+		if len(rawVal) != 8 {
+			return nil, fmt.Errorf("invalid finalized height data length: %d", len(rawVal))
+		}
+
+		heightValue = binary.LittleEndian.Uint64(rawVal)
 	default:
 		heightValue = normalizeHeight(heightPtr)
 	}

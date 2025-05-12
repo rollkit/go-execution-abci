@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -154,7 +155,8 @@ func TestExecuteFiresEvents(t *testing.T) {
 }
 
 func captureEvents(ctx context.Context, eventBus *cmtypes.EventBus, query string, numEventsExpected int) (*[]cmtpubsub.Message, *sync.RWMutex) {
-	evSub, err := eventBus.Subscribe(ctx, "test", cmtquery.MustCompile(query), numEventsExpected)
+	subscriber := fmt.Sprintf("test-%d", time.Now().UnixNano())
+	evSub, err := eventBus.Subscribe(ctx, subscriber, cmtquery.MustCompile(query), numEventsExpected)
 	if err != nil {
 		panic(err)
 	}

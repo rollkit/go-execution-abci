@@ -474,7 +474,9 @@ func setupNodeAndExecutor(
 	cleanupFn = func() {
 		cancelFn()
 		_ = eventBus.Stop()
-		_ = idxSvc.Stop()
+		if idxSvc != nil {
+			_ = idxSvc.Stop()
+		}
 		_ = rpcServer.Stop()
 	}
 	return rolllkitNode, executor, cleanupFn, nil

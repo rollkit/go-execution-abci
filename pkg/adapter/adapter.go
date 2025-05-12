@@ -31,9 +31,6 @@ import (
 
 var _ execution.Executor = &Adapter{}
 
-// P2PClientInfo permite inyectar mocks en tests y usar el cliente real en producción
-//
-//go:generate mockery --name=P2PClientInfo --output=../rpc/core --outpkg=core --case=underscore
 type P2PClientInfo interface {
 	Info() (string, string, string, error)
 	Host() host.Host

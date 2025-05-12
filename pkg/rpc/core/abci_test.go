@@ -14,10 +14,6 @@ import (
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
 )
 
-// MockApp definition and its methods have been moved to mock_app_test.go
-// The interface satisfaction check var _ servertypes.ABCI = (*MockApp)(nil)
-// has also been moved to mock_app_test.go
-
 func TestABCIQuery(t *testing.T) {
 	mockApp := new(MockApp)
 	env = &Environment{

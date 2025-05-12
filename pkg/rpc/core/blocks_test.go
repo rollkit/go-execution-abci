@@ -15,10 +15,6 @@ import (
 	"github.com/rollkit/rollkit/types"
 )
 
-// MockTxIndexer and MockRollkitStore definitions and their methods have been moved to mocks_test.go
-// Interface satisfaction checks have also been moved.
-
-// Helper to create a basic rpctypes.Context for tests
 func newTestRPCContext() *rpctypes.Context {
 	return &rpctypes.Context{}
 }
@@ -79,18 +75,15 @@ func TestBlockSearch_Success(t *testing.T) {
 	assert.Len(t, result.Blocks, 2)
 	assert.Equal(t, 2, result.TotalCount)
 
-	// Compare specific header fields
 	assert.Equal(t, header1.Header.BaseHeader.Height, uint64(result.Blocks[0].Block.Header.Height))
-	assert.Equal(t, []byte(header1.Header.AppHash), []byte(result.Blocks[0].Block.Header.AppHash))                 // Convert both to []byte
-	assert.Equal(t, []byte(header1.Header.ProposerAddress), []byte(result.Blocks[0].Block.Header.ProposerAddress)) // Convert both to []byte
+	assert.Equal(t, []byte(header1.Header.AppHash), []byte(result.Blocks[0].Block.Header.AppHash))
+	assert.Equal(t, []byte(header1.Header.ProposerAddress), []byte(result.Blocks[0].Block.Header.ProposerAddress))
 
 	assert.Equal(t, header2.Header.BaseHeader.Height, uint64(result.Blocks[1].Block.Header.Height))
-	assert.Equal(t, []byte(header2.Header.AppHash), []byte(result.Blocks[1].Block.Header.AppHash))                 // Convert both to []byte
-	assert.Equal(t, []byte(header2.Header.ProposerAddress), []byte(result.Blocks[1].Block.Header.ProposerAddress)) // Convert both to []byte
+	assert.Equal(t, []byte(header2.Header.AppHash), []byte(result.Blocks[1].Block.Header.AppHash))
+	assert.Equal(t, []byte(header2.Header.ProposerAddress), []byte(result.Blocks[1].Block.Header.ProposerAddress))
 
 	mockTxIndexer.AssertExpectations(t)
 	mockRollkitStore.AssertExpectations(t)
 	mockApp.AssertExpectations(t)
 }
-
-// TODO: Start with TestBlockSearch tests

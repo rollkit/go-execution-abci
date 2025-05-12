@@ -12,12 +12,6 @@ import (
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 )
 
-const (
-	// MaxQueryLength is the maximum length of a query string that will be
-	// accepted. This is done to mitigate potential DOS attacks.
-	maxQueryLength = 2048
-)
-
 // Subscribe for events via WebSocket.
 // More: https://docs.cometbft.com/v0.37/rpc/#/Websocket/subscribe
 func Subscribe(ctx *rpctypes.Context, query string) (*ctypes.ResultSubscribe, error) {

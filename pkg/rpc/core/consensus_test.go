@@ -20,8 +20,6 @@ import (
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
 )
 
-// newTestValidatorSet creates a simple validator set for testing.
-// Based on parts of stateFixture from adapter/store_test.go
 func newTestValidator() *cmttypes.Validator {
 	pk := ed25519.GenPrivKey().PubKey()
 	return &cmttypes.Validator{
@@ -268,7 +266,7 @@ func TestConsensusParams(t *testing.T) {
 		assert.Equal(int64(expectedHeight), result.BlockHeight)
 		assert.Equal(sampleProtoParams.Block.MaxBytes, result.ConsensusParams.Block.MaxBytes)
 		assert.Equal(sampleProtoParams.Block.MaxGas, result.ConsensusParams.Block.MaxGas)
-		// ... other asserts
+
 		mockStore.AssertExpectations(t)
 	})
 

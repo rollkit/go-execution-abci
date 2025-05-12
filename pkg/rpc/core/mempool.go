@@ -169,7 +169,7 @@ func BroadcastTxCommit(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultBro
 	case <-deliverTxSub.Canceled():
 		var reason string
 		if deliverTxSub.Err() == nil {
-			reason = "Tendermint exited"
+			reason = "BFT engine exited"
 		} else {
 			reason = deliverTxSub.Err().Error()
 		}

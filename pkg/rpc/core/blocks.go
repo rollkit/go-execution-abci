@@ -88,10 +88,10 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 	var heightValue uint64
 
 	switch {
-	// block tag = included
 	case heightPtr != nil && *heightPtr == -1:
-		panic("not implemented") // TODO: implement this, we dont have access to the block manager
-		// heightValue = env.Adapter.BlockManager.GetDAIncludedHeight()
+		// TODO: implement
+		// heightValue = p.adapter.store.GetDAIncludedHeight()
+		return nil, errors.New("DA included height not implemented")
 	default:
 		heightValue = normalizeHeight(heightPtr)
 	}

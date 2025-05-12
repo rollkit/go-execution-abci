@@ -13,7 +13,6 @@ import (
 )
 
 func TestBroadcastEvidence(t *testing.T) {
-	// Setup the environment (minimal, as BroadcastEvidence only uses env.Logger)
 	env = &Environment{Logger: cmtlog.NewNopLogger()}
 
 	// Create sample evidence (DuplicateVoteEvidence is a concrete type)
@@ -46,10 +45,6 @@ func TestBroadcastEvidence(t *testing.T) {
 		ValidatorPower:   10,
 		Timestamp:        time.Now(),
 	}
-
-	// For the hash to be consistent, ensure the evidence fields are set before calling Hash()
-	// In a real scenario, VoteA and VoteB would need to be properly signed by the validator.
-	// Here, we are just testing the passthrough nature.
 
 	result, err := BroadcastEvidence(nil, ev) // ctx is not used by the function
 

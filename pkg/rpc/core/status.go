@@ -113,7 +113,5 @@ func Status(ctx *rpctypes.Context) (*ctypes.ResultStatus, error) {
 		},
 	}
 
-	fmt.Println("result", result)
-
 	return result, nil
 }

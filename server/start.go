@@ -14,6 +14,10 @@ import (
 	cmtp2p "github.com/cometbft/cometbft/p2p"
 	pvm "github.com/cometbft/cometbft/privval"
 	"github.com/cometbft/cometbft/proxy"
+	"github.com/cometbft/cometbft/state/indexer"
+	"github.com/cometbft/cometbft/state/indexer/block"
+	"github.com/cometbft/cometbft/state/txindex"
+	cmttypes "github.com/cometbft/cometbft/types"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/server"
@@ -443,10 +447,22 @@ func setupNodeAndExecutor(
 	if err != nil {
 		return nil, nil, cleanupFn, err
 	}
+	eventBus, err := createAndStartEventBus(logger)
+	if err != nil {
+		return nil, nil, cleanupFn, fmt.Errorf("setup event-bus: %w", err)
+	}
+	executor.EventBus = eventBus
 
+	idxSvc, txIndexer, blockIndexer, err := createAndStartIndexerService(cfg, cmtGenDoc.ChainID, cmtcfg.DefaultDBProvider, eventBus, logger)
+	if err != nil {
+		return nil, nil, cleanupFn, fmt.Errorf("start indexer service: %w", err)
+	}
 	core.SetEnvironment(&core.Environment{
-		Logger:  servercmtlog.CometLoggerWrapper{Logger: logger},
-		Adapter: executor,
+		Adapter:      executor,
+		TxIndexer:    txIndexer,
+		BlockIndexer: blockIndexer,
+		Logger:       servercmtlog.CometLoggerWrapper{Logger: logger},
+		Config:       *cfg.RPC,
 	})
 
 	// Pass the created handler to the RPC server constructor
@@ -455,8 +471,57 @@ func setupNodeAndExecutor(
 	if err != nil {
 		return nil, nil, cleanupFn, fmt.Errorf("failed to start rpc server: %w", err)
 	}
-
+	cleanupFn = func() {
+		cancelFn()
+		_ = eventBus.Stop()
+		if idxSvc != nil {
+			_ = idxSvc.Stop()
+		}
+		_ = rpcServer.Stop()
+	}
 	return rolllkitNode, executor, cleanupFn, nil
+}
+
+func createAndStartEventBus(logger log.Logger) (*cmttypes.EventBus, error) {
+	eventBus := cmttypes.NewEventBus()
+	eventBus.SetLogger(servercmtlog.CometLoggerWrapper{Logger: logger}.With("module", "events"))
+	if err := eventBus.Start(); err != nil {
+		return nil, err
+	}
+	return eventBus, nil
+}
+
+func createAndStartIndexerService(
+	config *cmtcfg.Config,
+	chainID string,
+	dbProvider cmtcfg.DBProvider,
+	eventBus *cmttypes.EventBus,
+	logger log.Logger,
+) (*txindex.IndexerService, txindex.TxIndexer, indexer.BlockIndexer, error) {
+	var (
+		txIndexer    txindex.TxIndexer
+		blockIndexer indexer.BlockIndexer
+	)
+
+	txIndexer, blockIndexer, allIndexersDisabled, err := block.IndexerFromConfigWithDisabledIndexers(config, dbProvider, chainID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if allIndexersDisabled {
+		return nil, txIndexer, blockIndexer, nil
+	}
+
+	cmtLogger := servercmtlog.CometLoggerWrapper{Logger: logger}.With("module", "txindex")
+	txIndexer.SetLogger(cmtLogger)
+	blockIndexer.SetLogger(cmtLogger)
+
+	indexerService := txindex.NewIndexerService(txIndexer, blockIndexer, eventBus, false)
+	indexerService.SetLogger(cmtLogger)
+	if err := indexerService.Start(); err != nil {
+		return nil, nil, nil, err
+	}
+
+	return indexerService, txIndexer, blockIndexer, nil
 }
 
 // getGenDocProvider returns a function which returns the genesis doc from the genesis file.

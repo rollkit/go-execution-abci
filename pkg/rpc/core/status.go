@@ -92,7 +92,7 @@ func Status(ctx *rpctypes.Context) (*ctypes.ResultStatus, error) {
 			Moniker:         config.DefaultBaseConfig().Moniker,
 			Other: corep2p.DefaultNodeInfoOther{
 				TxIndex:    txIndexerStatus,
-				RPCAddress: env.Adapter.CometCfg.RPC.ListenAddress,
+				RPCAddress: env.Config.ListenAddress,
 			},
 		},
 		SyncInfo: ctypes.SyncInfo{

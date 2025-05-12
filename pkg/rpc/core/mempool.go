@@ -89,10 +89,27 @@ func BroadcastTxCommit(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultBro
 	// This code is a local client, so we can assume that subscriber is ""
 	subscriber := "" //ctx.RemoteAddr()
 
-	if env.Adapter.EventBus.NumClients() >= env.Adapter.CometCfg.RPC.MaxSubscriptionClients {
-		return nil, fmt.Errorf("max_subscription_clients %d reached", env.Adapter.CometCfg.RPC.MaxSubscriptionClients)
-	} else if env.Adapter.EventBus.NumClientSubscriptions(subscriber) >= env.Adapter.CometCfg.RPC.MaxSubscriptionsPerClient {
-		return nil, fmt.Errorf("max_subscriptions_per_client %d reached", env.Adapter.CometCfg.RPC.MaxSubscriptionsPerClient)
+	/*
+		if env.Adapter.EventBus.NumClients() >= env.Adapter.CometCfg.RPC.MaxSubscriptionClients {
+			return nil, fmt.Errorf("max_subscription_clients %d reached", env.Adapter.CometCfg.RPC.MaxSubscriptionClients)
+		} else if env.Adapter.EventBus.NumClientSubscriptions(subscriber) >= env.Adapter.CometCfg.RPC.MaxSubscriptionsPerClient {
+			return nil, fmt.Errorf("max_subscriptions_per_client %d reached", env.Adapter.CometCfg.RPC.MaxSubscriptionsPerClient)
+		}
+		if env.Adapter.EventBus == nil {
+			return nil, errors.New("event bus is not configured, cannot subscribe to events")
+		}
+	*/
+
+	// Use CometBFT config values directly if available
+	// TODO: Access these config values properly, perhaps via RpcProvider struct if needed
+	maxSubs := 100    // Placeholder
+	maxClients := 100 // Placeholder
+	// commitTimeout := env.Config.TimeoutBroadcastTxCommit // Assuming CometCfg is accessible
+
+	if env.Adapter.EventBus.NumClients() >= maxClients {
+		return nil, fmt.Errorf("max_subscription_clients %d reached", maxClients)
+	} else if env.Adapter.EventBus.NumClientSubscriptions(subscriber) >= maxSubs {
+		return nil, fmt.Errorf("max_subscriptions_per_client %d reached", maxSubs)
 	}
 
 	// Subscribe to tx being committed in block.
@@ -163,7 +180,7 @@ func BroadcastTxCommit(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultBro
 			TxResult: abci.ExecTxResult{},
 			Hash:     tx.Hash(),
 		}, err
-	case <-time.After(env.Adapter.CometCfg.RPC.TimeoutBroadcastTxCommit):
+	case <-time.After(subscribeTimeout):
 		err = errors.New("timed out waiting for tx to be included in a block")
 		env.Logger.Error("Error on broadcastTxCommit", "err", err)
 		return &ctypes.ResultBroadcastTxCommit{

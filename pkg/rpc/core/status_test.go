@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cometbft/cometbft/config"
 	cmbytes "github.com/cometbft/cometbft/libs/bytes"
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
@@ -61,7 +60,6 @@ func TestStatus(t *testing.T) {
 				Validators: genesisValidators,
 			},
 		},
-		CometCfg:  config.DefaultConfig(),
 		P2PClient: mockP2P,
 	}
 	// Set the global env (required by Status function)

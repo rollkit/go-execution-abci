@@ -66,7 +66,7 @@ func Status(ctx *rpctypes.Context) (*ctypes.ResultStatus, error) {
 	}
 	defaultProtocolVersion := corep2p.NewProtocolVersion(
 		version.P2PProtocol,
-		state.Version.Block,
+		version.BlockProtocol,
 		state.Version.App,
 	)
 	id, addr, network, err := env.Adapter.P2PClient.Info()

@@ -9,16 +9,16 @@ import (
 	"github.com/cometbft/cometbft/state/indexer"
 	"github.com/cometbft/cometbft/state/txindex"
 	cmttypes "github.com/cometbft/cometbft/types"
+	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	ma "github.com/multiformats/go-multiaddr"
-	"github.com/rollkit/go-execution-abci/pkg/adapter"
 	rlkp2p "github.com/rollkit/rollkit/pkg/p2p"
-	"github.com/stretchr/testify/mock"
-
-	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	rstore "github.com/rollkit/rollkit/pkg/store"
 	"github.com/rollkit/rollkit/types"
+	"github.com/stretchr/testify/mock"
+
+	"github.com/rollkit/go-execution-abci/pkg/adapter"
 )
 
 var _ txindex.TxIndexer = (*MockTxIndexer)(nil)

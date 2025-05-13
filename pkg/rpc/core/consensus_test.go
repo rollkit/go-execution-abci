@@ -16,7 +16,6 @@ import (
 	testifyassert "github.com/stretchr/testify/assert"
 	testifymock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	testifyrequire "github.com/stretchr/testify/require"
 
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
 )
@@ -131,7 +130,7 @@ func setupTestConsensusParamsEnv(t *testing.T, useMockRollkitStore bool, stateTo
 
 func TestValidators(t *testing.T) {
 	assert := testifyassert.New(t)
-	require := testifyrequire.New(t)
+	require := require.New(t)
 	ctx := newTestRPCContext()
 
 	t.Run("Success_OneValidator_LatestHeight", func(t *testing.T) {
@@ -208,7 +207,7 @@ func TestValidators(t *testing.T) {
 
 func TestDumpConsensusState(t *testing.T) {
 	assert := testifyassert.New(t)
-	require := testifyrequire.New(t)
+	require := require.New(t)
 	ctx := newTestRPCContext()
 
 	result, err := DumpConsensusState(ctx)
@@ -220,7 +219,7 @@ func TestDumpConsensusState(t *testing.T) {
 
 func TestConsensusState(t *testing.T) {
 	assert := testifyassert.New(t)
-	require := testifyrequire.New(t)
+	require := require.New(t)
 	ctx := newTestRPCContext()
 
 	result, err := ConsensusState(ctx)
@@ -232,7 +231,7 @@ func TestConsensusState(t *testing.T) {
 
 func TestConsensusParams(t *testing.T) {
 	assert := testifyassert.New(t)
-	require := testifyrequire.New(t)
+	require := require.New(t)
 	ctx := newTestRPCContext()
 
 	// sampleProtoParams and mockStateWithConsensusParams moved to package level vars (testProtoConsensusParams, testMockStateWithConsensusParams)

@@ -146,7 +146,15 @@ func BroadcastTxCommit(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultBro
 		env.Logger.Error("Error on broadcastTxCommit", "err", err)
 		return nil, fmt.Errorf("error on broadcastTxCommit: %w", err)
 	}
-	checkTxRes := <-checkTxResCh
+	var checkTxRes *abci.ResponseCheckTx
+	select {
+	case res := <-checkTxResCh:
+		checkTxRes = res
+	case <-unwrappedCtx.Done():
+		env.Logger.Error("Context finished while waiting for CheckTx result in BroadcastTxCommit", "err", unwrappedCtx.Err())
+		return nil, fmt.Errorf("context finished while waiting for CheckTx result: %w", unwrappedCtx.Err())
+	}
+
 	if checkTxRes.Code != abci.CodeTypeOK {
 		return &ctypes.ResultBroadcastTxCommit{
 			CheckTx:  *checkTxRes,

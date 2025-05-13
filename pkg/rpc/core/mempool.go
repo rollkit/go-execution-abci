@@ -166,8 +166,6 @@ func BroadcastTxCommit(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultBro
 	// broadcast tx
 	err = env.Adapter.TxGossiper.Publish(unwrappedCtx, tx)
 	if err != nil {
-		// remove tx from mempool if broadcast fails
-		_ = env.Adapter.Mempool.RemoveTxByKey(tx.Key())
 		return nil, fmt.Errorf("tx added to local mempool but failure to broadcast: %w", err)
 	}
 
@@ -197,6 +195,15 @@ func BroadcastTxCommit(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultBro
 		}, err
 	case <-time.After(subscribeTimeout):
 		err = errors.New("timed out waiting for tx to be included in a block")
+		env.Logger.Error("Error on broadcastTxCommit", "err", err)
+		return &ctypes.ResultBroadcastTxCommit{
+			CheckTx:  *checkTxRes,
+			TxResult: abci.ExecTxResult{},
+			Hash:     tx.Hash(),
+		}, err
+	case <-unwrappedCtx.Done():
+		// Parent context cancelled
+		err = fmt.Errorf("context cancelled while waiting for tx commit event: %w", unwrappedCtx.Err())
 		env.Logger.Error("Error on broadcastTxCommit", "err", err)
 		return &ctypes.ResultBroadcastTxCommit{
 			CheckTx:  *checkTxRes,

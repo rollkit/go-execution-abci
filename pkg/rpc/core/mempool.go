@@ -166,6 +166,8 @@ func BroadcastTxCommit(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultBro
 	// broadcast tx
 	err = env.Adapter.TxGossiper.Publish(unwrappedCtx, tx)
 	if err != nil {
+		// remove tx from mempool if broadcast fails
+		_ = env.Adapter.Mempool.RemoveTxByKey(tx.Key())
 		return nil, fmt.Errorf("tx added to local mempool but failure to broadcast: %w", err)
 	}
 

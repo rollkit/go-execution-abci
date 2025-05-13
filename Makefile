@@ -46,6 +46,12 @@ fmt:
 	@markdownlint --config .markdownlint.yaml '**/*.md' -f
 .PHONY: fmt
 
+## gci: Format Go imports
+gci:
+	@echo "--> Formatting Go imports"
+	@gci write --section standard --section default --section "prefix(github.com/rollkit/go-execution-abci)" --section "prefix(github.com/rollkit)" .
+.PHONY: gci
+
 ## vet: Run go vet
 vet: 
 	@echo "--> Running go vet"

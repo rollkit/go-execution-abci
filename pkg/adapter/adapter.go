@@ -17,6 +17,9 @@ import (
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	ds "github.com/ipfs/go-datastore"
 	kt "github.com/ipfs/go-datastore/keytransform"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	host "github.com/libp2p/go-libp2p/core/host"
+	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/rollkit/rollkit/core/execution"
 	rollnode "github.com/rollkit/rollkit/node"
@@ -27,6 +30,14 @@ import (
 )
 
 var _ execution.Executor = &Adapter{}
+
+type P2PClientInfo interface {
+	Info() (string, string, string, error)
+	Host() host.Host
+	PubSub() *pubsub.PubSub
+	Addrs() []ma.Multiaddr
+	Peers() []rollkitp2p.PeerConnection
+}
 
 // LoadGenesisDoc returns the genesis document from the provided config file.
 func LoadGenesisDoc(cfg *config.Config) (*cmttypes.GenesisDoc, error) {
@@ -46,7 +57,7 @@ type Adapter struct {
 	Mempool      mempool.Mempool
 	MempoolIDs   *mempoolIDs
 
-	P2PClient  *rollkitp2p.Client
+	P2PClient  P2PClientInfo
 	TxGossiper *p2p.Gossiper
 	p2pMetrics *rollkitp2p.Metrics
 

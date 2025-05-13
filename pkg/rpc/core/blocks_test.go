@@ -4,8 +4,7 @@ import (
 	"testing"
 	"time"
 
-	abci "github.com/cometbft/cometbft/abci/types"
-	cmtlog "github.com/cometbft/cometbft/libs/log"
+	cmtlog "github.com/cometbft/cometbft/libs/log" // Added import
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -23,13 +22,15 @@ func TestBlockSearch_Success(t *testing.T) {
 	mockTxIndexer := new(MockTxIndexer)
 	mockRollkitStore := new(MockRollkitStore)
 	mockApp := new(MockApp)
+	mockBlockIndexer := new(MockBlockIndexer)
 	env = &Environment{
 		Adapter: &adapter.Adapter{
 			RollkitStore: mockRollkitStore,
 			App:          mockApp,
 		},
-		TxIndexer: mockTxIndexer,
-		Logger:    cmtlog.NewNopLogger(),
+		TxIndexer:    mockTxIndexer,
+		BlockIndexer: mockBlockIndexer,
+		Logger:       cmtlog.NewNopLogger(),
 	}
 
 	ctx := newTestRPCContext()
@@ -38,11 +39,9 @@ func TestBlockSearch_Success(t *testing.T) {
 	perPage := 10
 	orderBy := "asc"
 
-	txResult1 := &abci.TxResult{Height: 2, Index: 0}
-	txResult2 := &abci.TxResult{Height: 3, Index: 0}
-	mockedSearchResults := []*abci.TxResult{txResult1, txResult2}
+	mockedBlockHeights := []int64{2, 3}
 
-	mockTxIndexer.On("Search", mock.Anything, mock.AnythingOfType("*query.Query")).Return(mockedSearchResults, nil)
+	mockBlockIndexer.On("Search", mock.Anything, mock.AnythingOfType("*query.Query")).Return(mockedBlockHeights, nil)
 
 	header1 := &types.SignedHeader{
 		Header: types.Header{
@@ -84,6 +83,7 @@ func TestBlockSearch_Success(t *testing.T) {
 	assert.Equal(t, []byte(header2.Header.ProposerAddress), []byte(result.Blocks[1].Block.Header.ProposerAddress))
 
 	mockTxIndexer.AssertExpectations(t)
+	mockBlockIndexer.AssertExpectations(t)
 	mockRollkitStore.AssertExpectations(t)
 	mockApp.AssertExpectations(t)
 }

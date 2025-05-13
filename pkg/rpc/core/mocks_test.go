@@ -6,7 +6,9 @@ import (
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 	cmquery "github.com/cometbft/cometbft/libs/pubsub/query"
+	"github.com/cometbft/cometbft/state/indexer"
 	"github.com/cometbft/cometbft/state/txindex"
+	cmttypes "github.com/cometbft/cometbft/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	ma "github.com/multiformats/go-multiaddr"
@@ -23,6 +25,7 @@ var _ txindex.TxIndexer = (*MockTxIndexer)(nil)
 var _ rstore.Store = (*MockRollkitStore)(nil)
 var _ servertypes.ABCI = (*MockApp)(nil)
 var _ adapter.P2PClientInfo = (*MockP2PClient)(nil)
+var _ indexer.BlockIndexer = (*MockBlockIndexer)(nil)
 
 // MockTxIndexer is a mock for txindex.TxIndexer
 type MockTxIndexer struct {
@@ -57,6 +60,52 @@ func (m *MockTxIndexer) Search(ctx context.Context, query *cmquery.Query) ([]*ab
 
 func (m *MockTxIndexer) SetLogger(logger cmtlog.Logger) {
 	m.Called(logger)
+}
+
+// MockBlockIndexer is a mock for indexer.BlockIndexer
+type MockBlockIndexer struct {
+	mock.Mock
+}
+
+// Has implements indexer.BlockIndexer.
+func (m *MockBlockIndexer) Has(height int64) (bool, error) {
+	args := m.Called(height)
+	return args.Bool(0), args.Error(1)
+}
+
+// Index implements indexer.BlockIndexer.
+func (m *MockBlockIndexer) Index(events cmttypes.EventDataNewBlockEvents) error {
+	args := m.Called(events)
+	return args.Error(0)
+}
+
+// Search implements indexer.BlockIndexer.
+func (m *MockBlockIndexer) Search(ctx context.Context, q *cmquery.Query) ([]int64, error) {
+	args := m.Called(ctx, q)
+	return args.Get(0).([]int64), args.Error(1)
+}
+
+// SetLogger implements indexer.BlockIndexer.
+func (m *MockBlockIndexer) SetLogger(l cmtlog.Logger) {
+	m.Called(l)
+}
+
+// Prune implements indexer.BlockIndexer.
+func (m *MockBlockIndexer) Prune(retainHeight int64) (int64, int64, error) {
+	args := m.Called(retainHeight)
+	return args.Get(0).(int64), args.Get(1).(int64), args.Error(2)
+}
+
+// SetRetainHeight implements indexer.BlockIndexer.
+func (m *MockBlockIndexer) SetRetainHeight(retainHeight int64) error {
+	args := m.Called(retainHeight)
+	return args.Error(0)
+}
+
+// GetRetainHeight implements indexer.BlockIndexer.
+func (m *MockBlockIndexer) GetRetainHeight() (int64, error) {
+	args := m.Called()
+	return args.Get(0).(int64), args.Error(1)
 }
 
 // MockRollkitStore is a mock for rstore.Store

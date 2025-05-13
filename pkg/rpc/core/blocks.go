@@ -28,7 +28,7 @@ func BlockSearch(
 		return nil, err
 	}
 
-	results, err := env.TxIndexer.Search(wrappedCtx, q)
+	results, err := env.BlockIndexer.Search(wrappedCtx, q)
 	if err != nil {
 		return nil, err
 	}
@@ -37,12 +37,12 @@ func BlockSearch(
 	switch orderBy {
 	case "desc":
 		sort.Slice(results, func(i, j int) bool {
-			return results[i].Height > results[j].Height
+			return results[i] > results[j]
 		})
 
 	case "asc", "":
 		sort.Slice(results, func(i, j int) bool {
-			return results[i].Height < results[j].Height
+			return results[i] < results[j]
 		})
 	default:
 		return nil, errors.New("expected order_by to be either `asc` or `desc` or empty")
@@ -62,7 +62,7 @@ func BlockSearch(
 
 	blocks := make([]*ctypes.ResultBlock, 0, pageSize)
 	for i := skipCount; i < skipCount+pageSize; i++ {
-		header, data, err := env.Adapter.RollkitStore.GetBlockData(wrappedCtx, uint64(results[i].Height))
+		header, data, err := env.Adapter.RollkitStore.GetBlockData(wrappedCtx, uint64(results[i]))
 		if err != nil {
 			return nil, err
 		}

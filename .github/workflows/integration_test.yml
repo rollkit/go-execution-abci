@@ -148,7 +148,7 @@ jobs:
 
           sleep 3
 
-          # query the transaction (TODO: uncomment after tx indexer is fixed)
+          # query the transaction
           TX_RESULT=$(gmd query tx $TX_HASH --output json)
           TX_CODE=$(echo $TX_RESULT | jq -r '.code')
           if [ "$TX_CODE" != "0" ]; then

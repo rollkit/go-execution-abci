@@ -32,6 +32,7 @@ func BroadcastTxAsync(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultBroa
 	// gossipTx optimistically
 	err = env.Adapter.TxGossiper.Publish(unwrappedCtx, tx)
 	if err != nil {
+		_ = env.Adapter.Mempool.RemoveTxByKey(tx.Key())
 		return nil, fmt.Errorf("tx added to local mempool but failed to gossip: %w", err)
 	}
 	return &ctypes.ResultBroadcastTx{Hash: tx.Hash()}, nil

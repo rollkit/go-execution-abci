@@ -14,11 +14,40 @@ import (
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	testifyassert "github.com/stretchr/testify/assert"
 	testifymock "github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	testifyrequire "github.com/stretchr/testify/require"
 
 	ds "github.com/ipfs/go-datastore"
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
 )
+
+var (
+	testSamplePubKey     = ed25519.GenPrivKey().PubKey()
+	testSampleAddress    = testSamplePubKey.Address()
+	testGenesisValidator = cmttypes.GenesisValidator{
+		Address: testSampleAddress,
+		PubKey:  testSamplePubKey,
+		Power:   1,
+		Name:    "genesis-validator",
+	}
+	testSampleConsensusParams = &cmttypes.ConsensusParams{
+		Block: cmttypes.BlockParams{MaxBytes: 10, MaxGas: 100},
+	}
+
+	testProtoConsensusParams = cmtproto.ConsensusParams{
+		Block:     &cmtproto.BlockParams{MaxBytes: 1024, MaxGas: 200000},
+		Evidence:  &cmtproto.EvidenceParams{MaxAgeNumBlocks: 1000, MaxAgeDuration: time.Hour, MaxBytes: 512},
+		Validator: &cmtproto.ValidatorParams{PubKeyTypes: []string{"ed25519"}},
+		Version:   &cmtproto.VersionParams{App: 1},
+	}
+	testMockStateWithConsensusParams cmtstate.State
+)
+
+func init() {
+	testMockStateWithConsensusParams = newValidState()
+	testMockStateWithConsensusParams.ConsensusParams = cmttypes.ConsensusParamsFromProto(testProtoConsensusParams)
+	testMockStateWithConsensusParams.LastHeightConsensusParamsChanged = testMockStateWithConsensusParams.InitialHeight
+}
 
 func newTestValidator() *cmttypes.Validator {
 	pk := ed25519.GenPrivKey().PubKey()
@@ -33,7 +62,7 @@ func newTestValidator() *cmttypes.Validator {
 func newValidState() cmtstate.State {
 	val := newTestValidator()
 	valSet := cmttypes.NewValidatorSet([]*cmttypes.Validator{val})
-	valSet.Proposer = val // Ensure proposer is set
+	valSet.Proposer = val
 
 	sampleHash1 := make([]byte, 32)
 	for i := range sampleHash1 {
@@ -41,7 +70,7 @@ func newValidState() cmtstate.State {
 	}
 	sampleHash2 := make([]byte, 32)
 	for i := range sampleHash2 {
-		sampleHash2[i] = byte(i + 100) // Make it different from sampleHash1
+		sampleHash2[i] = byte(i + 100)
 	}
 
 	return cmtstate.State{
@@ -57,37 +86,56 @@ func newValidState() cmtstate.State {
 	}
 }
 
+// setupTestValidatorsEnv helper for TestValidators
+func setupTestValidatorsEnv(t *testing.T, gvs []cmttypes.GenesisValidator, consensusParams *cmttypes.ConsensusParams) *MockRollkitStore {
+	mockStore := new(MockRollkitStore)
+	adapterInstance := &adapter.Adapter{
+		RollkitStore: mockStore,
+		AppGenesis: &genutiltypes.AppGenesis{
+			Consensus: &genutiltypes.ConsensusGenesis{
+				Validators: gvs,
+				Params:     consensusParams,
+			},
+		},
+	}
+	env = &Environment{Adapter: adapterInstance, Logger: cmtlog.NewNopLogger()}
+	return mockStore
+}
+
+// setupTestConsensusParamsEnv helper for TestConsensusParams
+// Returns the mockRollkitStore (if created), the adapter instance, and the abciStore.
+func setupTestConsensusParamsEnv(t *testing.T, useMockRollkitStore bool, stateToSave *cmtstate.State) (*MockRollkitStore, *adapter.Store) {
+	var mockRollkitStore *MockRollkitStore
+	if useMockRollkitStore {
+		mockRollkitStore = new(MockRollkitStore)
+	}
+
+	dsStore := ds.NewMapDatastore()
+	abciStore := adapter.NewStore(dsStore)
+
+	if stateToSave != nil {
+		err := abciStore.SaveState(context.Background(), stateToSave)
+		require.NoError(t, err)
+	}
+
+	adapterInstance := &adapter.Adapter{
+		Store: abciStore,
+	}
+	if useMockRollkitStore {
+		adapterInstance.RollkitStore = mockRollkitStore
+	}
+
+	env = &Environment{Adapter: adapterInstance, Logger: cmtlog.NewNopLogger()}
+	return mockRollkitStore, abciStore
+}
+
 func TestValidators(t *testing.T) {
 	assert := testifyassert.New(t)
 	require := testifyrequire.New(t)
-	ctx := newTestRPCContext() // From mocks_test.go
-
-	samplePubKey := ed25519.GenPrivKey().PubKey()
-	sampleAddress := samplePubKey.Address()
-
-	genesisValidator := cmttypes.GenesisValidator{
-		Address: sampleAddress,
-		PubKey:  samplePubKey,
-		Power:   1,
-		Name:    "genesis-validator",
-	}
-
-	sampleConsensusParams := &cmttypes.ConsensusParams{
-		Block: cmttypes.BlockParams{MaxBytes: 10, MaxGas: 100},
-	}
+	ctx := newTestRPCContext()
 
 	t.Run("Success_OneValidator_LatestHeight", func(t *testing.T) {
-		mockStore := new(MockRollkitStore)
-		adapterInstance := &adapter.Adapter{
-			RollkitStore: mockStore,
-			AppGenesis: &genutiltypes.AppGenesis{
-				Consensus: &genutiltypes.ConsensusGenesis{
-					Validators: []cmttypes.GenesisValidator{genesisValidator},
-					Params:     sampleConsensusParams,
-				},
-			},
-		}
-		env = &Environment{Adapter: adapterInstance, Logger: cmtlog.NewNopLogger()}
+		mockStore := setupTestValidatorsEnv(t, []cmttypes.GenesisValidator{testGenesisValidator}, testSampleConsensusParams)
 
 		expectedHeight := uint64(100)
 		mockStore.On("Height", testifymock.Anything).Return(expectedHeight, nil).Once()
@@ -99,25 +147,15 @@ func TestValidators(t *testing.T) {
 		assert.Len(result.Validators, 1)
 		assert.Equal(1, result.Count)
 		assert.Equal(1, result.Total)
-		assert.Equal(sampleAddress, result.Validators[0].Address)
-		assert.Equal(samplePubKey, result.Validators[0].PubKey)
+		assert.Equal(testSampleAddress, result.Validators[0].Address)
+		assert.Equal(testSamplePubKey, result.Validators[0].PubKey)
 		assert.Equal(int64(1), result.Validators[0].VotingPower)
 		assert.Equal(int64(1), result.Validators[0].ProposerPriority)
 		mockStore.AssertExpectations(t)
 	})
 
 	t.Run("Success_OneValidator_SpecificHeight", func(t *testing.T) {
-		mockStore := new(MockRollkitStore)
-		adapterInstance := &adapter.Adapter{
-			RollkitStore: mockStore,
-			AppGenesis: &genutiltypes.AppGenesis{
-				Consensus: &genutiltypes.ConsensusGenesis{
-					Validators: []cmttypes.GenesisValidator{genesisValidator},
-					Params:     sampleConsensusParams,
-				},
-			},
-		}
-		env = &Environment{Adapter: adapterInstance, Logger: cmtlog.NewNopLogger()}
+		_ = setupTestValidatorsEnv(t, []cmttypes.GenesisValidator{testGenesisValidator}, testSampleConsensusParams) // mockStore not used directly here for Height mock
 		specificHeight := int64(50)
 
 		result, err := Validators(ctx, &specificHeight, nil, nil)
@@ -127,25 +165,14 @@ func TestValidators(t *testing.T) {
 		assert.Len(result.Validators, 1)
 		assert.Equal(1, result.Count)
 		assert.Equal(1, result.Total)
-		assert.Equal(sampleAddress, result.Validators[0].Address)
-		assert.Equal(samplePubKey, result.Validators[0].PubKey)
+		assert.Equal(testSampleAddress, result.Validators[0].Address)
+		assert.Equal(testSamplePubKey, result.Validators[0].PubKey)
 		assert.Equal(int64(1), result.Validators[0].VotingPower)
 		assert.Equal(int64(1), result.Validators[0].ProposerPriority)
 	})
 
 	t.Run("Error_NoValidators", func(t *testing.T) {
-		mockStore := new(MockRollkitStore)
-		adapterInstance := &adapter.Adapter{
-			RollkitStore: mockStore,
-			AppGenesis: &genutiltypes.AppGenesis{
-				Consensus: &genutiltypes.ConsensusGenesis{
-					Validators: []cmttypes.GenesisValidator{},
-					Params:     sampleConsensusParams,
-				},
-			},
-		}
-		env = &Environment{Adapter: adapterInstance, Logger: cmtlog.NewNopLogger()}
-
+		mockStore := setupTestValidatorsEnv(t, []cmttypes.GenesisValidator{}, testSampleConsensusParams)
 		mockStore.On("Height", testifymock.Anything).Return(uint64(0), nil).Maybe()
 
 		result, err := Validators(ctx, nil, nil, nil)
@@ -156,18 +183,7 @@ func TestValidators(t *testing.T) {
 	})
 
 	t.Run("Error_TooManyValidators", func(t *testing.T) {
-		mockStore := new(MockRollkitStore)
-		adapterInstance := &adapter.Adapter{
-			RollkitStore: mockStore,
-			AppGenesis: &genutiltypes.AppGenesis{
-				Consensus: &genutiltypes.ConsensusGenesis{
-					Validators: []cmttypes.GenesisValidator{genesisValidator, genesisValidator},
-					Params:     sampleConsensusParams,
-				},
-			},
-		}
-		env = &Environment{Adapter: adapterInstance, Logger: cmtlog.NewNopLogger()}
-
+		mockStore := setupTestValidatorsEnv(t, []cmttypes.GenesisValidator{testGenesisValidator, testGenesisValidator}, testSampleConsensusParams)
 		mockStore.On("Height", testifymock.Anything).Return(uint64(0), nil).Maybe()
 
 		result, err := Validators(ctx, nil, nil, nil)
@@ -178,24 +194,14 @@ func TestValidators(t *testing.T) {
 	})
 
 	t.Run("Success_HeightNormalizationReturnsZeroOnError", func(t *testing.T) {
-		mockStore := new(MockRollkitStore)
-		adapterInstance := &adapter.Adapter{
-			RollkitStore: mockStore,
-			AppGenesis: &genutiltypes.AppGenesis{
-				Consensus: &genutiltypes.ConsensusGenesis{
-					Validators: []cmttypes.GenesisValidator{genesisValidator},
-					Params:     sampleConsensusParams,
-				},
-			},
-		}
-		env = &Environment{Adapter: adapterInstance, Logger: cmtlog.NewNopLogger()}
-
+		mockStore := setupTestValidatorsEnv(t, []cmttypes.GenesisValidator{testGenesisValidator}, testSampleConsensusParams)
 		mockStore.On("Height", testifymock.Anything).Return(uint64(0), errors.New("failed to get height")).Once()
 
 		result, err := Validators(ctx, nil, nil, nil)
 		require.NoError(err)
 		require.NotNil(result)
-		assert.Equal(int64(0), result.BlockHeight)
+		assert.Equal(int64(0), result.BlockHeight) // Asserting BlockHeight is 0 as per test name
+		assert.Len(result.Validators, 1)           // Still expect validator details
 		mockStore.AssertExpectations(t)
 	})
 }
@@ -229,84 +235,50 @@ func TestConsensusParams(t *testing.T) {
 	require := testifyrequire.New(t)
 	ctx := newTestRPCContext()
 
-	sampleProtoParams := cmtproto.ConsensusParams{
-		Block: &cmtproto.BlockParams{MaxBytes: 1024, MaxGas: 200000},
-		Evidence: &cmtproto.EvidenceParams{
-			MaxAgeNumBlocks: 1000, MaxAgeDuration: time.Hour, MaxBytes: 512,
-		},
-		Validator: &cmtproto.ValidatorParams{PubKeyTypes: []string{"ed25519"}},
-		Version:   &cmtproto.VersionParams{App: 1},
-	}
-
-	mockStateWithConsensusParams := newValidState()
-	mockStateWithConsensusParams.ConsensusParams = cmttypes.ConsensusParamsFromProto(sampleProtoParams)
-	mockStateWithConsensusParams.LastHeightConsensusParamsChanged = mockStateWithConsensusParams.InitialHeight
+	// sampleProtoParams and mockStateWithConsensusParams moved to package level vars (testProtoConsensusParams, testMockStateWithConsensusParams)
 
 	t.Run("Success_LatestHeight", func(t *testing.T) {
-		mockStore := new(MockRollkitStore)
-		dsStore := ds.NewMapDatastore()
-		abciStore := adapter.NewStore(dsStore)
-
-		adapterInstance := &adapter.Adapter{
-			RollkitStore: mockStore,
-			Store:        abciStore,
-		}
-		env = &Environment{Adapter: adapterInstance, Logger: cmtlog.NewNopLogger()}
+		mockRollkitStore, _ := setupTestConsensusParamsEnv(t, true, &testMockStateWithConsensusParams)
 
 		expectedHeight := uint64(120)
-		mockStore.On("Height", testifymock.Anything).Return(expectedHeight, nil).Once()
-
-		err := abciStore.SaveState(context.Background(), &mockStateWithConsensusParams)
-		require.NoError(err)
+		mockRollkitStore.On("Height", testifymock.Anything).Return(expectedHeight, nil).Once()
 
 		result, err := ConsensusParams(ctx, nil)
 		require.NoError(err)
 		require.NotNil(result)
 
 		assert.Equal(int64(expectedHeight), result.BlockHeight)
-		assert.Equal(sampleProtoParams.Block.MaxBytes, result.ConsensusParams.Block.MaxBytes)
-		assert.Equal(sampleProtoParams.Block.MaxGas, result.ConsensusParams.Block.MaxGas)
+		assert.Equal(testProtoConsensusParams.Block.MaxBytes, result.ConsensusParams.Block.MaxBytes)
+		assert.Equal(testProtoConsensusParams.Block.MaxGas, result.ConsensusParams.Block.MaxGas)
 
-		mockStore.AssertExpectations(t)
+		mockRollkitStore.AssertExpectations(t)
 	})
 
 	t.Run("Success_SpecificHeight", func(t *testing.T) {
-		dsStore := ds.NewMapDatastore()
-		abciStore := adapter.NewStore(dsStore)
-
-		adapterInstance := &adapter.Adapter{
-			Store: abciStore,
-		}
-		env = &Environment{Adapter: adapterInstance, Logger: cmtlog.NewNopLogger()}
-
+		_, _ = setupTestConsensusParamsEnv(t, false, &testMockStateWithConsensusParams) // mockRollkitStore not needed
 		specificHeight := int64(60)
-		err := abciStore.SaveState(context.Background(), &mockStateWithConsensusParams)
-		require.NoError(err)
+		// err := abciStore.SaveState(context.Background(), &testMockStateWithConsensusParams) // Moved to helper
+		// require.NoError(err) // Moved to helper
 
 		result, err := ConsensusParams(ctx, &specificHeight)
 		require.NoError(err)
 		require.NotNil(result)
 		assert.Equal(specificHeight, result.BlockHeight)
-		assert.Equal(sampleProtoParams.Block.MaxBytes, result.ConsensusParams.Block.MaxBytes)
+		assert.Equal(testProtoConsensusParams.Block.MaxBytes, result.ConsensusParams.Block.MaxBytes)
 	})
 
 	t.Run("Error_LoadStateFails", func(t *testing.T) {
-		mockRollkitStore := new(MockRollkitStore)
-		dsStore := ds.NewMapDatastore()
-		abciStore := adapter.NewStore(dsStore)
-
-		adapterInstance := &adapter.Adapter{
-			RollkitStore: mockRollkitStore,
-			Store:        abciStore,
-		}
-		env = &Environment{Adapter: adapterInstance, Logger: cmtlog.NewNopLogger()}
-
+		mockRollkitStore, _ := setupTestConsensusParamsEnv(t, true, nil) // Don't save state to force load failure
 		mockRollkitStore.On("Height", testifymock.Anything).Return(uint64(100), nil).Maybe()
 
 		result, err := ConsensusParams(ctx, nil)
 
 		require.Error(err)
 		assert.Nil(result)
+		// The original test checked: assert.ErrorContains(err, "failed to get state metadata")
+		// and require.True(errors.Is(err, ds.ErrNotFound), "error should wrap ds.ErrNotFound")
+		// The error message check is kept from original if LoadState returns a clear error.
+		// If LoadState wraps ds.ErrNotFound, then errors.Is(err, ds.ErrNotFound) would be more precise.
 		assert.ErrorContains(err, "failed to get state metadata")
 		require.True(errors.Is(err, ds.ErrNotFound), "error should wrap ds.ErrNotFound")
 
@@ -314,25 +286,17 @@ func TestConsensusParams(t *testing.T) {
 	})
 
 	t.Run("Success_HeightNormalizationReturnsZeroOnError", func(t *testing.T) {
-		mockRollkitStore := new(MockRollkitStore)
-		dsStore := ds.NewMapDatastore()
-		abciStore := adapter.NewStore(dsStore)
-		adapterInstance := &adapter.Adapter{
-			RollkitStore: mockRollkitStore,
-			Store:        abciStore,
-		}
-		env = &Environment{Adapter: adapterInstance, Logger: cmtlog.NewNopLogger()}
-
+		mockRollkitStore, _ := setupTestConsensusParamsEnv(t, true, &testMockStateWithConsensusParams)
 		mockRollkitStore.On("Height", testifymock.Anything).Return(uint64(0), errors.New("failed to get height")).Once()
 
-		err := abciStore.SaveState(context.Background(), &mockStateWithConsensusParams)
-		require.NoError(err)
+		// err := abciStore.SaveState(context.Background(), &testMockStateWithConsensusParams) // Moved to helper
+		// require.NoError(err) // Moved to helper
 
 		result, err := ConsensusParams(ctx, nil)
 		require.NoError(err)
 		require.NotNil(result)
 		assert.Equal(int64(0), result.BlockHeight)
-		assert.Equal(sampleProtoParams.Block.MaxBytes, result.ConsensusParams.Block.MaxBytes)
+		assert.Equal(testProtoConsensusParams.Block.MaxBytes, result.ConsensusParams.Block.MaxBytes)
 		mockRollkitStore.AssertExpectations(t)
 	})
 }

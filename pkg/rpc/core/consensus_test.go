@@ -12,12 +12,12 @@ import (
 	cmtstate "github.com/cometbft/cometbft/state"
 	cmttypes "github.com/cometbft/cometbft/types"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
+	ds "github.com/ipfs/go-datastore"
 	testifyassert "github.com/stretchr/testify/assert"
 	testifymock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	testifyrequire "github.com/stretchr/testify/require"
 
-	ds "github.com/ipfs/go-datastore"
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
 )
 

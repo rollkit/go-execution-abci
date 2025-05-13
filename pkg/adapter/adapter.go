@@ -17,15 +17,14 @@ import (
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	ds "github.com/ipfs/go-datastore"
 	kt "github.com/ipfs/go-datastore/keytransform"
-	rollnode "github.com/rollkit/rollkit/node"
-
-	"github.com/rollkit/rollkit/core/execution"
-	rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
-	rstore "github.com/rollkit/rollkit/pkg/store"
-
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	host "github.com/libp2p/go-libp2p/core/host"
 	ma "github.com/multiformats/go-multiaddr"
+	"github.com/rollkit/rollkit/core/execution"
+	rollnode "github.com/rollkit/rollkit/node"
+	rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
+	rstore "github.com/rollkit/rollkit/pkg/store"
+
 	"github.com/rollkit/go-execution-abci/pkg/p2p"
 )
 

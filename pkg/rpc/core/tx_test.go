@@ -2,7 +2,6 @@ package core
 
 import (
 	"errors"
-	"fmt"
 	"testing"
 
 	abci "github.com/cometbft/cometbft/abci/types"
@@ -263,66 +262,4 @@ func TestTxSearch(t *testing.T) {
 
 	// TODO: Add test case for prove = true once the proof logic is implemented
 	// t.Run("Success_WithProof", func(t *testing.T) { ... })
-}
-
-// Helper functions for pagination validation (copied from cometbft/rpc/core/tx.go as they are not exported)
-// Consider moving these to a shared test utility if used frequently.
-const (
-	defaultPerPage_test = 30
-	maxPerPage_test     = 100
-)
-
-func validatePerPage_test(perPagePtr *int) int {
-	if perPagePtr == nil {
-		return defaultPerPage_test
-	}
-
-	perPage := *perPagePtr
-	if perPage < 1 {
-		return defaultPerPage_test
-	} else if perPage > maxPerPage_test {
-		return maxPerPage_test
-	}
-	return perPage
-}
-
-func validatePage_test(pagePtr *int, perPage, totalCount int) (int, error) {
-	if perPage < 1 {
-		panic(fmt.Sprintf("zero or negative perPage: %d", perPage))
-	}
-
-	if pagePtr == nil { // no page specified
-		return 1, nil
-	}
-
-	page := *pagePtr
-	if page < 1 {
-		return 1, fmt.Errorf("page must be greater than 0")
-	}
-
-	pages := ((totalCount - 1) / perPage) + 1
-	if pages == 0 {
-		pages = 1 // one page of zero results
-	}
-	if page > pages {
-		return pages, fmt.Errorf("page should be less than or equal to %d", pages)
-	}
-
-	return page, nil
-}
-
-func validateSkipCount_test(page, perPage int) int {
-	skipCount := (page - 1) * perPage
-	if skipCount < 0 {
-		return 0
-	}
-
-	return skipCount
-}
-
-func min_test(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

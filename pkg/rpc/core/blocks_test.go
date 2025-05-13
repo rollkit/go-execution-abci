@@ -4,14 +4,14 @@ import (
 	"testing"
 	"time"
 
-	cmtlog "github.com/cometbft/cometbft/libs/log" // Added import
+	cmtlog "github.com/cometbft/cometbft/libs/log"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
+	"github.com/rollkit/rollkit/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
-	"github.com/rollkit/rollkit/types"
 )
 
 func newTestRPCContext() *rpctypes.Context {
@@ -74,9 +74,9 @@ func TestBlockSearch_Success(t *testing.T) {
 	assert.Len(t, result.Blocks, 2)
 	assert.Equal(t, 2, result.TotalCount)
 
-	assert.Equal(t, header1.Header.BaseHeader.Height, uint64(result.Blocks[0].Block.Header.Height))
-	assert.Equal(t, []byte(header1.Header.AppHash), []byte(result.Blocks[0].Block.Header.AppHash))
-	assert.Equal(t, []byte(header1.Header.ProposerAddress), []byte(result.Blocks[0].Block.Header.ProposerAddress))
+	assert.Equal(t, header1.BaseHeader.Height, uint64(result.Blocks[0].Block.Header.Height))
+	assert.Equal(t, []byte(header1.AppHash), []byte(result.Blocks[0].Block.Header.AppHash))
+	assert.Equal(t, []byte(header1.ProposerAddress), []byte(result.Blocks[0].Block.Header.ProposerAddress))
 
 	assert.Equal(t, header2.Header.BaseHeader.Height, uint64(result.Blocks[1].Block.Header.Height))
 	assert.Equal(t, []byte(header2.Header.AppHash), []byte(result.Blocks[1].Block.Header.AppHash))

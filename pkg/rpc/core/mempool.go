@@ -57,7 +57,7 @@ func BroadcastTxSync(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultBroad
 	select {
 	case res := <-resCh:
 		// gossip the transaction if it's in the mempool.
-		// Note: we have to do this here because, unlike the tendermint mempool reactor, there
+		// Note: we have to do this here because, unlike the cometbft mempool reactor, there
 		// is no routine that gossips transactions after they enter the pool
 		if res.Code == abci.CodeTypeOK {
 			err = env.Adapter.TxGossiper.Publish(unwrappedCtx, tx)
@@ -89,7 +89,7 @@ func BroadcastTxSync(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultBroad
 func BroadcastTxCommit(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultBroadcastTxCommit, error) {
 	unwrappedCtx := ctx.Context()
 
-	// This implementation corresponds to Tendermints implementation from rpc/core/mempool.go.
+	// This implementation corresponds to CometBFT implementation from rpc/core/mempool.go.
 	// ctx.RemoteAddr godoc: If neither HTTPReq nor WSConn is set, an empty string is returned.
 	// This code is a local client, so we can assume that subscriber is ""
 	subscriber := "" //ctx.RemoteAddr()

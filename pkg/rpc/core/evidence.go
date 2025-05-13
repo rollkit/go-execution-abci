@@ -7,8 +7,8 @@ import (
 )
 
 // BroadcastEvidence implements client.Client but is essentially a no-op in this context,
-// as Rollkit doesn't handle evidence in the same way as Tendermint.
-// It returns a successful response with the evidence hash, mimicking Tendermint's behaviour
+// as Rollkit doesn't handle evidence in the same way as CometBFT.
+// It returns a successful response with the evidence hash, mimicking CometBFT's behaviour
 // without actually processing or storing the evidence.
 func BroadcastEvidence(ctx *rpctypes.Context, ev cmttypes.Evidence) (*ctypes.ResultBroadcastEvidence, error) {
 	env.Logger.Debug("BroadcastEvidence called, but evidence handling is not implemented in Rollkit RPC.")

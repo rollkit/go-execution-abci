@@ -265,7 +265,7 @@ func TestTxSearch(t *testing.T) {
 	// t.Run("Success_WithProof", func(t *testing.T) { ... })
 }
 
-// Helper functions for pagination validation (copied from tendermint/rpc/core/tx.go as they are not exported)
+// Helper functions for pagination validation (copied from cometbft/rpc/core/tx.go as they are not exported)
 // Consider moving these to a shared test utility if used frequently.
 const (
 	defaultPerPage_test = 30

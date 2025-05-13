@@ -46,7 +46,7 @@ func Validators(ctx *rpctypes.Context, heightPtr *int64, pagePtr, perPagePtr *in
 // UNSTABLE
 // More: https://docs.cometbft.com/v0.37/rpc/#/Info/dump_consensus_state
 func DumpConsensusState(ctx *rpctypes.Context) (*coretypes.ResultDumpConsensusState, error) {
-	// Rollkit doesn't have Tendermint consensus state.
+	// Rollkit doesn't have CometBFT consensus state.
 	return nil, ErrConsensusStateNotAvailable
 }
 
@@ -54,7 +54,7 @@ func DumpConsensusState(ctx *rpctypes.Context) (*coretypes.ResultDumpConsensusSt
 // UNSTABLE
 // More: https://docs.cometbft.com/v0.37/rpc/#/Info/consensus_state
 func ConsensusState(ctx *rpctypes.Context) (*coretypes.ResultConsensusState, error) {
-	// Rollkit doesn't have Tendermint consensus state.
+	// Rollkit doesn't have CometBFT consensus state.
 	return nil, ErrConsensusStateNotAvailable
 }
 

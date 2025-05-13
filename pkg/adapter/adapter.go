@@ -20,12 +20,11 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	host "github.com/libp2p/go-libp2p/core/host"
 	ma "github.com/multiformats/go-multiaddr"
+	"github.com/rollkit/go-execution-abci/pkg/p2p"
 	"github.com/rollkit/rollkit/core/execution"
 	rollnode "github.com/rollkit/rollkit/node"
 	rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
 	rstore "github.com/rollkit/rollkit/pkg/store"
-
-	"github.com/rollkit/go-execution-abci/pkg/p2p"
 )
 
 var _ execution.Executor = &Adapter{}

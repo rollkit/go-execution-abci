@@ -9,13 +9,14 @@ import (
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	cmttypes "github.com/cometbft/cometbft/types"
+	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
-	"github.com/rollkit/go-execution-abci/pkg/adapter"
 	rlktypes "github.com/rollkit/rollkit/types"
+
+	"github.com/rollkit/go-execution-abci/pkg/adapter"
 )
 
 func TestStatus(t *testing.T) {

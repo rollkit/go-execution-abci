@@ -6,11 +6,13 @@ import (
 
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
-	"github.com/rollkit/go-execution-abci/pkg/adapter"
-	"github.com/rollkit/rollkit/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	"github.com/rollkit/rollkit/types"
+
+	"github.com/rollkit/go-execution-abci/pkg/adapter"
 )
 
 func newTestRPCContext() *rpctypes.Context {

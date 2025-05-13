@@ -77,9 +77,9 @@ func TestBlockSearch_Success(t *testing.T) {
 	assert.Equal(t, []byte(header1.AppHash), []byte(result.Blocks[0].Block.AppHash))
 	assert.Equal(t, []byte(header1.ProposerAddress), []byte(result.Blocks[0].Block.ProposerAddress))
 
-	assert.Equal(t, header2.Header.BaseHeader.Height, uint64(result.Blocks[1].Block.Height))
-	assert.Equal(t, []byte(header2.Header.AppHash), []byte(result.Blocks[1].Block.AppHash))
-	assert.Equal(t, []byte(header2.Header.ProposerAddress), []byte(result.Blocks[1].Block.ProposerAddress))
+	assert.Equal(t, header2.BaseHeader.Height, uint64(result.Blocks[1].Block.Height))
+	assert.Equal(t, []byte(header2.AppHash), []byte(result.Blocks[1].Block.AppHash))
+	assert.Equal(t, []byte(header2.ProposerAddress), []byte(result.Blocks[1].Block.ProposerAddress))
 
 	mockTxIndexer.AssertExpectations(t)
 	mockBlockIndexer.AssertExpectations(t)

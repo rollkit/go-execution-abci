@@ -100,17 +100,6 @@ func BroadcastTxCommit(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultBro
 	// This code is a local client, so we can assume that subscriber is ""
 	subscriber := "" //ctx.RemoteAddr()
 
-	/*
-		if env.Adapter.EventBus.NumClients() >= env.Adapter.CometCfg.RPC.MaxSubscriptionClients {
-			return nil, fmt.Errorf("max_subscription_clients %d reached", env.Adapter.CometCfg.RPC.MaxSubscriptionClients)
-		} else if env.Adapter.EventBus.NumClientSubscriptions(subscriber) >= env.Adapter.CometCfg.RPC.MaxSubscriptionsPerClient {
-			return nil, fmt.Errorf("max_subscriptions_per_client %d reached", env.Adapter.CometCfg.RPC.MaxSubscriptionsPerClient)
-		}
-		if env.Adapter.EventBus == nil {
-			return nil, errors.New("event bus is not configured, cannot subscribe to events")
-		}
-	*/
-
 	// Use CometBFT config values directly if available
 	// TODO: Access these config values properly, perhaps via RpcProvider struct if needed
 	maxSubs := 100    // Placeholder

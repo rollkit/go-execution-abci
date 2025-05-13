@@ -89,7 +89,7 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 
 	switch {
 	case heightPtr != nil && *heightPtr == -1:
-		// TODO: implement
+		// TODO: https://github.com/rollkit/go-execution-abci/issues/91
 		// heightValue = p.adapter.store.GetDAIncludedHeight()
 		return nil, errors.New("DA included height not implemented")
 	default:

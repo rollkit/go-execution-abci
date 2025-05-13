@@ -54,30 +54,34 @@ func BroadcastTxSync(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultBroad
 	if err != nil {
 		return nil, err
 	}
-	res := <-resCh
-
-	// gossip the transaction if it's in the mempool.
-	// Note: we have to do this here because, unlike the tendermint mempool reactor, there
-	// is no routine that gossips transactions after they enter the pool
-	if res.Code == abci.CodeTypeOK {
-		err = env.Adapter.TxGossiper.Publish(unwrappedCtx, tx)
-		if err != nil {
-			// the transaction must be removed from the mempool if it cannot be gossiped.
-			// if this does not occur, then the user will not be able to try again using
-			// this node, as the CheckTx call above will return an error indicating that
-			// the tx is already in the mempool
-			_ = env.Adapter.Mempool.RemoveTxByKey(tx.Key())
-			return nil, fmt.Errorf("failed to gossip tx: %w", err)
+	select {
+	case res := <-resCh:
+		// gossip the transaction if it's in the mempool.
+		// Note: we have to do this here because, unlike the tendermint mempool reactor, there
+		// is no routine that gossips transactions after they enter the pool
+		if res.Code == abci.CodeTypeOK {
+			err = env.Adapter.TxGossiper.Publish(unwrappedCtx, tx)
+			if err != nil {
+				// the transaction must be removed from the mempool if it cannot be gossiped.
+				// if this does not occur, then the user will not be able to try again using
+				// this node, as the CheckTx call above will return an error indicating that
+				// the tx is already in the mempool
+				_ = env.Adapter.Mempool.RemoveTxByKey(tx.Key())
+				return nil, fmt.Errorf("failed to gossip tx: %w", err)
+			}
 		}
-	}
 
-	return &ctypes.ResultBroadcastTx{
-		Code:      res.Code,
-		Data:      res.Data,
-		Log:       res.Log,
-		Codespace: res.Codespace,
-		Hash:      tx.Hash(),
-	}, nil
+		return &ctypes.ResultBroadcastTx{
+			Code:      res.Code,
+			Data:      res.Data,
+			Log:       res.Log,
+			Codespace: res.Codespace,
+			Hash:      tx.Hash(),
+		}, nil
+	case <-unwrappedCtx.Done():
+		// If the context is done, return an error.
+		return nil, fmt.Errorf("context finished while waiting for CheckTx result: %w", unwrappedCtx.Err())
+	}
 }
 
 // BroadcastTxCommit returns with the responses from CheckTx and DeliverTx.

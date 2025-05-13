@@ -198,7 +198,7 @@ func BlockResults(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlockR
 	// 	ConsensusParamUpdates: resp.ConsensusParamUpdates,
 	// 	AppHash:               header.Header.AppHash,
 	// }, nil
-	return nil, nil // TODO: implement GetBlockResponses
+	return nil, errors.New("BlockResults not implemented")
 }
 
 // Header gets block header at a given height.

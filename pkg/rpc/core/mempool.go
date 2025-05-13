@@ -27,7 +27,7 @@ func BroadcastTxAsync(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultBroa
 	unwrappedCtx := ctx.Context()
 	err := env.Adapter.Mempool.CheckTx(tx, nil, mempool.TxInfo{})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error during CheckTx: %w", err)
 	}
 	// gossipTx optimistically
 	err = env.Adapter.TxGossiper.Publish(unwrappedCtx, tx)

@@ -32,7 +32,10 @@ func BroadcastTxAsync(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultBroa
 	// gossipTx optimistically
 	err = env.Adapter.TxGossiper.Publish(unwrappedCtx, tx)
 	if err != nil {
-		_ = env.Adapter.Mempool.RemoveTxByKey(tx.Key())
+		err2 := env.Adapter.Mempool.RemoveTxByKey(tx.Key())
+		if err2 != nil {
+			env.Logger.Error("Error removing tx from mempool", "err", err2)
+		}
 		return nil, fmt.Errorf("tx added to local mempool but failed to gossip: %w", err)
 	}
 	return &ctypes.ResultBroadcastTx{Hash: tx.Hash()}, nil
@@ -66,7 +69,10 @@ func BroadcastTxSync(ctx *rpctypes.Context, tx cmttypes.Tx) (*ctypes.ResultBroad
 				// if this does not occur, then the user will not be able to try again using
 				// this node, as the CheckTx call above will return an error indicating that
 				// the tx is already in the mempool
-				_ = env.Adapter.Mempool.RemoveTxByKey(tx.Key())
+				err2 := env.Adapter.Mempool.RemoveTxByKey(tx.Key())
+				if err2 != nil {
+					env.Logger.Error("Error removing tx from mempool", "err", err2)
+				}
 				return nil, fmt.Errorf("failed to gossip tx: %w", err)
 			}
 		}

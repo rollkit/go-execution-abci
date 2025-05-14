@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cometbft/cometbft/crypto/merkle"
+	"github.com/cometbft/cometbft/crypto/tmhash"
 	cmtquery "github.com/cometbft/cometbft/libs/pubsub/query"
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
-	"github.com/cometbft/cometbft/types"
+	cmttypes "github.com/cometbft/cometbft/types"
+
+	rlktypes "github.com/rollkit/rollkit/types"
 )
 
 // Tx allows you to query the transaction results. `nil` could mean the
@@ -28,17 +32,12 @@ func Tx(ctx *rpctypes.Context, hash []byte, prove bool) (*ctypes.ResultTx, error
 	height := res.Height
 	index := res.Index
 
-	var proof types.TxProof
-	// if prove {
-	// 	//_, data, _ := env.Adapter.RollkitStore.GetBlockData(unwrappedCtx, uint64(height))
-	// 	//blockProof := data.Txs.Proof(int(index)) // TODO: Add proof method to Txs
-	// 	// proof = types.TxProof{
-	// 	// 	RootHash: blockProof.RootHash,
-	// 	// 	Data:     types.Tx(blockProof.Data),
-	// 	// 	Proof:    blockProof.Proof,
-	// 	// }
-	// }
-
+	var proof cmttypes.TxProof
+	if prove {
+		if proof, err = buildProof(ctx, height, index); err != nil {
+			return nil, err
+		}
+	}
 	return &ctypes.ResultTx{
 		Hash:     hash,
 		Height:   height,
@@ -106,14 +105,14 @@ func TxSearch(
 	for i := skipCount; i < skipCount+pageSize; i++ {
 		r := results[i]
 
-		var proof types.TxProof
-		/*if prove {
-			block := nil                               //env.BlockStore.GetBlock(r.Height)
-			proof = block.Data.Txs.Proof(int(r.Index)) // XXX: overflow on 32-bit machines
-		}*/
-
+		var proof cmttypes.TxProof
+		if prove {
+			if proof, err = buildProof(ctx, r.Height, r.Index); err != nil {
+				return nil, err
+			}
+		}
 		apiResults = append(apiResults, &ctypes.ResultTx{
-			Hash:     types.Tx(r.Tx).Hash(),
+			Hash:     cmttypes.Tx(r.Tx).Hash(),
 			Height:   r.Height,
 			Index:    r.Index,
 			TxResult: r.Result,
@@ -123,4 +122,31 @@ func TxSearch(
 	}
 
 	return &ctypes.ResultTxSearch{Txs: apiResults, TotalCount: totalCount}, nil
+}
+
+func buildProof(ctx *rpctypes.Context, blockHeight int64, txIndex uint32) (cmttypes.TxProof, error) {
+	_, data, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), uint64(blockHeight))
+	if err != nil {
+		return cmttypes.TxProof{}, fmt.Errorf("failed to get block data: %w", err)
+	}
+	return proofTXExists(data.Txs, txIndex), nil
+}
+
+func proofTXExists(txs []rlktypes.Tx, i uint32) cmttypes.TxProof {
+	hl := hashList(txs)
+	root, proofs := merkle.ProofsFromByteSlices(hl)
+
+	return cmttypes.TxProof{
+		RootHash: root,
+		Data:     cmttypes.Tx(txs[i]),
+		Proof:    *proofs[i],
+	}
+}
+
+func hashList(txs []rlktypes.Tx) [][]byte {
+	hl := make([][]byte, len(txs))
+	for i := 0; i < len(txs); i++ {
+		hl[i] = tmhash.Sum(txs[i])
+	}
+	return hl
 }

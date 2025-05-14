@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	rktypes "github.com/rollkit/rollkit/types"
+
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
 )
 
@@ -22,10 +24,14 @@ func TestTx(t *testing.T) {
 	ctx := newTestRPCContext() // Assumes newTestRPCContext is available or define it
 
 	mockTxIndexer := new(MockTxIndexer)
+	mockStore := new(MockRollkitStore)
+
 	env = &Environment{
 		TxIndexer: mockTxIndexer,
 		Logger:    cmtlog.NewNopLogger(),
-		Adapter:   &adapter.Adapter{}, // Minimal adapter needed? Add mocks if GetBlockData is used (for prove=true)
+		Adapter: &adapter.Adapter{
+			RollkitStore: mockStore,
+		},
 	}
 
 	sampleTx := cmttypes.Tx("sample_tx_data")
@@ -44,10 +50,11 @@ func TestTx(t *testing.T) {
 		Result: sampleResult,
 	}
 
-	t.Run("Success", func(t *testing.T) {
+	t.Run("Success with proofs", func(t *testing.T) {
 		mockTxIndexer.On("Get", sampleHash).Return(sampleTxResult, nil).Once()
-
-		result, err := Tx(ctx, sampleHash, false) // prove = false
+		mockStore.On("GetBlockData", mock.Anything, uint64(sampleHeight)).Return(nil,
+			&rktypes.Data{Txs: rktypes.Txs{[]byte{0}, []byte{1}}}, nil).Once()
+		result, err := Tx(ctx, sampleHash, true)
 
 		require.NoError(err)
 		require.NotNil(result)
@@ -56,10 +63,31 @@ func TestTx(t *testing.T) {
 		assert.Equal(sampleIndex, result.Index)
 		assert.Equal(sampleResult, result.TxResult)
 		assert.Equal(sampleTx, result.Tx)
-		// Proof is expected to be empty when prove is false
-		assert.Empty(result.Proof.Proof) // Check specific fields if needed
+		assert.Equal(int64(2), result.Proof.Proof.Total)
+		assert.Equal(int64(1), result.Proof.Proof.Index)
+		assert.NotEmpty(result.Proof.Proof.LeafHash)
 
 		mockTxIndexer.AssertExpectations(t)
+		mockStore.AssertExpectations(t)
+	})
+
+	t.Run("result without proofs", func(t *testing.T) {
+		mockTxIndexer.On("Get", sampleHash).Return(sampleTxResult, nil).Once()
+		// when
+		result, err := Tx(ctx, sampleHash, false)
+		// then
+		require.NoError(err)
+		require.NotNil(result)
+		assert.Equal(sampleHash, []byte(result.Hash))
+		assert.Equal(sampleHeight, result.Height)
+		assert.Equal(sampleIndex, result.Index)
+		assert.Equal(sampleResult, result.TxResult)
+		assert.Equal(sampleTx, result.Tx)
+		// Proof is expected to be empty when prove is false
+		assert.Empty(result.Proof.Proof)
+
+		mockTxIndexer.AssertExpectations(t)
+		mockStore.AssertExpectations(t)
 	})
 
 	t.Run("NotFound", func(t *testing.T) {
@@ -99,10 +127,11 @@ func TestTxSearch(t *testing.T) {
 	ctx := newTestRPCContext()
 
 	mockTxIndexer := new(MockTxIndexer)
+	mockStore := new(MockRollkitStore)
 	env = &Environment{
 		TxIndexer: mockTxIndexer,
 		Logger:    cmtlog.NewNopLogger(),
-		Adapter:   &adapter.Adapter{},
+		Adapter:   &adapter.Adapter{RollkitStore: mockStore},
 	}
 
 	// Sample transactions for search results
@@ -197,6 +226,53 @@ func TestTxSearch(t *testing.T) {
 		assert.Equal(int64(11), result.Txs[0].Height)
 		assert.Equal(uint32(0), result.Txs[0].Index)
 		assert.Equal(tx2.Hash(), []byte(result.Txs[0].Hash))
+
+		mockTxIndexer.AssertExpectations(t)
+	})
+
+	t.Run("with proofs", func(t *testing.T) {
+		query := "tx.height >= 10"
+		orderBy := "asc"
+		mockTxIndexer.On("Search", mock.Anything, mock.AnythingOfType("*query.Query")).Run(func(args mock.Arguments) {
+			// Basic check if the query seems right (optional)
+			q := args.Get(1).(*cmtquery.Query)
+			require.NotNil(q)
+		}).Return(searchResults, nil).Once()
+		mockStore.On("GetBlockData", mock.Anything, uint64(res1.Height)).Return(nil,
+			&rktypes.Data{Txs: rktypes.Txs{[]byte{0}, []byte{1}}}, nil).Once()
+		mockStore.On("GetBlockData", mock.Anything, uint64(res2.Height)).Return(nil,
+			&rktypes.Data{Txs: rktypes.Txs{[]byte{2}}}, nil).Once()
+		mockStore.On("GetBlockData", mock.Anything, uint64(res3.Height)).Return(nil,
+			&rktypes.Data{Txs: rktypes.Txs{[]byte{3}, []byte{4}, []byte{5}}}, nil).Once()
+
+		result, err := TxSearch(ctx, query, true, &defaultPage, &defaultPerPage, orderBy)
+
+		require.NoError(err)
+		require.NotNil(result)
+		assert.Equal(3, result.TotalCount)
+		require.Len(result.Txs, 3)
+
+		// Check order: (h10, i0), (h10, i1), (h11, i0)
+		assert.Equal(int64(10), result.Txs[0].Height)
+		assert.Equal(uint32(0), result.Txs[0].Index)
+		assert.Equal(tx3.Hash(), []byte(result.Txs[0].Hash))
+		assert.Equal(int64(2), result.Txs[0].Proof.Proof.Total)
+		assert.Equal(int64(0), result.Txs[0].Proof.Proof.Index)
+		assert.NotEmpty(result.Txs[0].Proof.Proof.LeafHash)
+
+		assert.Equal(int64(10), result.Txs[1].Height)
+		assert.Equal(uint32(1), result.Txs[1].Index)
+		assert.Equal(tx1.Hash(), []byte(result.Txs[1].Hash))
+		assert.Equal(int64(3), result.Txs[1].Proof.Proof.Total)
+		assert.Equal(int64(1), result.Txs[1].Proof.Proof.Index)
+		assert.NotEmpty(result.Txs[1].Proof.Proof.LeafHash)
+
+		assert.Equal(int64(11), result.Txs[2].Height)
+		assert.Equal(uint32(0), result.Txs[2].Index)
+		assert.Equal(tx2.Hash(), []byte(result.Txs[2].Hash))
+		assert.Equal(int64(1), result.Txs[2].Proof.Proof.Total)
+		assert.Equal(int64(0), result.Txs[2].Proof.Proof.Index)
+		assert.NotEmpty(result.Txs[2].Proof.Proof.LeafHash)
 
 		mockTxIndexer.AssertExpectations(t)
 	})

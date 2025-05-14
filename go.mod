@@ -3,7 +3,7 @@ module github.com/rollkit/go-execution-abci
 go 1.24.1
 
 require (
-	cosmossdk.io/log v1.5.1
+	cosmossdk.io/log v1.6.0
 	github.com/cometbft/cometbft v0.38.17
 	github.com/cosmos/cosmos-sdk v0.50.13
 	github.com/cosmos/gogoproto v1.7.0

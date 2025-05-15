@@ -142,6 +142,11 @@ func (f *blockFilter) Filter(e dsq.Entry) bool {
 	return height >= uint64(f.min) && height <= uint64(f.max)
 }
 
+// BlockIterator returns a slice of BlockResponse objects containing paired headers and data
+// for blocks within the specified height range. It efficiently retrieves blocks by performing
+// only two datastore queries (one for headers, one for data) rather than querying each block
+// individually.
+// Returns a slice of BlockResponse objects sorted by height in descending order.
 func BlockIterator(ctx context.Context, max int64, min int64) []BlockResponse {
 	var blocks []BlockResponse
 	ds, ok := env.Adapter.RollkitStore.(ds.Batching)
@@ -218,4 +223,14 @@ func BlockIterator(ctx context.Context, max int64, min int64) []BlockResponse {
 type BlockResponse struct {
 	header *rlktypes.SignedHeader
 	data   *rlktypes.Data
+}
+
+// returns the block's signed header.
+func (br BlockResponse) Header() *rlktypes.SignedHeader {
+	return br.header
+}
+
+// returns the block's data.
+func (br BlockResponse) Data() *rlktypes.Data {
+	return br.data
 }

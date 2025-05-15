@@ -12,8 +12,9 @@ import (
 	ds "github.com/ipfs/go-datastore"
 	dsq "github.com/ipfs/go-datastore/query"
 
-	"github.com/rollkit/go-execution-abci/pkg/common"
 	rlktypes "github.com/rollkit/rollkit/types"
+
+	"github.com/rollkit/go-execution-abci/pkg/common"
 )
 
 const NodeIDByteLength = 20
@@ -111,13 +112,14 @@ func TruncateNodeID(idStr string) (string, error) {
 }
 
 func getHeightFromEntry(field string, value []byte) (uint64, error) {
-	if field == "data" {
+	switch field {
+	case "data":
 		var block rlktypes.Data
 		if err := json.Unmarshal(value, &block); err != nil {
 			return 0, err
 		}
 		return block.Height(), nil
-	} else if field == "header" {
+	case "header":
 		var block rlktypes.SignedHeader
 		if err := json.Unmarshal(value, &block); err != nil {
 			return 0, err
@@ -160,7 +162,6 @@ func BlockIterator(start int64, end int64) []BlockResponse {
 		Prefix: "d",
 	}
 	qData.Filters = append(qData.Filters, filterData)
-	// TODO: add sorting to get the result in the right order
 
 	rHeader, err := ds.Query(context.Background(), qHeader)
 	if err != nil {
@@ -171,6 +172,7 @@ func BlockIterator(start int64, end int64) []BlockResponse {
 		return blocks
 	}
 
+	//we need to match the data to the header using the height, for that we use a map
 	headerMap := make(map[uint64]*rlktypes.SignedHeader)
 	for h := range rHeader.Next() {
 		header := new(rlktypes.SignedHeader)
@@ -189,13 +191,14 @@ func BlockIterator(start int64, end int64) []BlockResponse {
 		dataMap[data.Height()] = data
 	}
 
+	//maps the headers to the data
 	for height, header := range headerMap {
 		if data, ok := dataMap[height]; ok {
 			blocks = append(blocks, BlockResponse{header: header, data: data})
 		}
 	}
 
-	// Sort blocks by height descending
+	//sort blocks by height descending
 	sort.Slice(blocks, func(i, j int) bool {
 		return blocks[i].header.Height() > blocks[j].header.Height()
 	})

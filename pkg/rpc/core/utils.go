@@ -129,8 +129,8 @@ func getHeightFromEntry(field string, value []byte) (uint64, error) {
 }
 
 type blockFilter struct { // needs this for the Filter interface
-	start int64
-	end   int64
+	max   int64
+	min   int64
 	field string //need this field for differentiation between getting headers and getting data
 }
 
@@ -139,17 +139,17 @@ func (f *blockFilter) Filter(e dsq.Entry) bool {
 	if err != nil {
 		return false
 	}
-	return height >= uint64(f.end) && height <= uint64(f.start)
+	return height >= uint64(f.min) && height <= uint64(f.max)
 }
 
-func BlockIterator(start int64, end int64) []BlockResponse {
+func BlockIterator(ctx context.Context, max int64, min int64) []BlockResponse {
 	var blocks []BlockResponse
 	ds, ok := env.Adapter.RollkitStore.(ds.Batching)
 	if !ok {
 		return blocks
 	}
-	filterData := &blockFilter{start: start, end: end, field: "data"}
-	filterHeader := &blockFilter{start: start, end: end, field: "header"}
+	filterData := &blockFilter{max: max, min: min, field: "data"}
+	filterHeader := &blockFilter{max: max, min: min, field: "header"}
 
 	// we need to do two queries, one for the block header and one for the block data
 	qHeader := dsq.Query{
@@ -162,11 +162,11 @@ func BlockIterator(start int64, end int64) []BlockResponse {
 	}
 	qData.Filters = append(qData.Filters, filterData)
 
-	rHeader, err := ds.Query(context.Background(), qHeader)
+	rHeader, err := ds.Query(ctx, qHeader)
 	if err != nil {
 		return blocks
 	}
-	rData, err := ds.Query(context.Background(), qData)
+	rData, err := ds.Query(ctx, qData)
 	if err != nil {
 		return blocks
 	}
@@ -175,18 +175,24 @@ func BlockIterator(start int64, end int64) []BlockResponse {
 
 	//we need to match the data to the header using the height, for that we use a map
 	headerMap := make(map[uint64]*rlktypes.SignedHeader)
-	for h := range rHeader.Next() {
+	for res := range rHeader.Next() {
+		if res.Error != nil {
+			continue
+		}
 		header := new(rlktypes.SignedHeader)
-		if err := header.UnmarshalBinary(h.Value); err != nil {
+		if err := header.UnmarshalBinary(res.Value); err != nil {
 			continue
 		}
 		headerMap[header.Height()] = header
 	}
 
 	dataMap := make(map[uint64]*rlktypes.Data)
-	for d := range rData.Next() {
+	for res := range rData.Next() {
+		if res.Error != nil {
+			continue
+		}
 		data := new(rlktypes.Data)
-		if err := data.UnmarshalBinary(d.Value); err != nil {
+		if err := data.UnmarshalBinary(res.Value); err != nil {
 			continue
 		}
 		dataMap[data.Height()] = data

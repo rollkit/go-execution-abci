@@ -2,6 +2,10 @@ module github.com/rollkit/go-execution-abci
 
 go 1.24.1
 
+replace github.com/btcsuite/btcd => github.com/btcsuite/btcd v0.22.0-beta
+
+exclude github.com/btcsuite/btcd/chaincfg/chainhash v1.0.2
+
 require (
 	cosmossdk.io/log v1.6.0
 	github.com/cometbft/cometbft v0.38.17
@@ -10,19 +14,15 @@ require (
 	github.com/go-kit/kit v0.13.0
 	github.com/hashicorp/go-metrics v0.5.4
 	github.com/ipfs/go-datastore v0.8.2
-	github.com/rollkit/rollkit v0.14.2-0.20250507184359-400a8cbdc425
-	github.com/rollkit/rollkit/core v0.0.0-20250506085607-c574d7c79224
-	github.com/rollkit/rollkit/da v0.0.0-20250506085607-c574d7c79224
-	github.com/rollkit/rollkit/sequencers/single v0.0.0-20250506085607-c574d7c79224
+	github.com/rollkit/rollkit v0.14.2-0.20250515091507-3b728709a591
+	github.com/rollkit/rollkit/core v0.0.0-20250515091507-3b728709a591
+	github.com/rollkit/rollkit/da v0.0.0-20250515091507-3b728709a591
+	github.com/rollkit/rollkit/sequencers/single v0.0.0-20250515091507-3b728709a591
 	github.com/rs/cors v1.11.1
 	golang.org/x/net v0.40.0
 	golang.org/x/sync v0.14.0
 	google.golang.org/grpc v1.72.0
 )
-
-replace github.com/btcsuite/btcd => github.com/btcsuite/btcd v0.22.0-beta
-
-exclude github.com/btcsuite/btcd/chaincfg/chainhash v1.0.2
 
 require (
 	connectrpc.com/connect v1.18.1 // indirect
@@ -47,6 +47,7 @@ require (
 	github.com/bytedance/sonic/loader v0.2.4 // indirect
 	github.com/celestiaorg/go-header v0.6.5 // indirect
 	github.com/celestiaorg/go-libp2p-messenger v0.2.2 // indirect
+	github.com/celestiaorg/go-square/v2 v2.2.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.5 // indirect

@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -114,17 +113,17 @@ func TruncateNodeID(idStr string) (string, error) {
 func getHeightFromEntry(field string, value []byte) (uint64, error) {
 	switch field {
 	case "data":
-		var block rlktypes.Data
-		if err := json.Unmarshal(value, &block); err != nil {
+		data := new(rlktypes.Data)
+		if err := data.UnmarshalBinary(value); err != nil {
 			return 0, err
 		}
-		return block.Height(), nil
+		return data.Height(), nil
 	case "header":
-		var block rlktypes.SignedHeader
-		if err := json.Unmarshal(value, &block); err != nil {
+		header := new(rlktypes.SignedHeader)
+		if err := header.UnmarshalBinary(value); err != nil {
 			return 0, err
 		}
-		return block.Height(), nil
+		return header.Height(), nil
 	}
 	return 0, fmt.Errorf("unknown field: %s", field)
 }

@@ -239,11 +239,9 @@ func TestTxSearch(t *testing.T) {
 			require.NotNil(q)
 		}).Return(searchResults, nil).Once()
 		mockStore.On("GetBlockData", mock.Anything, uint64(res1.Height)).Return(nil,
-			&rktypes.Data{Txs: rktypes.Txs{[]byte{0}, []byte{1}}}, nil).Once()
+			&rktypes.Data{Txs: rktypes.Txs{[]byte{0}, []byte{1}}}, nil).Twice()
 		mockStore.On("GetBlockData", mock.Anything, uint64(res2.Height)).Return(nil,
 			&rktypes.Data{Txs: rktypes.Txs{[]byte{2}}}, nil).Once()
-		mockStore.On("GetBlockData", mock.Anything, uint64(res3.Height)).Return(nil,
-			&rktypes.Data{Txs: rktypes.Txs{[]byte{3}, []byte{4}, []byte{5}}}, nil).Once()
 
 		result, err := TxSearch(ctx, query, true, &defaultPage, &defaultPerPage, orderBy)
 
@@ -263,7 +261,7 @@ func TestTxSearch(t *testing.T) {
 		assert.Equal(int64(10), result.Txs[1].Height)
 		assert.Equal(uint32(1), result.Txs[1].Index)
 		assert.Equal(tx1.Hash(), []byte(result.Txs[1].Hash))
-		assert.Equal(int64(3), result.Txs[1].Proof.Proof.Total)
+		assert.Equal(int64(2), result.Txs[1].Proof.Proof.Total)
 		assert.Equal(int64(1), result.Txs[1].Proof.Proof.Index)
 		assert.NotEmpty(result.Txs[1].Proof.Proof.LeafHash)
 

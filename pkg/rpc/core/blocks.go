@@ -276,13 +276,9 @@ func BlockchainInfo(ctx *rpctypes.Context, minHeight, maxHeight int64) (*ctypes.
 	env.Logger.Debug("BlockchainInfo", "maxHeight", maxHeight, "minHeight", minHeight)
 
 	blocks := make([]*cmttypes.BlockMeta, 0, maxHeight-minHeight+1)
-	for height := maxHeight; height >= minHeight; height-- {
-		header, data, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), uint64(height))
-		if err != nil {
-			return nil, err
-		}
-		if header != nil && data != nil {
-			cmblockmeta, err := common.ToABCIBlockMeta(header, data)
+	for _, block := range BlockIterator(ctx.Context(), maxHeight, minHeight) {
+		if block.header != nil && block.data != nil {
+			cmblockmeta, err := common.ToABCIBlockMeta(block.header, block.data)
 			if err != nil {
 				return nil, err
 			}

@@ -1,9 +1,7 @@
 package core
 
 import (
-	"context"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -13,8 +11,6 @@ import (
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	cmttypes "github.com/cometbft/cometbft/types"
-	ds "github.com/ipfs/go-datastore"
-	dsq "github.com/ipfs/go-datastore/query"
 
 	"github.com/rollkit/rollkit/block"
 	rlktypes "github.com/rollkit/rollkit/types"
@@ -297,95 +293,4 @@ func BlockchainInfo(ctx *rpctypes.Context, minHeight, maxHeight int64) (*ctypes.
 		LastHeight: int64(height), //nolint:gosec
 		BlockMetas: blocks,
 	}, nil
-}
-
-type BlockFilter struct { // needs this for the Filter interface
-	start int64
-	end   int64
-	field string //need this field for differentiation between getting headers and getting data
-}
-
-func (f *BlockFilter) Filter(e dsq.Entry) bool {
-	var height uint64
-	if f.field == "data" { //not great but necessary because we are not getting the same data
-		var block rlktypes.Data
-		err := json.Unmarshal(e.Value, &block)
-		if err != nil {
-			return false
-		}
-		height = block.Height()
-	}
-	if f.field == "header" {
-		var block rlktypes.SignedHeader
-		err := json.Unmarshal(e.Value, &block)
-		if err != nil {
-			return false
-		}
-		height = block.Height()
-	}
-
-	return height >= uint64(f.end) && height <= uint64(f.start)
-}
-
-func BlockIterator(start int64, end int64) []BlockResponse {
-	var blocks []BlockResponse
-	ds, ok := env.Adapter.RollkitStore.(ds.Batching)
-	if !ok {
-		return blocks
-	}
-	filter := &BlockFilter{start: start, end: end}
-
-	// we need to do two queries, one for the block header and one for the block data
-	qHeader := dsq.Query{
-		Prefix: "d",
-	}
-	qHeader.Filters = append(qHeader.Filters, filter)
-
-	qData := dsq.Query{
-		Prefix: "h",
-	}
-	qData.Filters = append(qData.Filters, filter)
-	// TODO: add sorting to get the result in the right order
-
-	rHeader, err := ds.Query(context.Background(), qHeader)
-	if err != nil {
-		return blocks
-	}
-	rData, err := ds.Query(context.Background(), qData)
-	if err != nil {
-		return blocks
-	}
-
-	headers, err := rHeader.Rest() // wait to get all the results, not needed but easier implementation for now
-	if err != nil {
-		return blocks
-	}
-	datas, err := rData.Rest()
-	if err != nil {
-		return blocks
-	}
-
-	for i := 0; i < len(headers); i++ {
-		header := new(rlktypes.SignedHeader)
-		err = header.UnmarshalBinary(headers[i].Value)
-		if err != nil {
-			continue
-		}
-
-		data := new(rlktypes.Data)
-		err = data.UnmarshalBinary(datas[i].Value)
-		if err != nil {
-			continue
-		}
-		// TODO: add a check that the heights are the same for the header and for the data
-		blocks = append(blocks, BlockResponse{header: header, data: data})
-		// here we do the assumption that the header and data results are sorted and that the heights are matching
-
-	}
-	return blocks
-}
-
-type BlockResponse struct {
-	header *rlktypes.SignedHeader
-	data   *rlktypes.Data
 }

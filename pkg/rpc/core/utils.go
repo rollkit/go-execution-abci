@@ -170,6 +170,8 @@ func BlockIterator(start int64, end int64) []BlockResponse {
 	if err != nil {
 		return blocks
 	}
+	defer rHeader.Close() //nolint:errcheck
+	defer rData.Close()   //nolint:errcheck
 
 	//we need to match the data to the header using the height, for that we use a map
 	headerMap := make(map[uint64]*rlktypes.SignedHeader)

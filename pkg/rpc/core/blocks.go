@@ -277,9 +277,6 @@ func BlockchainInfo(ctx *rpctypes.Context, minHeight, maxHeight int64) (*ctypes.
 
 	blocks := make([]*cmttypes.BlockMeta, 0, maxHeight-minHeight+1)
 	for _, block := range BlockIterator(maxHeight, minHeight) {
-		if err != nil {
-			return nil, err
-		}
 		if block.header != nil && block.data != nil {
 			cmblockmeta, err := common.ToABCIBlockMeta(block.header, block.data)
 			if err != nil {

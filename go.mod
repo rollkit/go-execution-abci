@@ -2,8 +2,6 @@ module github.com/rollkit/go-execution-abci
 
 go 1.24.1
 
-replace github.com/rollkit/rollkit => ../rollkit
-
 require (
 	cosmossdk.io/log v1.6.0
 	github.com/cometbft/cometbft v0.38.17
@@ -12,15 +10,17 @@ require (
 	github.com/go-kit/kit v0.13.0
 	github.com/hashicorp/go-metrics v0.5.4
 	github.com/ipfs/go-datastore v0.8.2
-	github.com/rollkit/rollkit v0.14.2-0.20250513183517-beb4e92f7074
-	github.com/rollkit/rollkit/core v0.0.0-20250513183517-beb4e92f7074
-	github.com/rollkit/rollkit/da v0.0.0-20250513183517-beb4e92f7074
-	github.com/rollkit/rollkit/sequencers/single v0.0.0-20250513183517-beb4e92f7074
+	github.com/rollkit/rollkit v0.14.2-0.20250515091507-3b728709a591
+	github.com/rollkit/rollkit/core v0.0.0-20250515091507-3b728709a591
+	github.com/rollkit/rollkit/da v0.0.0-20250515091507-3b728709a591
+	github.com/rollkit/rollkit/sequencers/single v0.0.0-20250515091507-3b728709a591
 	github.com/rs/cors v1.11.1
 	golang.org/x/net v0.40.0
 	golang.org/x/sync v0.14.0
 	google.golang.org/grpc v1.72.0
 )
+
+require github.com/celestiaorg/go-square/v2 v2.2.0 // indirect
 
 replace github.com/btcsuite/btcd => github.com/btcsuite/btcd v0.22.0-beta
 

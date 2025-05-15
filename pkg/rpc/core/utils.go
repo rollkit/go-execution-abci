@@ -128,13 +128,13 @@ func getHeightFromEntry(field string, value []byte) (uint64, error) {
 	return 0, fmt.Errorf("unknown field: %s", field)
 }
 
-type BlockFilter struct { // needs this for the Filter interface
+type blockFilter struct { // needs this for the Filter interface
 	start int64
 	end   int64
 	field string //need this field for differentiation between getting headers and getting data
 }
 
-func (f *BlockFilter) Filter(e dsq.Entry) bool {
+func (f *blockFilter) Filter(e dsq.Entry) bool {
 	height, err := getHeightFromEntry(f.field, e.Value)
 	if err != nil {
 		return false
@@ -148,8 +148,8 @@ func BlockIterator(start int64, end int64) []BlockResponse {
 	if !ok {
 		return blocks
 	}
-	filterData := &BlockFilter{start: start, end: end, field: "data"}
-	filterHeader := &BlockFilter{start: start, end: end, field: "header"}
+	filterData := &blockFilter{start: start, end: end, field: "data"}
+	filterHeader := &blockFilter{start: start, end: end, field: "header"}
 
 	// we need to do two queries, one for the block header and one for the block data
 	qHeader := dsq.Query{
@@ -207,6 +207,8 @@ func BlockIterator(start int64, end int64) []BlockResponse {
 	return blocks
 }
 
+// BlockResponse represents a paired block header and data for efficient iteration.
+// It's returned by BlockIterator to provide access to both components of a block.
 type BlockResponse struct {
 	header *rlktypes.SignedHeader
 	data   *rlktypes.Data

@@ -22,7 +22,7 @@ func AddFlags(cmd *cobra.Command) {
 	cmd.Flags().Duration(config.FlagBlockTime, def.Node.BlockTime.Duration, "block time (for aggregator mode)")
 	cmd.Flags().String(config.FlagTrustedHash, def.Node.TrustedHash, "initial trusted hash to start the header exchange service")
 	cmd.Flags().Bool(config.FlagLazyAggregator, def.Node.LazyMode, "produce blocks only when transactions are available or after lazy block time")
-	cmd.Flags().Uint64(config.FlagMaxPendingBlocks, def.Node.MaxPendingBlocks, "maximum blocks pending DA confirmation before pausing block production (0 for no limit)")
+	cmd.Flags().Uint64(config.FlagMaxPendingHeaders, def.Node.MaxPendingHeaders, "maximum blocks pending DA confirmation before pausing block production (0 for no limit)")
 	cmd.Flags().Duration(config.FlagLazyBlockTime, def.Node.LazyBlockInterval.Duration, "maximum interval between blocks in lazy aggregation mode")
 
 	// Data Availability configuration flags

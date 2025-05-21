@@ -17,12 +17,10 @@ import (
 	cmtypes "github.com/cometbft/cometbft/types"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	ds "github.com/ipfs/go-datastore"
-	kt "github.com/ipfs/go-datastore/keytransform"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	rollnode "github.com/rollkit/rollkit/node"
-	rstore "github.com/rollkit/rollkit/pkg/store"
+	"github.com/rollkit/rollkit/types"
 )
 
 func TestExecuteFiresEvents(t *testing.T) {
@@ -76,37 +74,16 @@ func TestExecuteFiresEvents(t *testing.T) {
 
 			capturedBlockEvents, blockMx := captureEvents(ctx, eventBus, "tm.event='NewBlock'", 1)
 			capturedTxEvents, txMx := captureEvents(ctx, eventBus, "tm.event='Tx'", 2)
-			mockApp := &MockABCIApp{
-				ProcessProposalFn: func(proposal *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
-					return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_ACCEPT}, nil
-				},
-				FinalizeBlockFn: func(block *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
-					return &abci.ResponseFinalizeBlock{
-						TxResults: myExecResult,
-					}, nil
-				},
-				CommitFn: func() (*abci.ResponseCommit, error) {
-					return &abci.ResponseCommit{}, nil
-				},
-			}
-			spec.mockMutator(mockApp)
+			myMockApp := mockApp(myExecResult, spec.mockMutator)
 
 			originStore := ds.NewMapDatastore()
-			rollkitPrefixStore := kt.Wrap(originStore, &kt.PrefixTransform{
-				Prefix: ds.NewKey(rollnode.RollkitPrefix),
-			})
-			rollkitStore := rstore.New(rollkitPrefixStore)
-			abciStore := NewStore(originStore)
-			adapter := &Adapter{
-				App:          mockApp,
-				Store:        abciStore,
-				RollkitStore: rollkitStore,
-				EventBus:     eventBus,
-				Metrics:      NopMetrics(),
-				Logger:       log.NewTestLogger(t),
-				MempoolIDs:   newMempoolIDs(),
-				Mempool:      &mempool.NopMempool{},
-			}
+			adapter := NewABCIExecutor(myMockApp, originStore, nil, nil, log.NewTestLogger(t), nil, nil, NopMetrics())
+			adapter.EventBus = eventBus
+			adapter.MempoolIDs = newMempoolIDs()
+			adapter.Mempool = &mempool.NopMempool{}
+
+			var sig types.Signature = make([]byte, 32)
+			require.NoError(t, adapter.RollkitStore.SaveBlockData(ctx, headerFixture(), &types.Data{Txs: make(types.Txs, 0)}, &sig))
 			require.NoError(t, adapter.Store.SaveState(ctx, stateFixture()))
 
 			// when
@@ -154,6 +131,24 @@ func TestExecuteFiresEvents(t *testing.T) {
 	}
 }
 
+func mockApp(myExecResult []*abci.ExecTxResult, mutator ...func(*MockABCIApp)) *MockABCIApp {
+	r := &MockABCIApp{
+		ProcessProposalFn: func(proposal *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
+			return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_ACCEPT}, nil
+		},
+		FinalizeBlockFn: func(block *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
+			return &abci.ResponseFinalizeBlock{TxResults: myExecResult}, nil
+		},
+		CommitFn: func() (*abci.ResponseCommit, error) {
+			return &abci.ResponseCommit{}, nil
+		},
+	}
+	for _, m := range mutator {
+		m(r)
+	}
+	return r
+}
+
 func captureEvents(ctx context.Context, eventBus *cmtypes.EventBus, query string, numEventsExpected int) (*[]cmtpubsub.Message, *sync.RWMutex) {
 	subscriber := fmt.Sprintf("test-%d", time.Now().UnixNano())
 	evSub, err := eventBus.Subscribe(ctx, subscriber, cmtquery.MustCompile(query), numEventsExpected)
@@ -179,6 +174,16 @@ func captureEvents(ctx context.Context, eventBus *cmtypes.EventBus, query string
 		}
 	}()
 	return &capturedEvents, &mx
+}
+
+func headerFixture() *types.SignedHeader {
+	return &types.SignedHeader{
+		Header: types.Header{
+			BaseHeader:      types.BaseHeader{Height: 2, Time: uint64(time.Now().UnixNano())},
+			ProposerAddress: []byte("proposer1"),
+			AppHash:         []byte("apphash1"),
+		},
+	}
 }
 
 type MockABCIApp struct {

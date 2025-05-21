@@ -117,11 +117,10 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 	metrics *telemetry.Metrics, opts server.StartCmdOptions,
 ) error {
 	cmtCfg := svrCtx.Config
-	gRPCOnly := svrCtx.Viper.GetBool(flagGRPCOnly)
-	g, ctx, cancelFn := getCtx(svrCtx, true)
+	g, ctx, cancelFn := getCtx(svrCtx)
 	defer cancelFn()
 
-	if gRPCOnly {
+	if gRPCOnly := svrCtx.Viper.GetBool(flagGRPCOnly); gRPCOnly {
 		// TODO: Generalize logic so that gRPC only is really in startStandAlone
 		svrCtx.Logger.Info("starting node in gRPC only mode; CometBFT is disabled")
 		svrCfg.GRPC.Enable = true
@@ -134,16 +133,12 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 		defer cleanupFn()
 
 		g.Go(func() error {
-			svrCtx.Logger.Info("Attempting to start Rollkit node run loop")
+			svrCtx.Logger.Info("rollkit node run loop launched in background goroutine")
 			err := rollkitNode.Run(ctx)
-			if err != nil && err != context.Canceled {
-				return fmt.Errorf("rollkit node run failed: %w", err)
-			}
-
 			if err == context.Canceled {
 				svrCtx.Logger.Info("rollkit node run loop cancelled by context")
-			} else {
-				svrCtx.Logger.Info("rollkit node run loop completed")
+			} else if err != nil {
+				return fmt.Errorf("rollkit node run failed: %w", err)
 			}
 
 			// cancel context to stop all other processes
@@ -151,21 +146,20 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 
 			return nil
 		})
-		svrCtx.Logger.Info("rollkit node run loop launched in background goroutine")
 
 		// Wait for the node to start p2p before attempting to start the gossiper
 		time.Sleep(1 * time.Second)
 
 		// Start the executor (Adapter) AFTER launching the node goroutine.
 		// Assumption: rollkitNode.Run initializes PubSub quickly enough.
-		svrCtx.Logger.Info("Attempting to start executor (Adapter.Start)")
+		svrCtx.Logger.Info("attempting to start executor (Adapter.Start)")
 		if err := executor.Start(ctx); err != nil {
-			svrCtx.Logger.Error("Failed to start executor", "error", err)
+			svrCtx.Logger.Error("failed to start executor", "error", err)
 			// If this fails, the node goroutine might still be running.
 			// The errgroup context cancellation should handle shutdown.
 			return fmt.Errorf("failed to start executor: %w", err)
 		}
-		svrCtx.Logger.Info("Executor started successfully")
+		svrCtx.Logger.Info("executor started successfully")
 
 		// Add the tx service to the gRPC router.
 		if svrCfg.API.Enable || svrCfg.GRPC.Enable {
@@ -196,8 +190,6 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 		}
 	}
 
-	// Wait for all goroutines (Node Run, gRPC, API, Signal Listener) to complete or error
-	svrCtx.Logger.Info("Waiting for services to complete...")
 	return g.Wait()
 }
 
@@ -255,6 +247,7 @@ func startGrpcServer(
 	g.Go(func() error {
 		return servergrpc.StartGRPCServer(ctx, svrCtx.Logger.With("module", "grpc-server"), config, grpcSrv)
 	})
+
 	return grpcSrv, clientCtx, nil
 }
 
@@ -285,6 +278,7 @@ func startAPIServer(
 	g.Go(func() error {
 		return apiSrv.Start(ctx, svrCfg)
 	})
+
 	return nil
 }
 
@@ -552,11 +546,11 @@ func getAndValidateConfig(svrCtx *server.Context) (serverconfig.Config, error) {
 	return config, nil
 }
 
-func getCtx(svrCtx *server.Context, block bool) (*errgroup.Group, context.Context, context.CancelFunc) {
+func getCtx(svrCtx *server.Context) (*errgroup.Group, context.Context, context.CancelFunc) {
 	ctx, cancelFn := context.WithCancel(context.Background())
 	g, ctx := errgroup.WithContext(ctx)
 	// listen for quit signals so the calling parent process can gracefully exit
-	server.ListenForQuitSignals(g, block, cancelFn, svrCtx.Logger)
+	server.ListenForQuitSignals(g /* block */, false, cancelFn, svrCtx.Logger)
 	return g, ctx, cancelFn
 }
 

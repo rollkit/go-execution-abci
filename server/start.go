@@ -141,9 +141,9 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 			}
 
 			if err == context.Canceled {
-				svrCtx.Logger.Info("Rollkit node run loop cancelled by context")
+				svrCtx.Logger.Info("rollkit node run loop cancelled by context")
 			} else {
-				svrCtx.Logger.Info("Rollkit node run loop completed")
+				svrCtx.Logger.Info("rollkit node run loop completed")
 			}
 
 			// cancel context to stop all other processes
@@ -151,7 +151,7 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 
 			return nil
 		})
-		svrCtx.Logger.Info("Rollkit node run loop launched in background goroutine")
+		svrCtx.Logger.Info("rollkit node run loop launched in background goroutine")
 
 		// Wait for the node to start p2p before attempting to start the gossiper
 		time.Sleep(1 * time.Second)

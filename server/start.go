@@ -118,7 +118,8 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 ) error {
 	cmtCfg := svrCtx.Config
 	gRPCOnly := svrCtx.Viper.GetBool(flagGRPCOnly)
-	g, ctx := getCtx(svrCtx, true)
+	g, ctx, cancelFn := getCtx(svrCtx, true)
+	defer cancelFn()
 
 	if gRPCOnly {
 		// TODO: Generalize logic so that gRPC only is really in startStandAlone
@@ -136,15 +137,19 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 			svrCtx.Logger.Info("Attempting to start Rollkit node run loop")
 			err := rollkitNode.Run(ctx)
 			if err != nil && err != context.Canceled {
-				svrCtx.Logger.Error("Rollkit node run loop failed", "error", err)
 				return fmt.Errorf("rollkit node run failed: %w", err)
 			}
+
 			if err == context.Canceled {
 				svrCtx.Logger.Info("Rollkit node run loop cancelled by context")
 			} else {
 				svrCtx.Logger.Info("Rollkit node run loop completed")
 			}
-			return nil // Return nil on graceful shutdown or normal completion
+
+			// cancel context to stop all other processes
+			cancelFn()
+
+			return nil
 		})
 		svrCtx.Logger.Info("Rollkit node run loop launched in background goroutine")
 
@@ -165,7 +170,7 @@ func startInProcess(svrCtx *server.Context, svrCfg serverconfig.Config, clientCt
 		// Add the tx service to the gRPC router.
 		if svrCfg.API.Enable || svrCfg.GRPC.Enable {
 			// Use the started rpcServer for the client context
-			//clientCtx = clientCtx.WithClient(rpcProvider)
+			// clientCtx = clientCtx.WithClient(rpcProvider)
 
 			app.RegisterTxService(clientCtx)
 			app.RegisterTendermintService(clientCtx)
@@ -245,8 +250,8 @@ func startGrpcServer(
 		return nil, clientCtx, err
 	}
 
-	// Start the gRPC server in a goroutine. Note, the provided ctx will ensure
-	// that the server is gracefully shut down.
+	// Start the gRPC server in a goroutine.
+	// Note, the provided ctx will ensure that the server is gracefully shut down.
 	g.Go(func() error {
 		return servergrpc.StartGRPCServer(ctx, svrCtx.Logger.With("module", "grpc-server"), config, grpcSrv)
 	})
@@ -386,11 +391,6 @@ func setupNodeAndExecutor(
 	mempool := mempool.NewCListMempool(cfg.Mempool, proxyApp.Mempool(), int64(height))
 	executor.SetMempool(mempool)
 
-	ctxWithCancel, cancelFn := context.WithCancel(ctx)
-	cleanupFn = func() {
-		cancelFn()
-	}
-
 	rollkitGenesis := genesis.NewGenesis(
 		cmtGenDoc.ChainID,
 		uint64(cmtGenDoc.InitialHeight),
@@ -431,7 +431,7 @@ func setupNodeAndExecutor(
 	}
 
 	rolllkitNode, err = node.NewNode(
-		ctxWithCancel,
+		ctx,
 		rollkitcfg,
 		executor,
 		sequencer,
@@ -467,18 +467,22 @@ func setupNodeAndExecutor(
 
 	// Pass the created handler to the RPC server constructor
 	rpcServer := rpc.NewRPCServer(cfg.RPC, logger)
-	err = rpcServer.Start()
-	if err != nil {
+	if err = rpcServer.Start(); err != nil {
 		return nil, nil, cleanupFn, fmt.Errorf("failed to start rpc server: %w", err)
 	}
+
 	cleanupFn = func() {
-		cancelFn()
-		_ = eventBus.Stop()
+		if eventBus != nil {
+			_ = eventBus.Stop()
+		}
 		if idxSvc != nil {
 			_ = idxSvc.Stop()
 		}
-		_ = rpcServer.Stop()
+		if rpcServer != nil {
+			_ = rpcServer.Stop()
+		}
 	}
+
 	return rolllkitNode, executor, cleanupFn, nil
 }
 
@@ -548,12 +552,12 @@ func getAndValidateConfig(svrCtx *server.Context) (serverconfig.Config, error) {
 	return config, nil
 }
 
-func getCtx(svrCtx *server.Context, block bool) (*errgroup.Group, context.Context) {
+func getCtx(svrCtx *server.Context, block bool) (*errgroup.Group, context.Context, context.CancelFunc) {
 	ctx, cancelFn := context.WithCancel(context.Background())
 	g, ctx := errgroup.WithContext(ctx)
 	// listen for quit signals so the calling parent process can gracefully exit
 	server.ListenForQuitSignals(g, block, cancelFn, svrCtx.Logger)
-	return g, ctx
+	return g, ctx, cancelFn
 }
 
 func openTraceWriter(traceWriterFile string) (w io.WriteCloser, err error) {

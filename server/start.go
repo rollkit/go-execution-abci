@@ -45,6 +45,7 @@ import (
 	"github.com/rollkit/rollkit/sequencers/single"
 
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
+	rollkit_adapter "github.com/rollkit/go-execution-abci/pkg/rollkit_adapter"
 	"github.com/rollkit/go-execution-abci/pkg/rpc"
 	"github.com/rollkit/go-execution-abci/pkg/rpc/core"
 	execsigner "github.com/rollkit/go-execution-abci/pkg/signer"
@@ -416,6 +417,8 @@ func setupNodeAndExecutor(
 		}
 	}
 
+	cometBFTHasher := rollkit_adapter.CreateCometBFTValidatorHasher(logger.With("module", "CometBFTValidatorHasher"))
+
 	sequencer, err := single.NewSequencer(
 		ctx,
 		logger,
@@ -443,6 +446,7 @@ func setupNodeAndExecutor(
 		database,
 		metrics,
 		logger,
+		cometBFTHasher,
 	)
 	if err != nil {
 		return nil, nil, cleanupFn, err

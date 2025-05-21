@@ -11,6 +11,7 @@ import (
 	"github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/mempool"
 	corep2p "github.com/cometbft/cometbft/p2p"
+	types1 "github.com/cometbft/cometbft/proto/tendermint/types"
 	cmtstate "github.com/cometbft/cometbft/state"
 	cmttypes "github.com/cometbft/cometbft/types"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
@@ -244,6 +245,7 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 	} else {
 		s.ConsensusParams = cmttypes.ConsensusParamsFromProto(consensusParams)
 	}
+	s.ChainID = chainID
 
 	vals, err := cmttypes.PB2TM.ValidatorUpdates(res.Validators)
 	if err != nil {
@@ -272,6 +274,49 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 	return res.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
 }
 
+// getPreviousCommit retrieves the commit for the previous block height.
+// If blockHeight is the initial height, it returns an empty commit.
+func (a *Adapter) getPreviousCommit(ctx context.Context, blockHeight uint64) (*cmttypes.Commit, error) {
+	prevHeight := blockHeight - 1
+	if blockHeight > uint64(a.AppGenesis.InitialHeight) {
+		lastAttestation, err := a.RollkitStore.GetSequencerAttestation(ctx, prevHeight)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get sequencer attestation for height %d: %w", prevHeight, err)
+		}
+
+		cmtBlockID_H_minus_1 := cmttypes.BlockID{
+			Hash: lastAttestation.BlockHeaderHash,
+			PartSetHeader: cmttypes.PartSetHeader{
+				Total: 1,
+				Hash:  lastAttestation.BlockDataHash,
+			},
+		}
+		cmtSig_H_minus_1 := cmttypes.CommitSig{
+			BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+			ValidatorAddress: cmttypes.Address(lastAttestation.SequencerAddress),
+			Timestamp:        lastAttestation.Timestamp,
+			Signature:        lastAttestation.Signature,
+		}
+		return &cmttypes.Commit{
+			Height:     int64(lastAttestation.Height),
+			Round:      lastAttestation.Round,
+			BlockID:    cmtBlockID_H_minus_1,
+			Signatures: []cmttypes.CommitSig{cmtSig_H_minus_1},
+		}, nil
+	}
+
+	// This is the initial block (blockHeight == a.AppGenesis.InitialHeight)
+	// No attestation for height = InitialHeight - 1.
+
+	a.Logger.Info("Initial block, creating empty commit for previous height", "prevHeight", prevHeight)
+	return &cmttypes.Commit{
+		Height:     int64(prevHeight),
+		Round:      0,
+		BlockID:    cmttypes.BlockID{},
+		Signatures: []cmttypes.CommitSig{},
+	}, nil
+}
+
 // ExecuteTxs implements execution.Executor.
 func (a *Adapter) ExecuteTxs(
 	ctx context.Context,
@@ -292,10 +337,29 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("failed to load state: %w", err)
 	}
 
+	// Get the previous height to get the previous block's commit
+	prevHeight := blockHeight - 1
+	cometCommit_H_minus_1, err := a.getPreviousCommit(ctx, blockHeight)
+	if err != nil {
+		return nil, 0, err
+	}
+	calculatedPrevBlockCommitHash := cometCommit_H_minus_1.Hash()
+
+	if err := a.RollkitStore.SaveCommitHash(ctx, prevHeight, calculatedPrevBlockCommitHash); err != nil {
+		return nil, 0, fmt.Errorf("failed to save calculated commit hash for height %d: %w", prevHeight, err)
+	}
+
+	// The loaded state 's' (which is for H-1) is used to provide context (e.g. NextValidatorsHash).
+	// s.LastBlockID will be updated after FinalizeBlock for block H to reflect H-1's BlockID.
+	// s.AppHash at this point is AppHash_H-1 from store.
+
+	// Convert the commit for H-1 to ABCI type for ProcessProposal and FinalizeBlock
+	abciCommitInfo_H_minus_1 := cometCommitToABCICommitInfo(cometCommit_H_minus_1)
+
 	ppResp, err := a.App.ProcessProposal(&abci.RequestProcessProposal{
 		Txs:                txs,
-		ProposedLastCommit: abci.CommitInfo{},
-		Hash:               prevStateRoot,
+		ProposedLastCommit: abciCommitInfo_H_minus_1, // Pass commit for H-1
+		Hash:               prevStateRoot,            // This is the provisional RollkitHeader_H.Hash()
 		Height:             int64(blockHeight),
 		Time:               timestamp,
 		NextValidatorsHash: s.NextValidators.Hash(),
@@ -311,7 +375,8 @@ func (a *Adapter) ExecuteTxs(
 
 	fbResp, err := a.App.FinalizeBlock(&abci.RequestFinalizeBlock{
 		Txs:                txs,
-		Hash:               prevStateRoot,
+		DecidedLastCommit:  abciCommitInfo_H_minus_1, // Pass commit for H-1
+		Hash:               prevStateRoot,            // This is the provisional RollkitHeader_H.Hash()
 		Height:             int64(blockHeight),
 		Time:               timestamp,
 		NextValidatorsHash: s.NextValidators.Hash(),
@@ -320,6 +385,12 @@ func (a *Adapter) ExecuteTxs(
 	if err != nil {
 		return nil, 0, err
 	}
+
+	// Update s to reflect state H.
+	s.AppHash = fbResp.AppHash
+	s.LastBlockHeight = int64(blockHeight) // Height is now H
+	// Set LastBlockID to the ID of the *previous* block (H-1), whose commit was just processed.
+	s.LastBlockID = cometCommit_H_minus_1.BlockID
 
 	nValSet := s.NextValidators.Copy()
 
@@ -404,8 +475,15 @@ func (a *Adapter) ExecuteTxs(
 	for i := range txs {
 		cmtTxs[i] = txs[i]
 	}
-	block := s.MakeBlock(int64(blockHeight), cmtTxs, &cmttypes.Commit{Height: int64(blockHeight)}, nil, s.Validators.Proposer.Address)
-	fireEvents(a.Logger, a.EventBus, block, cmttypes.BlockID{}, fbResp, validatorUpdates)
+	// s is now state H. The third argument to MakeBlock is `lastCommit`, which is the commit for H-1.
+	block := s.MakeBlock(int64(blockHeight), cmtTxs, cometCommit_H_minus_1, nil, s.Validators.Proposer.Address)
+	// The ADR implies Rollkit BlockManager retrieves `calculatedPrevBlockCommitHash` and sets it on RollkitHeader_H.LastCommitHash.
+	// The `fireEvents` function takes blockID cmttypes.BlockID as its 4th argument.
+	// We need the BlockID for the current block H.
+	// Constructing BlockID_H for fireEvents using Header_H.Hash and PartsHeader_H.Hash from the newly created block.
+	currentBlockID := cmttypes.BlockID{Hash: block.Header.Hash(), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: block.Header.DataHash}}
+
+	fireEvents(a.Logger, a.EventBus, block, currentBlockID, fbResp, validatorUpdates)
 
 	a.Logger.Info("Block executed successfully", "height", blockHeight, "appHash", fmt.Sprintf("%X", fbResp.AppHash))
 	return fbResp.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
@@ -520,4 +598,37 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 // For a Cosmos SDK app, this is a no-op we do not need to do anything to mark the block as finalized.
 func (a *Adapter) SetFinal(ctx context.Context, blockHeight uint64) error {
 	return nil
+}
+
+// cometCommitToABCICommitInfo converts a CometBFT Commit to an ABCI CommitInfo.
+// This helper function is based on ADR Phase 2, step 7.
+func cometCommitToABCICommitInfo(commit *cmttypes.Commit) abci.CommitInfo {
+	if commit == nil {
+		return abci.CommitInfo{
+			Round: 0,
+			Votes: []abci.VoteInfo{},
+		}
+	}
+
+	if len(commit.Signatures) == 0 {
+		return abci.CommitInfo{
+			Round: commit.Round,
+			Votes: []abci.VoteInfo{},
+		}
+	}
+
+	votes := make([]abci.VoteInfo, len(commit.Signatures))
+	for i, sig := range commit.Signatures {
+		votes[i] = abci.VoteInfo{
+			Validator: abci.Validator{
+				Address: sig.ValidatorAddress,
+				Power:   0, // Power is not in CommitSig; set to 0 as per ADR context.
+			},
+			BlockIdFlag: types1.BlockIDFlag(sig.BlockIDFlag),
+		}
+	}
+	return abci.CommitInfo{
+		Round: commit.Round,
+		Votes: votes,
+	}
 }

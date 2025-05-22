@@ -1,3 +1,6 @@
+// package staking wraps the Cosmos SDK default x/staking module.
+// But it nullifies any validator actions (jail, unjail, etc) and validator update
+// in order to match Rollkit single sequencer characteristic.
 package staking
 
 import (

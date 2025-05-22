@@ -6,21 +6,15 @@ import (
 	"fmt"
 
 	"cosmossdk.io/core/appmodule"
-	"cosmossdk.io/core/store"
-	"cosmossdk.io/depinject"
-	"cosmossdk.io/depinject/appconfig"
 	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
 	cdctypes "github.com/cosmos/cosmos-sdk/codec/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
-	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
-	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 
 	"github.com/rollkit/go-execution-abci/modules/sequencer/keeper"
-	modulev1 "github.com/rollkit/go-execution-abci/modules/sequencer/module"
 	"github.com/rollkit/go-execution-abci/modules/sequencer/types"
 )
 
@@ -36,11 +30,6 @@ type AppModuleBasic struct {
 	cdc codec.Codec
 }
 
-type AppModule struct {
-	AppModuleBasic
-	keeper keeper.Keeper
-}
-
 // NewAppModule creates a new AppModule object
 func NewAppModule(cdc codec.Codec, keeper keeper.Keeper) AppModule {
 	return AppModule{
@@ -49,8 +38,13 @@ func NewAppModule(cdc codec.Codec, keeper keeper.Keeper) AppModule {
 	}
 }
 
-// Name returns the sequencer module's name.
-func (AppModuleBasic) Name() string {
+type AppModule struct {
+	AppModuleBasic
+	keeper keeper.Keeper
+}
+
+// Name returns the sequencer module's name
+func (am AppModuleBasic) Name() string {
 	return types.ModuleName
 }
 
@@ -77,36 +71,30 @@ func (AppModuleBasic) RegisterGRPCGatewayRoutes(clientCtx client.Context, mux *g
 	}
 }
 
+// IsAppModule implements the appmodule.AppModule interface.
+func (am AppModule) IsAppModule() {}
+
 func (am AppModule) InitGenesis(ctx sdk.Context, cdc codec.JSONCodec, data json.RawMessage) []abci.ValidatorUpdate {
 	var genesisState types.GenesisState
 	cdc.MustUnmarshalJSON(data, &genesisState)
-	return am.keeper.InitGenesis(ctx, &genesisState)
+
+	valUpdates, err := am.keeper.InitGenesis(ctx, &genesisState)
+	if err != nil {
+		panic(err)
+	}
+
+	return valUpdates
 }
 
 // EndBlock implements the AppModule interface
 func (am AppModule) EndBlock(ctx context.Context) ([]abci.ValidatorUpdate, error) {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	nextChangeSequencerHeight, err := am.keeper.NextSequencerChangeHeight.Get(ctx)
-	if sdkCtx.BlockHeight() != nextChangeSequencerHeight || err != nil {
+	if uint64(sdkCtx.BlockHeight()) != nextChangeSequencerHeight || err != nil {
 		return []abci.ValidatorUpdate{}, nil
 	}
 
 	return am.keeper.ChangeoverToRollup(sdkCtx, keeper.LastValidatorSet)
-}
-
-func (am AppModule) RegisterInvariants(ir sdk.InvariantRegistry) {
-	// am.keeper.RegisterInvariants(ir)
-}
-
-// IsAppModule implements the appmodule.AppModule interface.
-func (am AppModule) IsAppModule() {}
-
-// IsOnePerModuleType implements the depinject.OnePerModuleType interface.
-func (am AppModule) IsOnePerModuleType() {}
-
-// Name returns the sequencer module's name
-func (am AppModule) Name() string {
-	return types.ModuleName
 }
 
 // RegisterLegacyAminoCodec registers the staking module's types on the given LegacyAmino codec.
@@ -151,47 +139,4 @@ func (AppModule) ValidateGenesis(cdc codec.JSONCodec, config client.TxEncodingCo
 	}
 
 	return nil
-}
-
-// start depinject implementation
-
-func init() {
-	appconfig.Register(
-		&modulev1.Module{},
-		appconfig.Provide(ProvideModule),
-	)
-}
-
-type ModuleInputs struct {
-	depinject.In
-
-	Config        *modulev1.Module
-	AccountKeeper types.AccountKeeper
-	Cdc           codec.Codec
-	StoreService  store.KVStoreService
-}
-
-// Dependency Injection Outputs
-type ModuleOutputs struct {
-	depinject.Out
-
-	SequencerKeeper keeper.Keeper
-	Module          appmodule.AppModule
-}
-
-func ProvideModule(in ModuleInputs) ModuleOutputs {
-	// default to governance authority if not provided
-	authority := authtypes.NewModuleAddress(govtypes.ModuleName)
-	if in.Config.Authority != "" {
-		authority = authtypes.NewModuleAddressOrBech32Address(in.Config.Authority)
-	}
-
-	k := keeper.NewKeeper(
-		in.Cdc,
-		in.StoreService,
-		in.AccountKeeper,
-		authority.String(),
-	)
-	m := NewAppModule(in.Cdc, k)
-	return ModuleOutputs{SequencerKeeper: k, Module: m}
 }

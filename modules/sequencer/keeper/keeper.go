@@ -19,12 +19,13 @@ type Keeper struct {
 
 	Schema                    collections.Schema
 	Sequencer                 collections.Item[types.Sequencer]
-	NextSequencerChangeHeight collections.Item[int64]
+	NextSequencerChangeHeight collections.Item[uint64]
 	Params                    collections.Item[types.Params]
 }
 
-// NewKeeper creates a new sequencer Keeper instance
-func NewKeeper(cdc codec.BinaryCodec,
+// NewKeeper creates a new sequencer Keeper instance.
+func NewKeeper(
+	cdc codec.BinaryCodec,
 	storeService storetypes.KVStoreService,
 	ak types.AccountKeeper,
 	authority string,
@@ -42,7 +43,7 @@ func NewKeeper(cdc codec.BinaryCodec,
 		authority:                 authority,
 		Params:                    collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
 		Sequencer:                 collections.NewItem(sb, types.SequencerConsAddrKey, "sequencer", codec.CollValue[types.Sequencer](cdc)),
-		NextSequencerChangeHeight: collections.NewItem(sb, types.NextSequencerChangeHeight, "next_sequencer_change_height", collections.Int64Value),
+		NextSequencerChangeHeight: collections.NewItem(sb, types.NextSequencerChangeHeight, "next_sequencer_change_height", collections.Uint64Value),
 	}
 
 	schema, err := sb.Build()
@@ -57,12 +58,4 @@ func NewKeeper(cdc codec.BinaryCodec,
 // Logger returns a module-specific logger.
 func (k Keeper) Logger(ctx sdk.Context) log.Logger {
 	return ctx.Logger().With("module", "x/"+types.ModuleName)
-}
-
-func (keeper Keeper) GetSequencer(ctx sdk.Context) types.Sequencer {
-	seq, err := keeper.Sequencer.Get(ctx)
-	if err != nil {
-		return types.Sequencer{}
-	}
-	return seq
 }

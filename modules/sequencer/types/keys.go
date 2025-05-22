@@ -1,25 +1,11 @@
 package types
 
-const (
-	// ModuleName is the name of the sequencer module
-	ModuleName = "sequencer"
-
-	// StoreKey is the string store representation
-	StoreKey = ModuleName
-
-	// RouterKey is the msg router key for the sequencer module
-	RouterKey = ModuleName
-)
+// ModuleName is the name of the sequencer module
+const ModuleName = "sequencer"
 
 var (
-	// Keys for store sequencer cons address
-	SequencerConsAddrKey = []byte{0x11}
-
-	// Keys for store last validator set
-	LastValidatorSetKey = []byte{0x12}
-
-	// Keys for store next sequencer change height
+	SequencerConsAddrKey      = []byte{0x11}
+	LastValidatorSetKey       = []byte{0x12}
 	NextSequencerChangeHeight = []byte{0x13}
-
-	ParamsKey = []byte{0x14}
+	ParamsKey                 = []byte{0x14}
 )

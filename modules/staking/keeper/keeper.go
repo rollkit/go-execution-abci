@@ -27,12 +27,11 @@ func NewKeeper(
 	consensusAddressCodec addresscodec.Codec,
 ) Keeper {
 	k := stakingkeeper.NewKeeper(cdc, storeService, ak, bk, authority, validatorAddressCodec, consensusAddressCodec)
-	return Keeper{
-		Keeper: *k,
-	}
+	return Keeper{*k}
 }
 
-// TODO: apply state changes but does not return validator updates
-func (k Keeper) ApplyAndReturnValidatorSetUpdates(context.Context) (updates []abci.ValidatorUpdate, err error) {
-	return
+// ApplyAndReturnValidatorSetUpdates applies state changes but does not return validator updates.
+func (k Keeper) ApplyAndReturnValidatorSetUpdates(ctx context.Context) ([]abci.ValidatorUpdate, error) {
+	_, err := k.Keeper.ApplyAndReturnValidatorSetUpdates(ctx)
+	return []abci.ValidatorUpdate{}, err
 }

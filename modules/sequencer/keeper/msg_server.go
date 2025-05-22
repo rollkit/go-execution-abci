@@ -27,15 +27,11 @@ func (k msgServer) ChangeSequencers(ctx context.Context, msg *types.MsgChangeSeq
 	}
 
 	if len(msg.Sequencers) == 0 {
-		return nil, sdkerrors.ErrNotSupported.Wrapf("one sequencer is required.")
+		return nil, sdkerrors.ErrNotSupported.Wrapf("a sequencer is required.")
 	}
 
 	if len(msg.Sequencers) > 1 {
 		return nil, sdkerrors.ErrNotSupported.Wrapf("currently only one sequencer can be set at a time")
-	}
-
-	if err := k.Sequencer.Set(ctx, msg.Sequencers[0]); err != nil {
-		return nil, err
 	}
 
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
@@ -43,21 +39,9 @@ func (k msgServer) ChangeSequencers(ctx context.Context, msg *types.MsgChangeSeq
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("block height %d must be greater than current block height %d", msg.BlockHeight, sdkCtx.BlockHeight())
 	}
 
-	if err := k.NextSequencerChangeHeight.Set(ctx, msg.BlockHeight); err != nil {
+	if err := k.NextSequencers.Set(ctx, msg.BlockHeight, msg.Sequencers[0]); err != nil {
 		return nil, err
 	}
 
 	return &types.MsgChangeSequencersResponse{}, nil
-}
-
-func (k msgServer) UpdateParams(ctx context.Context, msg *types.MsgUpdateParams) (*types.MsgUpdateParamsResponse, error) {
-	if k.authority != msg.Authority {
-		return nil, govtypes.ErrInvalidSigner.Wrapf("invalid authority; expected %s, got %s", k.authority, msg.Authority)
-	}
-
-	if err := k.Params.Set(ctx, msg.Params); err != nil {
-		return nil, err
-	}
-
-	return &types.MsgUpdateParamsResponse{}, nil
 }

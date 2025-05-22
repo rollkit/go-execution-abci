@@ -31,7 +31,10 @@ type AppModuleBasic struct {
 }
 
 // NewAppModule creates a new AppModule object
-func NewAppModule(cdc codec.Codec, keeper keeper.Keeper) AppModule {
+func NewAppModule(
+	cdc codec.Codec,
+	keeper keeper.Keeper,
+) AppModule {
 	return AppModule{
 		AppModuleBasic: AppModuleBasic{cdc: cdc},
 		keeper:         keeper,
@@ -40,6 +43,7 @@ func NewAppModule(cdc codec.Codec, keeper keeper.Keeper) AppModule {
 
 type AppModule struct {
 	AppModuleBasic
+
 	keeper keeper.Keeper
 }
 
@@ -58,7 +62,6 @@ func (AppModuleBasic) RegisterInterfaces(registry cdctypes.InterfaceRegistry) {
 	types.RegisterInterfaces(registry)
 }
 
-// TODO: add validation
 // ValidateGenesis performs genesis state validation for the sequencer module.
 func (AppModuleBasic) ValidateGenesis(cdc codec.JSONCodec, config client.TxEncodingConfig, bz json.RawMessage) error {
 	return nil
@@ -88,13 +91,7 @@ func (am AppModule) InitGenesis(ctx sdk.Context, cdc codec.JSONCodec, data json.
 
 // EndBlock implements the AppModule interface
 func (am AppModule) EndBlock(ctx context.Context) ([]abci.ValidatorUpdate, error) {
-	sdkCtx := sdk.UnwrapSDKContext(ctx)
-	nextChangeSequencerHeight, err := am.keeper.NextSequencerChangeHeight.Get(ctx)
-	if uint64(sdkCtx.BlockHeight()) != nextChangeSequencerHeight || err != nil {
-		return []abci.ValidatorUpdate{}, nil
-	}
-
-	return am.keeper.ChangeoverToRollup(sdkCtx, keeper.LastValidatorSet)
+	return am.keeper.EndBlock(ctx)
 }
 
 // RegisterLegacyAminoCodec registers the staking module's types on the given LegacyAmino codec.
@@ -110,6 +107,7 @@ func (AppModule) RegisterInterfaces(registry cdctypes.InterfaceRegistry) {
 // RegisterServices registers module services.
 func (am AppModule) RegisterServices(cfg module.Configurator) {
 	types.RegisterMsgServer(cfg.MsgServer(), keeper.NewMsgServerImpl(am.keeper))
+	types.RegisterQueryServer(cfg.QueryServer(), keeper.NewQueryServer(am.keeper))
 }
 
 // RegisterGRPCGatewayRoutes registers the gRPC Gateway routes for the staking module.

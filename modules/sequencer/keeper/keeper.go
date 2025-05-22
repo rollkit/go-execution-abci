@@ -13,14 +13,13 @@ import (
 type Keeper struct {
 	storeService storetypes.KVStoreService
 	cdc          codec.BinaryCodec
+	authority    string
 
-	authKeeper types.AccountKeeper
-	authority  string
+	authKeeper    types.AccountKeeper
+	stakingKeeper types.StakingKeeper
 
-	Schema                    collections.Schema
-	Sequencer                 collections.Item[types.Sequencer]
-	NextSequencerChangeHeight collections.Item[uint64]
-	Params                    collections.Item[types.Params]
+	Schema         collections.Schema
+	NextSequencers collections.Map[uint64, types.Sequencer]
 }
 
 // NewKeeper creates a new sequencer Keeper instance.
@@ -28,22 +27,28 @@ func NewKeeper(
 	cdc codec.BinaryCodec,
 	storeService storetypes.KVStoreService,
 	ak types.AccountKeeper,
+	stakingKeeper types.StakingKeeper,
 	authority string,
 ) Keeper {
-	// ensure that authority is a valid AccAddress
+	// ensure that authority is a valid account address
 	if _, err := ak.AddressCodec().StringToBytes(authority); err != nil {
 		panic("authority is not a valid acc address")
 	}
 
 	sb := collections.NewSchemaBuilder(storeService)
 	k := Keeper{
-		storeService:              storeService,
-		cdc:                       cdc,
-		authKeeper:                ak,
-		authority:                 authority,
-		Params:                    collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
-		Sequencer:                 collections.NewItem(sb, types.SequencerConsAddrKey, "sequencer", codec.CollValue[types.Sequencer](cdc)),
-		NextSequencerChangeHeight: collections.NewItem(sb, types.NextSequencerChangeHeight, "next_sequencer_change_height", collections.Uint64Value),
+		storeService:  storeService,
+		cdc:           cdc,
+		authority:     authority,
+		authKeeper:    ak,
+		stakingKeeper: stakingKeeper,
+		NextSequencers: collections.NewMap(
+			sb,
+			types.NextSequencersKey,
+			"next_sequencers",
+			collections.Uint64Key,
+			codec.CollValue[types.Sequencer](cdc),
+		),
 	}
 
 	schema, err := sb.Build()

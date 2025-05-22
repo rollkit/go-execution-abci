@@ -1,0 +1,41 @@
+syntax = "proto3";
+package rollkitsdk.sequencer.v1;
+
+import "amino/amino.proto";
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+import "rollkitsdk/sequencer/v1/genesis.proto";
+
+option go_package = "github.com/rollkit/go-execution-abci/modules/sequencer/types";
+
+// Query defines the gRPC querier service.
+service Query {
+  // SequencersChanges queries the sequencer changes.
+  rpc SequencersChanges(QuerySequencersChangesRequest) returns (QuerySequencersChangesResponse) {
+    option (google.api.http).get = "/rollkit/sequencer/v1/sequencers_changes";
+  }
+
+  // Sequencers queries the sequencer.
+  rpc Sequencers(QuerySequencersRequest) returns (QuerySequencersResponse) {
+    option (google.api.http).get = "/rollkit/sequencer/v1/sequencers";
+  }
+}
+
+// QuerySequencersChangesRequest is request type for the Query/SequencersChanges RPC method.
+message QuerySequencersChangesRequest {}
+
+// QuerySequencersChangesResponse is response type for the Query/SequencersChanges RPC method.
+message QuerySequencersChangesResponse {
+  // sequencer_changes is the list of sequencer changes.
+  repeated SequencerChanges sequencer_changes = 1
+      [ (gogoproto.nullable) = false, (amino.dont_omitempty) = true ];
+}
+
+// QuerySequencersRequest is request type for the Query/Sequencers RPC method.
+message QuerySequencersRequest {}
+
+// QuerySequencersResponse is response type for the Query/Sequencers RPC method.
+message QuerySequencersResponse {
+  // sequencers is the list of sequencers.
+  repeated Sequencer sequencers = 1 [(gogoproto.nullable) = false, (amino.dont_omitempty) = true];
+}

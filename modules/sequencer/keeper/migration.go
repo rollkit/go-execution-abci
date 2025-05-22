@@ -1,10 +1,10 @@
 package keeper
 
 import (
-	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
-
 	abci "github.com/cometbft/cometbft/abci/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
+
 	"github.com/rollkit/go-execution-abci/modules/sequencer/types"
 )
 

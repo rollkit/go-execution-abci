@@ -35,7 +35,9 @@ lint: vet
 	@echo "--> Running golangci-lint"
 	@golangci-lint run --fix
 
-.PHONY: lint
+lint-fix: lint
+
+.PHONY: lint lint-fix
 
 ## fmt: Run fixes for linters. Currently only markdownlint.
 fmt:

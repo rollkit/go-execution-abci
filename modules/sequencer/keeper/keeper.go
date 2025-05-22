@@ -13,12 +13,12 @@ import (
 type Keeper struct {
 	storeService storetypes.KVStoreService
 	cdc          codec.BinaryCodec
+	authority    string
 
-	authKeeper types.AccountKeeper
-	authority  string
+	authKeeper    types.AccountKeeper
+	stakingKeeper types.StakingKeeper
 
 	Schema        collections.Schema
-	Sequencer     collections.Item[types.Sequencer]
 	NextSequencer collections.Map[uint64, types.Sequencer]
 }
 
@@ -27,6 +27,7 @@ func NewKeeper(
 	cdc codec.BinaryCodec,
 	storeService storetypes.KVStoreService,
 	ak types.AccountKeeper,
+	stakingKeeper types.StakingKeeper,
 	authority string,
 ) Keeper {
 	// ensure that authority is a valid account address
@@ -36,16 +37,11 @@ func NewKeeper(
 
 	sb := collections.NewSchemaBuilder(storeService)
 	k := Keeper{
-		storeService: storeService,
-		cdc:          cdc,
-		authKeeper:   ak,
-		authority:    authority,
-		Sequencer: collections.NewItem(
-			sb,
-			types.SequencerConsAddrKey,
-			"sequencer",
-			codec.CollValue[types.Sequencer](cdc),
-		),
+		storeService:  storeService,
+		cdc:           cdc,
+		authority:     authority,
+		authKeeper:    ak,
+		stakingKeeper: stakingKeeper,
 		NextSequencer: collections.NewMap(
 			sb,
 			types.NextSequencerKey,

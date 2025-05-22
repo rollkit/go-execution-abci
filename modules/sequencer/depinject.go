@@ -54,9 +54,10 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 		in.Cdc,
 		in.StoreService,
 		in.AccountKeeper,
+		in.StakingKeeper,
 		authority.String(),
 	)
-	m := NewAppModule(in.Cdc, k, in.StakingKeeper)
+	m := NewAppModule(in.Cdc, k)
 
 	return ModuleOutputs{SequencerKeeper: k, Module: m}
 }

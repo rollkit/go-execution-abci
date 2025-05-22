@@ -3,10 +3,8 @@ package sequencer
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
-	"cosmossdk.io/collections"
 	"cosmossdk.io/core/appmodule"
 	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/cosmos/cosmos-sdk/client"
@@ -36,20 +34,17 @@ type AppModuleBasic struct {
 func NewAppModule(
 	cdc codec.Codec,
 	keeper keeper.Keeper,
-	stakingKeeper types.StakingKeeper,
 ) AppModule {
 	return AppModule{
 		AppModuleBasic: AppModuleBasic{cdc: cdc},
 		keeper:         keeper,
-		stakingKeeper:  stakingKeeper,
 	}
 }
 
 type AppModule struct {
 	AppModuleBasic
 
-	keeper        keeper.Keeper
-	stakingKeeper types.StakingKeeper
+	keeper keeper.Keeper
 }
 
 // Name returns the sequencer module's name
@@ -96,21 +91,7 @@ func (am AppModule) InitGenesis(ctx sdk.Context, cdc codec.JSONCodec, data json.
 
 // EndBlock implements the AppModule interface
 func (am AppModule) EndBlock(ctx context.Context) ([]abci.ValidatorUpdate, error) {
-	sdkCtx := sdk.UnwrapSDKContext(ctx)
-	nextSequencer, err := am.keeper.NextSequencer.Get(sdkCtx, uint64(sdkCtx.BlockHeight()))
-	if errors.Is(err, collections.ErrNotFound) {
-		// no sequencer change scheduled
-		return []abci.ValidatorUpdate{}, nil
-	} else if err != nil {
-		return nil, err
-	}
-
-	validatorSet, err := am.stakingKeeper.GetLastValidators(sdkCtx)
-	if err != nil {
-		return nil, err
-	}
-
-	return am.keeper.MigrateToSequencer(sdkCtx, nextSequencer, validatorSet)
+	return am.keeper.EndBlock(ctx)
 }
 
 // RegisterLegacyAminoCodec registers the staking module's types on the given LegacyAmino codec.

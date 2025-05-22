@@ -7,7 +7,7 @@ import (
 	"github.com/rollkit/go-execution-abci/modules/sequencer/types"
 )
 
-// MigrateToSequencer includes the logic that needs to execute during the process of a CometBFT chain to rollup changeover.
+// MigrateToSequencer includes the logic that needs to execute during the process of a CometBFT chain to rollup changeover **or** a sequencer changeover.
 // This method constructs validator updates that will be given to CometBFT, that will gradually (TODO) remove all the validators and add the sequencer.
 func (k Keeper) MigrateToSequencer(ctx sdk.Context, nextSeq types.Sequencer, lastValidatorSet []stakingtypes.Validator) (initialValUpdates []abci.ValidatorUpdate, err error) {
 	pk, err := nextSeq.TmConsPublicKey()
@@ -31,11 +31,6 @@ func (k Keeper) MigrateToSequencer(ctx sdk.Context, nextSeq types.Sequencer, las
 		k.Logger(ctx).Info("Migration to single sequencer complete. Chain is now using Rollkit.")
 	} else {
 		k.Logger(ctx).Info("Sequencer change complete. Chain is now using the new sequencer.")
-	}
-
-	// set new sequencer
-	if err := k.Sequencer.Set(ctx, nextSeq); err != nil {
-		return nil, err
 	}
 
 	// remove the sequencer from the next sequencer map

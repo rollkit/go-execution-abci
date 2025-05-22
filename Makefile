@@ -1,6 +1,3 @@
-DOCKER := $(shell which docker)
-DOCKER_BUF := $(DOCKER) run --rm -v $(CURDIR):/workspace --workdir /workspace bufbuild/buf
-
 # Define pkgs, run, and cover vairables for test so that we can override them in
 # the terminal more easily.
 pkgs := $(shell go list ./...)
@@ -38,7 +35,9 @@ lint: vet
 	@echo "--> Running golangci-lint"
 	@golangci-lint run --fix
 
-.PHONY: lint
+lint-fix: lint
+
+.PHONY: lint lint-fix
 
 ## fmt: Run fixes for linters. Currently only markdownlint.
 fmt:
@@ -64,8 +63,15 @@ test: vet
 	@go test -v -race -covermode=atomic -coverprofile=coverage.txt $(pkgs) -run $(run) -count=$(count)
 .PHONY: test
 
+## proto-gen: Generate protobuf files using buf
 proto-gen:
-	$(DOCKER) run --volume "$(CURDIR):/workspace" --workdir /workspace bufbuild/buf mod update
-	$(DOCKER) run --volume "$(CURDIR):/workspace" --workdir /workspace bufbuild/buf generate --config buf.yaml
+	@echo "--> Generating protobuf files for modules"
+	@cd modules/proto && \
+		go tool github.com/bufbuild/buf/cmd/buf dep update
+	@cd modules/proto && \
+		go tool github.com/bufbuild/buf/cmd/buf generate
+	@mv modules/github.com/rollkit/go-execution-abci/modules/sequencer/types/** modules/sequencer/types/ && \
+		mv modules/github.com/rollkit/go-execution-abci/modules/sequencer/module/* modules/sequencer/module/
+	@rm -r modules/github.com
 
-.PHONY: proto-gen 
+.PHONY: proto-gen

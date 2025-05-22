@@ -5,8 +5,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 
 	cmttypes "github.com/cometbft/cometbft/types"
+	ds "github.com/ipfs/go-datastore"
+	dsq "github.com/ipfs/go-datastore/query"
+
+	rlktypes "github.com/rollkit/rollkit/types"
 
 	"github.com/rollkit/go-execution-abci/pkg/common"
 )
@@ -103,4 +108,129 @@ func TruncateNodeID(idStr string) (string, error) {
 		return "", fmt.Errorf("node ID too short, expected at least %d bytes, got %d", NodeIDByteLength, len(idBytes))
 	}
 	return hex.EncodeToString(idBytes[:NodeIDByteLength]), nil
+}
+
+func getHeightFromEntry(field string, value []byte) (uint64, error) {
+	switch field {
+	case "data":
+		data := new(rlktypes.Data)
+		if err := data.UnmarshalBinary(value); err != nil {
+			return 0, err
+		}
+		return data.Height(), nil
+	case "header":
+		header := new(rlktypes.SignedHeader)
+		if err := header.UnmarshalBinary(value); err != nil {
+			return 0, err
+		}
+		return header.Height(), nil
+	}
+	return 0, fmt.Errorf("unknown field: %s", field)
+}
+
+type blockFilter struct { // needs this for the Filter interface
+	max   int64
+	min   int64
+	field string //need this field for differentiation between getting headers and getting data
+}
+
+func (f *blockFilter) Filter(e dsq.Entry) bool {
+	height, err := getHeightFromEntry(f.field, e.Value)
+	if err != nil {
+		return false
+	}
+	return height >= uint64(f.min) && height <= uint64(f.max)
+}
+
+// BlockIterator returns a slice of BlockResponse objects containing paired headers and data
+// for blocks within the specified height range. It efficiently retrieves blocks by performing
+// only two datastore queries (one for headers, one for data) rather than querying each block
+// individually.
+// Returns a slice of BlockResponse objects sorted by height in descending order.
+func BlockIterator(ctx context.Context, max int64, min int64) []BlockResponse {
+	var blocks []BlockResponse
+	ds, ok := env.Adapter.RollkitStore.(ds.Batching)
+	if !ok {
+		return blocks
+	}
+	filterData := &blockFilter{max: max, min: min, field: "data"}
+	filterHeader := &blockFilter{max: max, min: min, field: "header"}
+
+	// we need to do two queries, one for the block header and one for the block data
+	qHeader := dsq.Query{
+		Prefix: "h",
+	}
+	qHeader.Filters = append(qHeader.Filters, filterHeader)
+
+	qData := dsq.Query{
+		Prefix: "d",
+	}
+	qData.Filters = append(qData.Filters, filterData)
+
+	rHeader, err := ds.Query(ctx, qHeader)
+	if err != nil {
+		return blocks
+	}
+	rData, err := ds.Query(ctx, qData)
+	if err != nil {
+		return blocks
+	}
+	defer rHeader.Close() //nolint:errcheck
+	defer rData.Close()   //nolint:errcheck
+
+	//we need to match the data to the header using the height, for that we use a map
+	headerMap := make(map[uint64]*rlktypes.SignedHeader)
+	for res := range rHeader.Next() {
+		if res.Error != nil {
+			continue
+		}
+		header := new(rlktypes.SignedHeader)
+		if err := header.UnmarshalBinary(res.Value); err != nil {
+			continue
+		}
+		headerMap[header.Height()] = header
+	}
+
+	dataMap := make(map[uint64]*rlktypes.Data)
+	for res := range rData.Next() {
+		if res.Error != nil {
+			continue
+		}
+		data := new(rlktypes.Data)
+		if err := data.UnmarshalBinary(res.Value); err != nil {
+			continue
+		}
+		dataMap[data.Height()] = data
+	}
+
+	//maps the headers to the data
+	for height, header := range headerMap {
+		if data, ok := dataMap[height]; ok {
+			blocks = append(blocks, BlockResponse{header: header, data: data})
+		}
+	}
+
+	//sort blocks by height descending
+	sort.Slice(blocks, func(i, j int) bool {
+		return blocks[i].header.Height() > blocks[j].header.Height()
+	})
+
+	return blocks
+}
+
+// BlockResponse represents a paired block header and data for efficient iteration.
+// It's returned by BlockIterator to provide access to both components of a block.
+type BlockResponse struct {
+	header *rlktypes.SignedHeader
+	data   *rlktypes.Data
+}
+
+// returns the block's signed header.
+func (br BlockResponse) Header() *rlktypes.SignedHeader {
+	return br.header
+}
+
+// returns the block's data.
+func (br BlockResponse) Data() *rlktypes.Data {
+	return br.data
 }

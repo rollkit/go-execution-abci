@@ -223,7 +223,7 @@ make deps
 # Run tests
 make test
 
-# Generate protocol buffer code
+# Generate protocol buffer code (for modules)
 make proto-gen
 ```
 
@@ -231,12 +231,13 @@ make proto-gen
 
 ```bash
 go-execution-abci/
-├── adapter/      # Core adapter implementation
-├── mempool/      # Transaction mempool
-├── p2p/          # Peer-to-peer networking
-├── proto/        # Protocol buffer definitions
-├── rpc/          # RPC server implementation
-└── server/       # Server startup and configuration
+├── pkg
+│   ├── adapter/      # Core adapter implementation
+│   ├── signer/       # Signers helpers functions
+│   ├── p2p/          # Peer-to-peer networking
+│   └── rpc/          # RPC server implementation
+├── modules/          # Optional Cosmos SDK modules for Rollkit
+└── server/           # Server startup and configuration
 ```
 
 ## Contributing

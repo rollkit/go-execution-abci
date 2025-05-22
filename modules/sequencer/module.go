@@ -3,8 +3,10 @@ package sequencer
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
+	"cosmossdk.io/collections"
 	"cosmossdk.io/core/appmodule"
 	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/cosmos/cosmos-sdk/client"
@@ -31,16 +33,23 @@ type AppModuleBasic struct {
 }
 
 // NewAppModule creates a new AppModule object
-func NewAppModule(cdc codec.Codec, keeper keeper.Keeper) AppModule {
+func NewAppModule(
+	cdc codec.Codec,
+	keeper keeper.Keeper,
+	stakingKeeper types.StakingKeeper,
+) AppModule {
 	return AppModule{
 		AppModuleBasic: AppModuleBasic{cdc: cdc},
 		keeper:         keeper,
+		stakingKeeper:  stakingKeeper,
 	}
 }
 
 type AppModule struct {
 	AppModuleBasic
-	keeper keeper.Keeper
+
+	keeper        keeper.Keeper
+	stakingKeeper types.StakingKeeper
 }
 
 // Name returns the sequencer module's name
@@ -58,7 +67,6 @@ func (AppModuleBasic) RegisterInterfaces(registry cdctypes.InterfaceRegistry) {
 	types.RegisterInterfaces(registry)
 }
 
-// TODO: add validation
 // ValidateGenesis performs genesis state validation for the sequencer module.
 func (AppModuleBasic) ValidateGenesis(cdc codec.JSONCodec, config client.TxEncodingConfig, bz json.RawMessage) error {
 	return nil
@@ -89,12 +97,20 @@ func (am AppModule) InitGenesis(ctx sdk.Context, cdc codec.JSONCodec, data json.
 // EndBlock implements the AppModule interface
 func (am AppModule) EndBlock(ctx context.Context) ([]abci.ValidatorUpdate, error) {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
-	nextChangeSequencerHeight, err := am.keeper.NextSequencerChangeHeight.Get(ctx)
-	if uint64(sdkCtx.BlockHeight()) != nextChangeSequencerHeight || err != nil {
+	nextSequencer, err := am.keeper.NextSequencer.Get(sdkCtx, uint64(sdkCtx.BlockHeight()))
+	if errors.Is(err, collections.ErrNotFound) {
+		// no sequencer change scheduled
 		return []abci.ValidatorUpdate{}, nil
+	} else if err != nil {
+		return nil, err
 	}
 
-	return am.keeper.ChangeoverToRollup(sdkCtx, keeper.LastValidatorSet)
+	validatorSet, err := am.stakingKeeper.GetLastValidators(sdkCtx)
+	if err != nil {
+		return nil, err
+	}
+
+	return am.keeper.MigrateToSequencer(sdkCtx, nextSequencer, validatorSet)
 }
 
 // RegisterLegacyAminoCodec registers the staking module's types on the given LegacyAmino codec.
@@ -110,6 +126,7 @@ func (AppModule) RegisterInterfaces(registry cdctypes.InterfaceRegistry) {
 // RegisterServices registers module services.
 func (am AppModule) RegisterServices(cfg module.Configurator) {
 	types.RegisterMsgServer(cfg.MsgServer(), keeper.NewMsgServerImpl(am.keeper))
+	types.RegisterQueryServer(cfg.QueryServer(), keeper.NewQueryServer(am.keeper))
 }
 
 // RegisterGRPCGatewayRoutes registers the gRPC Gateway routes for the staking module.

@@ -1,9 +1,8 @@
 package types
 
 // NewGenesisState creates a new GenesisState instance
-func NewGenesisState(params Params, sequencer []Sequencer) *GenesisState {
+func NewGenesisState(sequencer []Sequencer) *GenesisState {
 	return &GenesisState{
-		Params:     params,
 		Sequencers: sequencer,
 	}
 }

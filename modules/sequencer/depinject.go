@@ -27,10 +27,12 @@ func init() {
 type ModuleInputs struct {
 	depinject.In
 
-	Config        *modulev1.Module
+	Config       *modulev1.Module
+	Cdc          codec.Codec
+	StoreService store.KVStoreService
+
 	AccountKeeper types.AccountKeeper
-	Cdc           codec.Codec
-	StoreService  store.KVStoreService
+	StakingKeeper types.StakingKeeper
 }
 
 // Dependency Injection Outputs
@@ -54,6 +56,7 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 		in.AccountKeeper,
 		authority.String(),
 	)
-	m := NewAppModule(in.Cdc, k)
+	m := NewAppModule(in.Cdc, k, in.StakingKeeper)
+
 	return ModuleOutputs{SequencerKeeper: k, Module: m}
 }

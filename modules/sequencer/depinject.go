@@ -8,6 +8,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
+
 	"github.com/rollkit/go-execution-abci/modules/sequencer/keeper"
 	modulev1 "github.com/rollkit/go-execution-abci/modules/sequencer/module"
 	"github.com/rollkit/go-execution-abci/modules/sequencer/types"

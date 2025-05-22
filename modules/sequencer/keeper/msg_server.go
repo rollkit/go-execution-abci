@@ -3,7 +3,7 @@ package keeper
 import (
 	"context"
 
-	errorsmod "cosmossdk.io/errors"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 
@@ -34,13 +34,16 @@ func (k msgServer) ChangeSequencers(ctx context.Context, msg *types.MsgChangeSeq
 		return nil, sdkerrors.ErrNotSupported.Wrapf("currently only one sequencer can be set at a time")
 	}
 
-	newSequencer := msg.Sequencers[0]
-	err := k.Sequencer.Set(ctx, newSequencer)
-	if err != nil {
+	if err := k.Sequencer.Set(ctx, msg.Sequencers[0]); err != nil {
 		return nil, err
 	}
 
-	if err = k.NextSequencerChangeHeight.Set(ctx, msg.BlockHeight); err != nil {
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
+	if msg.BlockHeight < uint64(sdkCtx.BlockHeight()) {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("block height %d must be greater than current block height %d", msg.BlockHeight, sdkCtx.BlockHeight())
+	}
+
+	if err := k.NextSequencerChangeHeight.Set(ctx, msg.BlockHeight); err != nil {
 		return nil, err
 	}
 
@@ -49,7 +52,7 @@ func (k msgServer) ChangeSequencers(ctx context.Context, msg *types.MsgChangeSeq
 
 func (k msgServer) UpdateParams(ctx context.Context, msg *types.MsgUpdateParams) (*types.MsgUpdateParamsResponse, error) {
 	if k.authority != msg.Authority {
-		return nil, errorsmod.Wrapf(govtypes.ErrInvalidSigner, "invalid authority; expected %s, got %s", k.authority, msg.Authority)
+		return nil, govtypes.ErrInvalidSigner.Wrapf("invalid authority; expected %s, got %s", k.authority, msg.Authority)
 	}
 
 	if err := k.Params.Set(ctx, msg.Params); err != nil {

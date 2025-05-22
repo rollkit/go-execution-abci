@@ -18,8 +18,8 @@ type Keeper struct {
 	authKeeper    types.AccountKeeper
 	stakingKeeper types.StakingKeeper
 
-	Schema        collections.Schema
-	NextSequencer collections.Map[uint64, types.Sequencer]
+	Schema         collections.Schema
+	NextSequencers collections.Map[uint64, types.Sequencer]
 }
 
 // NewKeeper creates a new sequencer Keeper instance.
@@ -42,10 +42,10 @@ func NewKeeper(
 		authority:     authority,
 		authKeeper:    ak,
 		stakingKeeper: stakingKeeper,
-		NextSequencer: collections.NewMap(
+		NextSequencers: collections.NewMap(
 			sb,
-			types.NextSequencerKey,
-			"next_sequencer",
+			types.NextSequencersKey,
+			"next_sequencers",
 			collections.Uint64Key,
 			codec.CollValue[types.Sequencer](cdc),
 		),

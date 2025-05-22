@@ -35,7 +35,7 @@ func (k Keeper) MigrateToSequencer(ctx sdk.Context, nextSeq types.Sequencer, las
 	}
 
 	// remove the sequencer from the next sequencer map
-	if err = k.NextSequencer.Clear(ctx, nil); err != nil {
+	if err = k.NextSequencers.Remove(ctx, uint64(ctx.BlockHeight())); err != nil {
 		return nil, err
 	}
 

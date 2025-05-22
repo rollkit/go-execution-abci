@@ -12,9 +12,9 @@ import (
 // EndBlocker is called at the end of every block and returns sequencer updates.
 func (k Keeper) EndBlock(ctx context.Context) ([]abci.ValidatorUpdate, error) {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
-	nextSequencer, err := k.NextSequencer.Get(sdkCtx, uint64(sdkCtx.BlockHeight()))
+	nextSequencer, err := k.NextSequencers.Get(sdkCtx, uint64(sdkCtx.BlockHeight()))
 	if errors.Is(err, collections.ErrNotFound) {
-		// no sequencer change scheduled
+		// no sequencer change scheduled for this block
 		return []abci.ValidatorUpdate{}, nil
 	} else if err != nil {
 		return nil, err

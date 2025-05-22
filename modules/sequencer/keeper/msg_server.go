@@ -39,7 +39,7 @@ func (k msgServer) ChangeSequencers(ctx context.Context, msg *types.MsgChangeSeq
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("block height %d must be greater than current block height %d", msg.BlockHeight, sdkCtx.BlockHeight())
 	}
 
-	if err := k.NextSequencer.Set(ctx, msg.BlockHeight, msg.Sequencers[0]); err != nil {
+	if err := k.NextSequencers.Set(ctx, msg.BlockHeight, msg.Sequencers[0]); err != nil {
 		return nil, err
 	}
 

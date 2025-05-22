@@ -50,7 +50,7 @@ func (q queryServer) Sequencers(ctx context.Context, _ *types.QuerySequencersReq
 // SequencersChanges returns the planned sequencers changes.
 func (q queryServer) SequencersChanges(ctx context.Context, _ *types.QuerySequencersChangesRequest) (*types.QuerySequencersChangesResponse, error) {
 	var sequencers []types.SequencerChanges
-	err := q.NextSequencer.Walk(ctx, nil, func(key uint64, sequencer types.Sequencer) (bool, error) {
+	err := q.NextSequencers.Walk(ctx, nil, func(key uint64, sequencer types.Sequencer) (bool, error) {
 		sequencers = append(sequencers, types.SequencerChanges{
 			BlockHeight: key,
 			Sequencers:  []types.Sequencer{sequencer},

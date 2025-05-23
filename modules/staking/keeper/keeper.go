@@ -37,7 +37,7 @@ func (k Keeper) ApplyAndReturnValidatorSetUpdates(ctx context.Context) ([]abci.V
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 	if sdkCtx.BlockHeight() == 0 {
 		// genesis block, return validator updates from gentxs.
-		return valUpdates, nil
+		return valUpdates, err
 	}
 
 	return []abci.ValidatorUpdate{}, err

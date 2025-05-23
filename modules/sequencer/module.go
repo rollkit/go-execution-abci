@@ -79,11 +79,6 @@ func (am AppModule) EndBlock(ctx context.Context) ([]abci.ValidatorUpdate, error
 	return am.keeper.EndBlock(ctx)
 }
 
-// RegisterLegacyAminoCodec registers the sequencer module's types on the given LegacyAmino codec.
-func (AppModule) RegisterLegacyAminoCodec(cdc *codec.LegacyAmino) {
-	types.RegisterLegacyAminoCodec(cdc)
-}
-
 // RegisterInterfaces registers the module's interface types
 func (AppModule) RegisterInterfaces(registry cdctypes.InterfaceRegistry) {
 	types.RegisterInterfaces(registry)
@@ -93,11 +88,4 @@ func (AppModule) RegisterInterfaces(registry cdctypes.InterfaceRegistry) {
 func (am AppModule) RegisterServices(cfg module.Configurator) {
 	types.RegisterMsgServer(cfg.MsgServer(), keeper.NewMsgServerImpl(am.keeper))
 	types.RegisterQueryServer(cfg.QueryServer(), keeper.NewQueryServer(am.keeper))
-}
-
-// RegisterGRPCGatewayRoutes registers the gRPC Gateway routes for the sequencer module.
-func (AppModule) RegisterGRPCGatewayRoutes(clientCtx client.Context, mux *gwruntime.ServeMux) {
-	if err := types.RegisterQueryHandlerClient(context.Background(), mux, types.NewQueryClient(clientCtx)); err != nil {
-		panic(err)
-	}
 }

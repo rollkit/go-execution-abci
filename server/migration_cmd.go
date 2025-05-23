@@ -15,9 +15,10 @@ import (
 	"github.com/cometbft/cometbft/state"
 	"github.com/cometbft/cometbft/store"
 	cometbfttypes "github.com/cometbft/cometbft/types"
+	"github.com/spf13/cobra"
+
 	rollkitstore "github.com/rollkit/rollkit/pkg/store"
 	rollkittypes "github.com/rollkit/rollkit/types"
-	"github.com/spf13/cobra"
 )
 
 // MigrateToRollkitCmd returns a command that migrates the data from the CometBFT chain to Rollkit.
@@ -159,7 +160,7 @@ func cometBlockToRollkit(block *cometbfttypes.Block) (*rollkittypes.SignedHeader
 		},
 	}
 
-	for _, tx := range block.Data.Txs {
+	for _, tx := range block.Txs {
 		data.Txs = append(data.Txs, rollkittypes.Tx(tx))
 	}
 	return header, data, signature

@@ -270,7 +270,7 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 		return nil, 0, fmt.Errorf("failed to save initial state: %w", err)
 	}
 
-	a.Logger.Info("Chain initialized successfully", "appHash", fmt.Sprintf("%X", res.AppHash))
+	a.Logger.Info("chain initialized successfully", "appHash", fmt.Sprintf("%X", res.AppHash))
 	return res.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
 }
 
@@ -478,7 +478,7 @@ func (a *Adapter) ExecuteTxs(
 
 	fireEvents(a.Logger, a.EventBus, block, currentBlockID, fbResp, validatorUpdates)
 
-	a.Logger.Info("Block executed successfully", "height", blockHeight, "appHash", fmt.Sprintf("%X", fbResp.AppHash))
+	a.Logger.Info("block executed successfully", "height", blockHeight, "appHash", fmt.Sprintf("%X", fbResp.AppHash))
 	return fbResp.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
 }
 

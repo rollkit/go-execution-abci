@@ -14,6 +14,8 @@ import (
 
 	"github.com/rollkit/rollkit/block"
 	rlktypes "github.com/rollkit/rollkit/types"
+
+	"github.com/rollkit/go-execution-abci/pkg/common"
 )
 
 // BlockSearch searches for a paginated set of blocks matching BeginBlock and
@@ -69,7 +71,7 @@ func BlockSearch(
 		if err != nil {
 			return nil, err
 		}
-		block, err := ToABCIBlock(header, data)
+		block, err := common.ToABCIBlock(header, data)
 		if err != nil {
 			return nil, err
 		}
@@ -114,7 +116,7 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 	}
 
 	hash := header.Hash()
-	abciBlock, err := ToABCIBlock(header, data)
+	abciBlock, err := common.ToABCIBlock(header, data)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +140,7 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 		return nil, err
 	}
 
-	abciBlock, err := ToABCIBlock(header, data)
+	abciBlock, err := common.ToABCIBlock(header, data)
 	if err != nil {
 		return nil, err
 	}
@@ -171,9 +173,9 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 	}
 
 	val := header.ProposerAddress
-	commit := GetABCICommit(heightValue, header.Hash(), val, header.Time(), header.Signature)
+	commit := common.ToABCICommit(heightValue, header.Hash(), val, header.Time(), header.Signature)
 
-	block, err := ToABCIBlock(header, data)
+	block, err := common.ToABCIBlock(header, data)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +240,7 @@ func HeaderByHash(ctx *rpctypes.Context, hash cmbytes.HexBytes) (*ctypes.ResultH
 		return nil, err
 	}
 
-	blockMeta, err := ToABCIBlockMeta(header, data)
+	blockMeta, err := common.ToABCIBlockMeta(header, data)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +282,7 @@ func BlockchainInfo(ctx *rpctypes.Context, minHeight, maxHeight int64) (*ctypes.
 			return nil, err
 		}
 		if header != nil && data != nil {
-			cmblockmeta, err := ToABCIBlockMeta(header, data)
+			cmblockmeta, err := common.ToABCIBlockMeta(header, data)
 			if err != nil {
 				return nil, err
 			}

@@ -9,7 +9,7 @@ import (
 )
 
 // MigrateToSequencer includes the logic that needs to execute during the process of a CometBFT chain to rollup changeover **or** a sequencer changeover.
-// This method constructs validator updates that will be given to CometBFT, that will gradually (TODO) remove all the validators and add the sequencer.
+// This method constructs validator updates that will be given to CometBFT, that will gradually remove all the validators and add the sequencer.
 func (k Keeper) MigrateToSequencer(ctx sdk.Context, nextSeq types.Sequencer, lastValidatorSet []stakingtypes.Validator) (initialValUpdates []abci.ValidatorUpdate, err error) {
 	pk, err := nextSeq.TmConsPublicKey()
 	if err != nil {

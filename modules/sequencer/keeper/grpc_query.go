@@ -33,7 +33,7 @@ func (q queryServer) Sequencers(ctx context.Context, _ *types.QuerySequencersReq
 	// In the meantime, this is enough to determine if the chain is using rollkit or not.
 	// There is one false positive for single validators chains, but those are more often local testnets.
 	if len(vals) > 1 {
-		return nil, sdkerrors.ErrLogic.Wrapf("chain is currently not using Rollkit")
+		return &types.QuerySequencersResponse{}, sdkerrors.ErrLogic.Wrapf("chain is currently not using Rollkit")
 	}
 
 	sequencers := make([]types.Sequencer, len(vals))

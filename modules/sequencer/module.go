@@ -67,7 +67,7 @@ func (AppModuleBasic) ValidateGenesis(cdc codec.JSONCodec, config client.TxEncod
 	return nil
 }
 
-// RegisterGRPCGatewayRoutes registers the gRPC Gateway routes for the staking module.
+// RegisterGRPCGatewayRoutes registers the gRPC Gateway routes for the sequencer module.
 func (AppModuleBasic) RegisterGRPCGatewayRoutes(clientCtx client.Context, mux *gwruntime.ServeMux) {
 	if err := types.RegisterQueryHandlerClient(context.Background(), mux, types.NewQueryClient(clientCtx)); err != nil {
 		panic(err)
@@ -77,24 +77,12 @@ func (AppModuleBasic) RegisterGRPCGatewayRoutes(clientCtx client.Context, mux *g
 // IsAppModule implements the appmodule.AppModule interface.
 func (am AppModule) IsAppModule() {}
 
-func (am AppModule) InitGenesis(ctx sdk.Context, cdc codec.JSONCodec, data json.RawMessage) []abci.ValidatorUpdate {
-	var genesisState types.GenesisState
-	cdc.MustUnmarshalJSON(data, &genesisState)
-
-	valUpdates, err := am.keeper.InitGenesis(ctx, &genesisState)
-	if err != nil {
-		panic(err)
-	}
-
-	return valUpdates
-}
-
 // EndBlock implements the AppModule interface
 func (am AppModule) EndBlock(ctx context.Context) ([]abci.ValidatorUpdate, error) {
 	return am.keeper.EndBlock(ctx)
 }
 
-// RegisterLegacyAminoCodec registers the staking module's types on the given LegacyAmino codec.
+// RegisterLegacyAminoCodec registers the sequencer module's types on the given LegacyAmino codec.
 func (AppModule) RegisterLegacyAminoCodec(cdc *codec.LegacyAmino) {
 	types.RegisterLegacyAminoCodec(cdc)
 }
@@ -110,26 +98,38 @@ func (am AppModule) RegisterServices(cfg module.Configurator) {
 	types.RegisterQueryServer(cfg.QueryServer(), keeper.NewQueryServer(am.keeper))
 }
 
-// RegisterGRPCGatewayRoutes registers the gRPC Gateway routes for the staking module.
+// RegisterGRPCGatewayRoutes registers the gRPC Gateway routes for the sequencer module.
 func (AppModule) RegisterGRPCGatewayRoutes(clientCtx client.Context, mux *gwruntime.ServeMux) {
 	if err := types.RegisterQueryHandlerClient(context.Background(), mux, types.NewQueryClient(clientCtx)); err != nil {
 		panic(err)
 	}
 }
 
-// DefaultGenesis returns default genesis state as raw bytes for the staking
+// DefaultGenesis returns default genesis state as raw bytes for the sequencer
 // module.
 func (AppModule) DefaultGenesis(cdc codec.JSONCodec) json.RawMessage {
 	return cdc.MustMarshalJSON(types.DefaultGenesisState())
 }
 
-// ExportGenesis returns the exported genesis state as raw bytes for the staking
-// module.
+// InitGenesis performs genesis initialization for the sequencer module.
+func (am AppModule) InitGenesis(ctx sdk.Context, cdc codec.JSONCodec, data json.RawMessage) []abci.ValidatorUpdate {
+	var genesisState types.GenesisState
+	cdc.MustUnmarshalJSON(data, &genesisState)
+
+	valUpdates, err := am.keeper.InitGenesis(ctx, &genesisState)
+	if err != nil {
+		panic(err)
+	}
+
+	return valUpdates
+}
+
+// ExportGenesis returns the exported genesis state as raw bytes for the sequencer module.
 func (am AppModule) ExportGenesis(ctx sdk.Context, cdc codec.JSONCodec) json.RawMessage {
 	return nil
 }
 
-// ValidateGenesis performs genesis state validation for the staking module.
+// ValidateGenesis performs genesis state validation for the sequencer module.
 func (AppModule) ValidateGenesis(cdc codec.JSONCodec, config client.TxEncodingConfig, bz json.RawMessage) error {
 	var data types.GenesisState
 	if err := cdc.UnmarshalJSON(bz, &data); err != nil {

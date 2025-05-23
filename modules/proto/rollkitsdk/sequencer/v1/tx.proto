@@ -22,7 +22,7 @@ service Msg {
 // MsgChangeSequencer is the Msg/ChangeSequencer request type.
 message MsgChangeSequencers {
   option (cosmos.msg.v1.signer) = "authority";
-  option (amino.name) = "rollkit/sequencer/v1/MsgChangeSequencers";
+  option (amino.name) = "sequencer/v1/MsgChangeSequencers";
 
   // authority is the address that controls the module (defaults to x/gov unless
   // overwritten).

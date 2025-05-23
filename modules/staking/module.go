@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 
 	"cosmossdk.io/core/appmodule"
+	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
@@ -22,7 +23,7 @@ var (
 	_ module.AppModuleBasic      = AppModuleBasic{}
 	_ module.AppModuleSimulation = AppModule{}
 	_ module.HasServices         = AppModule{}
-	_ module.HasGenesis          = AppModule{}
+	_ module.HasABCIGenesis      = AppModule{}
 
 	_ appmodule.AppModule       = AppModule{}
 	_ appmodule.HasBeginBlocker = AppModule{}
@@ -58,9 +59,9 @@ func (am AppModule) EndBlock(ctx context.Context) error {
 	return err
 }
 
-func (am AppModule) InitGenesis(ctx sdk.Context, cdc codec.JSONCodec, data json.RawMessage) {
+// InitGenesis performs genesis initialization for the staking module.
+func (am AppModule) InitGenesis(ctx sdk.Context, cdc codec.JSONCodec, data json.RawMessage) []abci.ValidatorUpdate {
 	var genesisState types.GenesisState
 	cdc.MustUnmarshalJSON(data, &genesisState)
-	// discard val updates, handled by sequencer modules.
-	_ = am.keeper.InitGenesis(ctx, &genesisState)
+	return am.keeper.InitGenesis(ctx, &genesisState)
 }

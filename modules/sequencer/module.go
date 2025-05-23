@@ -3,14 +3,12 @@ package sequencer
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"cosmossdk.io/core/appmodule"
 	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
 	cdctypes "github.com/cosmos/cosmos-sdk/codec/types"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 
@@ -22,7 +20,6 @@ var (
 	_ module.AppModuleBasic  = AppModuleBasic{}
 	_ appmodule.AppModule    = AppModule{}
 	_ module.HasServices     = AppModule{}
-	_ module.HasABCIGenesis  = AppModule{}
 	_ module.HasABCIEndBlock = AppModule{}
 )
 
@@ -103,38 +100,4 @@ func (AppModule) RegisterGRPCGatewayRoutes(clientCtx client.Context, mux *gwrunt
 	if err := types.RegisterQueryHandlerClient(context.Background(), mux, types.NewQueryClient(clientCtx)); err != nil {
 		panic(err)
 	}
-}
-
-// DefaultGenesis returns default genesis state as raw bytes for the sequencer
-// module.
-func (AppModule) DefaultGenesis(cdc codec.JSONCodec) json.RawMessage {
-	return cdc.MustMarshalJSON(types.DefaultGenesisState())
-}
-
-// InitGenesis performs genesis initialization for the sequencer module.
-func (am AppModule) InitGenesis(ctx sdk.Context, cdc codec.JSONCodec, data json.RawMessage) []abci.ValidatorUpdate {
-	var genesisState types.GenesisState
-	cdc.MustUnmarshalJSON(data, &genesisState)
-
-	valUpdates, err := am.keeper.InitGenesis(ctx, &genesisState)
-	if err != nil {
-		panic(err)
-	}
-
-	return valUpdates
-}
-
-// ExportGenesis returns the exported genesis state as raw bytes for the sequencer module.
-func (am AppModule) ExportGenesis(ctx sdk.Context, cdc codec.JSONCodec) json.RawMessage {
-	return nil
-}
-
-// ValidateGenesis performs genesis state validation for the sequencer module.
-func (AppModule) ValidateGenesis(cdc codec.JSONCodec, config client.TxEncodingConfig, bz json.RawMessage) error {
-	var data types.GenesisState
-	if err := cdc.UnmarshalJSON(bz, &data); err != nil {
-		return fmt.Errorf("failed to unmarshal %s genesis state: %w", types.ModuleName, err)
-	}
-
-	return nil
 }

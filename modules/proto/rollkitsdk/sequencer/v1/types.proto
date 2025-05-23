@@ -8,12 +8,6 @@ import "google/protobuf/any.proto";
 
 option go_package = "github.com/rollkit/go-execution-abci/modules/sequencer/types";
 
-// GenesisState defines the gm module's genesis state.
-message GenesisState {
-  repeated Sequencer sequencers = 2
-      [ (gogoproto.nullable) = false, (amino.dont_omitempty) = true ];
-}
-
 // Sequencer defines a sequence of instructions to be executed.
 message Sequencer {
   // name is the human-readable name of the sequence.

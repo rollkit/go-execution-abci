@@ -2,7 +2,9 @@ package keeper
 
 import (
 	"context"
+	"errors"
 
+	"cosmossdk.io/collections"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 
 	"github.com/rollkit/go-execution-abci/modules/sequencer/types"
@@ -57,7 +59,7 @@ func (q queryServer) SequencersChanges(ctx context.Context, _ *types.QuerySequen
 		})
 		return false, nil
 	})
-	if err != nil {
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
 		return nil, err
 	}
 

@@ -23,9 +23,8 @@ var (
 	_ module.AppModuleBasic      = AppModuleBasic{}
 	_ module.AppModuleSimulation = AppModule{}
 	_ module.HasServices         = AppModule{}
-	_ module.HasInvariants       = AppModule{}
+	_ module.HasABCIGenesis      = AppModule{}
 	_ module.HasABCIEndBlock     = AppModule{}
-	_ module.HasGenesis          = AppModule{}
 
 	_ appmodule.AppModule       = AppModule{}
 	_ appmodule.HasBeginBlocker = AppModule{}
@@ -42,10 +41,10 @@ type AppModule struct {
 }
 
 // NewAppModule creates a new AppModule object
-func NewAppModule(cdc codec.Codec, keeper keeper.Keeper, ak types.AccountKeeper, bk types.BankKeeper, ls exported.Subspace) AppModule {
+func NewAppModule(cdc codec.Codec, k keeper.Keeper, ak types.AccountKeeper, bk types.BankKeeper, ls exported.Subspace) AppModule {
 	return AppModule{
-		AppModule: staking.NewAppModule(cdc, &keeper.Keeper, ak, bk, ls),
-		keeper:    keeper,
+		AppModule: staking.NewAppModule(cdc, k.Keeper, ak, bk, ls),
+		keeper:    k,
 	}
 }
 
@@ -57,17 +56,12 @@ func (am AppModule) BeginBlock(ctx context.Context) error {
 // EndBlock returns the end blocker for the staking module.
 func (am AppModule) EndBlock(ctx context.Context) ([]abci.ValidatorUpdate, error) {
 	_, err := am.keeper.EndBlocker(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return []abci.ValidatorUpdate{}, nil
+	return []abci.ValidatorUpdate{}, err
 }
 
-func (am AppModule) InitGenesis(ctx sdk.Context, cdc codec.JSONCodec, data json.RawMessage) {
+// InitGenesis performs genesis initialization for the staking module.
+func (am AppModule) InitGenesis(ctx sdk.Context, cdc codec.JSONCodec, data json.RawMessage) []abci.ValidatorUpdate {
 	var genesisState types.GenesisState
 	cdc.MustUnmarshalJSON(data, &genesisState)
-	if err := am.keeper.InitGenesis(ctx, &genesisState); err != nil {
-		panic(err)
-	}
+	return am.keeper.InitGenesis(ctx, &genesisState)
 }

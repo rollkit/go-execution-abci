@@ -274,30 +274,30 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 	return res.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
 }
 
-// getCommit retrieves the commit for the previous block height.
+// getCommit retrieves the commit for the block height.
 // If blockHeight is the initial height, it returns an empty commit.
 func (a *Adapter) getCommit(ctx context.Context, blockHeight uint64) (*cmttypes.Commit, error) {
-	lastAttestation, err := a.RollkitStore.GetSequencerAttestation(ctx, blockHeight)
+	attestation, err := a.RollkitStore.GetSequencerAttestation(ctx, blockHeight)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sequencer attestation for height %d: %w", blockHeight, err)
 	}
 
 	cmtBlockID_H_minus_1 := cmttypes.BlockID{
-		Hash: lastAttestation.BlockHeaderHash,
+		Hash: attestation.BlockHeaderHash,
 		PartSetHeader: cmttypes.PartSetHeader{
 			Total: 1,
-			Hash:  lastAttestation.BlockDataHash,
+			Hash:  attestation.BlockDataHash,
 		},
 	}
 	cmtSig_H_minus_1 := cmttypes.CommitSig{
 		BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-		ValidatorAddress: cmttypes.Address(lastAttestation.SequencerAddress),
-		Timestamp:        lastAttestation.Timestamp,
-		Signature:        lastAttestation.Signature,
+		ValidatorAddress: cmttypes.Address(attestation.SequencerAddress),
+		Timestamp:        attestation.Timestamp,
+		Signature:        attestation.Signature,
 	}
 	return &cmttypes.Commit{
-		Height:     int64(lastAttestation.Height),
-		Round:      lastAttestation.Round,
+		Height:     int64(attestation.Height),
+		Round:      attestation.Round,
 		BlockID:    cmtBlockID_H_minus_1,
 		Signatures: []cmttypes.CommitSig{cmtSig_H_minus_1},
 	}, nil
@@ -322,17 +322,6 @@ func (a *Adapter) ExecuteTxs(
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to load state: %w", err)
 	}
-
-	cometCommit, err := a.getCommit(ctx, blockHeight)
-	if err != nil {
-		return nil, 0, err
-	}
-	calculatedPrevBlockCommitHash := cometCommit.Hash()
-
-	if err := a.RollkitStore.SaveCommitHash(ctx, blockHeight, calculatedPrevBlockCommitHash); err != nil {
-		return nil, 0, fmt.Errorf("failed to save calculated commit hash for height %d: %w", blockHeight, err)
-	}
-	a.Logger.Info("Saved commit hash for height", "height", blockHeight, "commitHash", calculatedPrevBlockCommitHash)
 
 	// The loaded state 's' (which is for H-1) is used to provide context (e.g. NextValidatorsHash).
 	// s.LastBlockID will be updated after FinalizeBlock for block H to reflect H-1's BlockID.

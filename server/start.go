@@ -414,6 +414,7 @@ func setupNodeAndExecutor(
 	cometBFTHasher := rollkit_adapter.CreateCometBFTValidatorHasher(logger.With("module", "CometBFTValidatorHasher"))
 	cometBFTPayloadProvider := rollkit_adapter.CreateCometBFTPayloadProvider()
 	cometBFTHeaderHasher := rollkit_adapter.CreateCometBFTHeaderHasher()
+	cometBFTCommitHashProvider := rollkit_adapter.CreateCometBFTCommitHasher()
 
 	sequencer, err := single.NewSequencer(
 		ctx,
@@ -445,6 +446,7 @@ func setupNodeAndExecutor(
 		cometBFTHasher,
 		cometBFTPayloadProvider,
 		cometBFTHeaderHasher,
+		cometBFTCommitHashProvider,
 	)
 	if err != nil {
 		return nil, nil, cleanupFn, err
@@ -465,6 +467,7 @@ func setupNodeAndExecutor(
 		BlockIndexer: blockIndexer,
 		Logger:       servercmtlog.CometLoggerWrapper{Logger: logger},
 		Config:       *cfg.RPC,
+		HeaderHasher: cometBFTHeaderHasher,
 	})
 
 	// Pass the created handler to the RPC server constructor

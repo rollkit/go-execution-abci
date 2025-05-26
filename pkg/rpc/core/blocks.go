@@ -115,7 +115,11 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 		return nil, err
 	}
 
-	hash := header.Hash()
+	hash, err := env.HeaderHasher(&header.Header)
+	if err != nil {
+		return nil, err
+	}
+
 	abciBlock, err := common.ToABCIBlock(header, data)
 	if err != nil {
 		return nil, err

@@ -26,7 +26,9 @@ import (
 	rollnode "github.com/rollkit/rollkit/node"
 	rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
 	rstore "github.com/rollkit/rollkit/pkg/store"
+	rlktypes "github.com/rollkit/rollkit/types"
 
+	"github.com/rollkit/go-execution-abci/pkg/common"
 	"github.com/rollkit/go-execution-abci/pkg/p2p"
 )
 
@@ -274,35 +276,6 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 	return res.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
 }
 
-// getCommit retrieves the commit for the block height.
-// If blockHeight is the initial height, it returns an empty commit.
-func (a *Adapter) getCommit(ctx context.Context, blockHeight uint64) (*cmttypes.Commit, error) {
-	attestation, err := a.RollkitStore.GetSequencerAttestation(ctx, blockHeight)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get sequencer attestation for height %d: %w", blockHeight, err)
-	}
-
-	cmtBlockID_H_minus_1 := cmttypes.BlockID{
-		Hash: attestation.BlockHeaderHash,
-		PartSetHeader: cmttypes.PartSetHeader{
-			Total: 1,
-			Hash:  attestation.BlockDataHash,
-		},
-	}
-	cmtSig_H_minus_1 := cmttypes.CommitSig{
-		BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-		ValidatorAddress: cmttypes.Address(attestation.SequencerAddress),
-		Timestamp:        attestation.Timestamp,
-		Signature:        attestation.Signature,
-	}
-	return &cmttypes.Commit{
-		Height:     int64(attestation.Height),
-		Round:      attestation.Round,
-		BlockID:    cmtBlockID_H_minus_1,
-		Signatures: []cmttypes.CommitSig{cmtSig_H_minus_1},
-	}, nil
-}
-
 // ExecuteTxs implements execution.Executor.
 func (a *Adapter) ExecuteTxs(
 	ctx context.Context,
@@ -323,29 +296,61 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("failed to load state: %w", err)
 	}
 
-	// The loaded state 's' (which is for H-1) is used to provide context (e.g. NextValidatorsHash).
-	// s.LastBlockID will be updated after FinalizeBlock for block H to reflect H-1's BlockID.
-	// s.AppHash at this point is AppHash_H-1 from store.
+	attestation, err := a.RollkitStore.GetSequencerAttestation(ctx, blockHeight)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get sequencer attestation for height %d: %w", blockHeight, err)
+	}
+	header := attestation.Header
 
-	// Convert the commit for H-1 to ABCI type for ProcessProposal and FinalizeBlock
-	var abciCommitInfo_H_minus_1 abci.CommitInfo = abci.CommitInfo{}
-	var cometCommit_H_minus_1 *cmttypes.Commit = &cmttypes.Commit{}
-	if blockHeight > uint64(a.AppGenesis.InitialHeight) {
-		cometCommit_H_minus_1, err := a.getCommit(ctx, blockHeight-1)
+	// Convert proto header to domain header
+	domainRolkitHeader := new(rlktypes.Header)
+	if err := domainRolkitHeader.FromProto(header.Header); err != nil {
+		return nil, 0, fmt.Errorf("failed to convert proto header to domain header: %w", err)
+	}
+
+	abciHeader, err := common.ToABCIHeader(domainRolkitHeader)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to convert header to ABCI header: %w", err)
+	}
+
+	var proposedLastCommit abci.CommitInfo
+	if blockHeight > 1 {
+		prevAttestation, err := a.RollkitStore.GetSequencerAttestation(ctx, blockHeight-1)
 		if err != nil {
-			return nil, 0, err
+			// If we can't get the previous attestation, we might proceed with an empty commit info
+			// or return an error, depending on the desired behavior. For now, log and use empty.
+			a.Logger.Error("failed to get previous sequencer attestation for ProposedLastCommit", "height", blockHeight-1, "err", err)
+			proposedLastCommit = abci.CommitInfo{Round: 0, Votes: []abci.VoteInfo{}}
+		} else {
+			commitForPrevBlock := &cmttypes.Commit{
+				Height:  int64(prevAttestation.Height),
+				Round:   prevAttestation.Round,
+				BlockID: cmttypes.BlockID{Hash: prevAttestation.BlockHeaderHash, PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: prevAttestation.BlockDataHash}},
+				Signatures: []cmttypes.CommitSig{
+					{
+						BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+						ValidatorAddress: cmttypes.Address(prevAttestation.SequencerAddress),
+						Timestamp:        prevAttestation.Timestamp.AsTime(),
+						Signature:        prevAttestation.Signature,
+					},
+				},
+			}
+			proposedLastCommit = cometCommitToABCICommitInfo(commitForPrevBlock)
 		}
-		abciCommitInfo_H_minus_1 = cometCommitToABCICommitInfo(cometCommit_H_minus_1)
+	} else {
+		// For the first block, ProposedLastCommit is empty
+		proposedLastCommit = abci.CommitInfo{Round: 0, Votes: []abci.VoteInfo{}}
 	}
 
 	ppResp, err := a.App.ProcessProposal(&abci.RequestProcessProposal{
-		Txs:                txs,
-		ProposedLastCommit: abciCommitInfo_H_minus_1, // Pass commit for H-1
-		Hash:               prevStateRoot,            // This is the provisional RollkitHeader_H.Hash()
+		Hash:               abciHeader.Hash(),
 		Height:             int64(blockHeight),
 		Time:               timestamp,
-		NextValidatorsHash: s.NextValidators.Hash(),
+		Txs:                txs,
+		ProposedLastCommit: proposedLastCommit,
+		Misbehavior:        []abci.Misbehavior{},
 		ProposerAddress:    s.Validators.Proposer.Address,
+		NextValidatorsHash: s.NextValidators.Hash(),
 	})
 	if err != nil {
 		return nil, 0, err
@@ -356,13 +361,17 @@ func (a *Adapter) ExecuteTxs(
 	}
 
 	fbResp, err := a.App.FinalizeBlock(&abci.RequestFinalizeBlock{
-		Txs:                txs,
-		DecidedLastCommit:  abciCommitInfo_H_minus_1, // Pass commit for H-1
-		Hash:               prevStateRoot,            // This is the provisional RollkitHeader_H.Hash()
-		Height:             int64(blockHeight),
-		Time:               timestamp,
+		Hash:               abciHeader.Hash(),
 		NextValidatorsHash: s.NextValidators.Hash(),
 		ProposerAddress:    s.Validators.Proposer.Address,
+		Height:             int64(blockHeight),
+		Time:               timestamp,
+		DecidedLastCommit: abci.CommitInfo{
+			Round: 0,
+			Votes: nil,
+		},
+		Txs: txs,
+		//Misbehavior: abciBlock.Evidence.Evidence.ToABCI(),
 	})
 	if err != nil {
 		return nil, 0, err
@@ -371,8 +380,7 @@ func (a *Adapter) ExecuteTxs(
 	// Update s to reflect state H.
 	s.AppHash = fbResp.AppHash
 	s.LastBlockHeight = int64(blockHeight) // Height is now H
-	// Set LastBlockID to the ID of the *previous* block (H-1), whose commit was just processed.
-	s.LastBlockID = cometCommit_H_minus_1.BlockID
+	//s.LastBlockID = cometCommit_H_minus_1.BlockID
 
 	nValSet := s.NextValidators.Copy()
 
@@ -457,8 +465,43 @@ func (a *Adapter) ExecuteTxs(
 	for i := range txs {
 		cmtTxs[i] = txs[i]
 	}
-	// s is now state H. The third argument to MakeBlock is `lastCommit`, which is the commit for H-1.
-	block := s.MakeBlock(int64(blockHeight), cmtTxs, cometCommit_H_minus_1, nil, s.Validators.Proposer.Address)
+
+	var commit *cmttypes.Commit = &cmttypes.Commit{
+		Height: int64(blockHeight),
+		Round:  0,
+		Signatures: []cmttypes.CommitSig{
+			{
+				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+				ValidatorAddress: s.Validators.Proposer.Address,
+				Timestamp:        time.Now(),
+				Signature:        []byte{},
+			},
+		},
+	}
+
+	if blockHeight > 1 {
+		attestation, err := a.RollkitStore.GetSequencerAttestation(ctx, blockHeight-1)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to get sequencer attestation for height %d: %w", blockHeight, err)
+		}
+
+		commit = &cmttypes.Commit{
+			Height:  int64(attestation.Height),
+			Round:   attestation.Round,
+			BlockID: cmttypes.BlockID{Hash: attestation.BlockHeaderHash, PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: attestation.BlockDataHash}},
+			Signatures: []cmttypes.CommitSig{
+				{
+					BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+					ValidatorAddress: cmttypes.Address(attestation.SequencerAddress),
+					Timestamp:        attestation.Timestamp.AsTime(),
+					Signature:        attestation.Signature,
+				},
+			},
+		}
+	}
+
+	block := s.MakeBlock(int64(blockHeight), cmtTxs, commit, nil, s.Validators.Proposer.Address)
+
 	// The ADR implies Rollkit BlockManager retrieves `calculatedPrevBlockCommitHash` and sets it on RollkitHeader_H.LastCommitHash.
 	// The `fireEvents` function takes blockID cmttypes.BlockID as its 4th argument.
 	// We need the BlockID for the current block H.

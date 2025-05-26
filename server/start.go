@@ -431,7 +431,6 @@ func setupNodeAndExecutor(
 		sequencer,
 		&daClient.DA,
 		signer,
-		*nodeKey,
 		p2pClient,
 		rollkitGenesis,
 		database,

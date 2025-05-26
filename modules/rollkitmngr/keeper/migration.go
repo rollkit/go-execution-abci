@@ -5,7 +5,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 
-	"github.com/rollkit/go-execution-abci/modules/sequencer/types"
+	"github.com/rollkit/go-execution-abci/modules/rollkitmngr/types"
 )
 
 // MigrateToSequencer includes the logic that needs to execute during the process of a CometBFT chain to rollup changeover **or** a sequencer changeover.

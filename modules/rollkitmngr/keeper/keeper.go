@@ -7,7 +7,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	"github.com/rollkit/go-execution-abci/modules/sequencer/types"
+	"github.com/rollkit/go-execution-abci/modules/rollkitmngr/types"
 )
 
 type Keeper struct {

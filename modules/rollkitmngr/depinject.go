@@ -1,4 +1,4 @@
-package sequencer
+package rollkitmngr
 
 import (
 	"cosmossdk.io/core/appmodule"
@@ -9,9 +9,9 @@ import (
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 
-	"github.com/rollkit/go-execution-abci/modules/sequencer/keeper"
-	modulev1 "github.com/rollkit/go-execution-abci/modules/sequencer/module"
-	"github.com/rollkit/go-execution-abci/modules/sequencer/types"
+	"github.com/rollkit/go-execution-abci/modules/rollkitmngr/keeper"
+	modulev1 "github.com/rollkit/go-execution-abci/modules/rollkitmngr/module"
+	"github.com/rollkit/go-execution-abci/modules/rollkitmngr/types"
 )
 
 // IsOnePerModuleType implements the depinject.OnePerModuleType interface.

@@ -1,0 +1,32 @@
+syntax = "proto3";
+package rollkitsdk.rollkitmngr.v1;
+
+import "amino/amino.proto";
+import "cosmos_proto/cosmos.proto";
+import "gogoproto/gogo.proto";
+import "google/protobuf/any.proto";
+
+option go_package = "github.com/rollkit/go-execution-abci/modules/rollkitmngr/types";
+
+// Sequencer defines a sequence of instructions to be executed.
+message Sequencer {
+  // name is the human-readable name of the sequencer.
+  string name = 1;
+
+  // consensus_pubkey is the consensus public key of the sequencer, as a
+  // Protobuf Any.
+  google.protobuf.Any consensus_pubkey = 2
+      [ (cosmos_proto.accepts_interface) = "cosmos.crypto.PubKey" ];
+}
+
+
+// Attester defines an attester that can attest to blocks.
+message Attester {
+  // name is the human-readable name of the attester.
+  string name = 1;
+
+  // consensus_pubkey is the consensus public key of the attester, as a
+  // Protobuf Any.
+  google.protobuf.Any consensus_pubkey = 2
+      [ (cosmos_proto.accepts_interface) = "cosmos.crypto.PubKey" ];
+}

@@ -413,6 +413,7 @@ func setupNodeAndExecutor(
 
 	cometBFTHasher := rollkit_adapter.CreateCometBFTValidatorHasher(logger.With("module", "CometBFTValidatorHasher"))
 	cometBFTPayloadProvider := rollkit_adapter.CreateCometBFTPayloadProvider()
+	cometBFTHeaderHasher := rollkit_adapter.CreateCometBFTHeaderHasher()
 
 	sequencer, err := single.NewSequencer(
 		ctx,
@@ -443,6 +444,7 @@ func setupNodeAndExecutor(
 		logger,
 		cometBFTHasher,
 		cometBFTPayloadProvider,
+		cometBFTHeaderHasher,
 	)
 	if err != nil {
 		return nil, nil, cleanupFn, err

@@ -10,7 +10,7 @@ import (
 	"github.com/rollkit/go-execution-abci/modules/rollkitmngr/types"
 )
 
-var _ types.MsgServer = msgServer{}
+var _ types.MsgServer = &msgServer{}
 
 type msgServer struct {
 	Keeper
@@ -21,7 +21,7 @@ func NewMsgServerImpl(keeper Keeper) types.MsgServer {
 	return &msgServer{Keeper: keeper}
 }
 
-func (k msgServer) MigrateToRollkit(ctx context.Context, msg *types.MsgRollkitMigrate) (*types.MsgMigrateToRollkitResponse, error) {
+func (k *msgServer) MigrateToRollkit(ctx context.Context, msg *types.MsgRollkitMigrate) (*types.MsgMigrateToRollkitResponse, error) {
 	if k.authority != msg.Authority {
 		return nil, govtypes.ErrInvalidSigner.Wrapf("invalid authority; expected %s, got %s", k.authority, msg.Authority)
 	}
@@ -38,4 +38,13 @@ func (k msgServer) MigrateToRollkit(ctx context.Context, msg *types.MsgRollkitMi
 	}
 
 	return &types.MsgMigrateToRollkitResponse{}, nil
+}
+
+// EditAttesters is a gov gated method that allows the authority to edit the list of attesters.
+func (k *msgServer) EditAttesters(ctx context.Context, msg *types.MsgEditAttesters) (*types.MsgEditAttestersResponse, error) {
+	if k.authority != msg.Authority {
+		return nil, govtypes.ErrInvalidSigner.Wrapf("invalid authority; expected %s, got %s", k.authority, msg.Authority)
+	}
+
+	return &types.MsgEditAttestersResponse{}, nil
 }

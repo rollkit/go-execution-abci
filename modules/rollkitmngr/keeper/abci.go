@@ -9,13 +9,26 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
-// TODO:
-// We should slowly migrate the validator set to the sequencer if validator set is greater than 1
-// We need to check if the sequencer is already in the validator set, otherwise it would need to be added to the validator set (check what are the implications of this)
-// Make sure logic works when going from CometBFT validator set to Rollkit
-// AND Rollkit sequencer to another
-// Clarify is multiple sequencers are supported in the future
-// Skip the slow migration if IBC is not enabled
+// Optimisations
+
+// 0.a Skip the slow migration if IBC is not enabled
+// 0.b Only from migration from CometBFT to Rollkit
+// 0.c BlockHeight is the height that starts the migration, as the migration can take several blocks to complete, we need to return the expected halt height.
+
+// Two options:
+
+// 1. Migrate to sequencer only
+/*
+	- Slowly migrate the validator set to the sequencer
+	- We need to check if the sequencer is already in the validator set, otherwise it would need to be added to the validator set (check what are the implications of this)
+	- If IBC enabled and vp of sequencer 2/3, migration can be done immediately
+*/
+
+// 2. Migrate to sequencer with attesters network
+/*
+	- If IBC enabled and vp of attesters network 2/3, migration can be done immediately
+	- Otherwise, slowly migrate the validator set to the attesters
+*/
 
 // EndBlocker is called at the end of every block and returns sequencer updates.
 func (k Keeper) EndBlock(ctx context.Context) ([]abci.ValidatorUpdate, error) {

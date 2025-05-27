@@ -13,13 +13,11 @@ func CreateCometBFTPayloadProvider() types.SignaturePayloadProvider {
 			Type:   cmtproto.PrecommitType,
 			Height: int64(header.Height()), //nolint:gosec
 			Round:  0,
-			// Header hash = block hash in rollkit
 			BlockID: cmtproto.BlockID{
 				Hash:          cmbytes.HexBytes(header.Hash()),
 				PartSetHeader: cmtproto.PartSetHeader{},
 			},
-			Timestamp: header.Time(),
-			// proposerAddress = sequencer = validator
+			Timestamp:        header.Time(),
 			ValidatorAddress: header.ProposerAddress,
 			ValidatorIndex:   0,
 		}

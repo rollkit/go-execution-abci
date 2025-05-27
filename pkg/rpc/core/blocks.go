@@ -166,25 +166,31 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, error) {
 	wrappedCtx := ctx.Context()
 	heightValue := normalizeHeight(heightPtr)
-	header, data, err := env.Adapter.RollkitStore.GetBlockData(wrappedCtx, heightValue)
+	rollkitSignedHeader, rollkitData, err := env.Adapter.RollkitStore.GetBlockData(wrappedCtx, heightValue)
 	if err != nil {
 		return nil, err
 	}
 
 	// we should have a single validator
-	if len(header.ProposerAddress) == 0 {
+	if len(rollkitSignedHeader.ProposerAddress) == 0 {
 		return nil, errors.New("empty proposer address found in block header")
 	}
 
-	val := header.ProposerAddress
-	commit := common.ToABCICommit(heightValue, header.Hash(), val, header.Time(), header.Signature)
-
-	block, err := common.ToABCIBlock(header, data)
+	// Convert to CometBFT block to get the correct CometBFT header and its hash
+	abciBlock, err := common.ToABCIBlock(rollkitSignedHeader, rollkitData)
 	if err != nil {
 		return nil, err
 	}
 
-	return ctypes.NewResultCommit(&block.Header, commit, true), nil
+	commitForAbciHeader := common.ToABCICommit(
+		uint64(abciBlock.Header.Height),
+		abciBlock.Header.Hash(),
+		rollkitSignedHeader.ProposerAddress,
+		abciBlock.Header.Time,
+		rollkitSignedHeader.Signature,
+	)
+
+	return ctypes.NewResultCommit(&abciBlock.Header, commitForAbciHeader, true), nil
 }
 
 // BlockResults is not fully implemented as in FullClient because

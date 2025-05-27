@@ -5,6 +5,7 @@ import (
 	"time"
 
 	cmtlog "github.com/cometbft/cometbft/libs/log"
+	"github.com/cometbft/cometbft/libs/math"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	cmttypes "github.com/cometbft/cometbft/types"
@@ -16,7 +17,11 @@ import (
 
 	"github.com/rollkit/rollkit/types"
 
+	cryptotypes "github.com/cometbft/cometbft/crypto"
+	"github.com/cometbft/cometbft/crypto/ed25519"
+	"github.com/cometbft/cometbft/light"
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
+	goexeccommon "github.com/rollkit/go-execution-abci/pkg/common"
 )
 
 func newTestRPCContext() *rpctypes.Context {
@@ -93,75 +98,15 @@ func TestBlockSearch_Success(t *testing.T) {
 	mockApp.AssertExpectations(t)
 }
 
-func TestCommit_VerifyCometBFTCommit_LightClient_Compatible(t *testing.T) {
-	blockHeight := uint64(1)
-	now := time.Now()
-	chainID := "test-chain-id"
-
-	mockPrivKey, mockPubKey, err := crypto.GenerateEd25519Key(nil)
-	require.NoError(t, err)
-
-	testSigner, err := types.NewSigner(mockPubKey)
-	require.NoError(t, err)
-	proposerAddress := testSigner.Address
-
-	blockData := &types.Data{
-		Metadata: &types.Metadata{
-			ChainID:      chainID,
-			Height:       blockHeight,
-			Time:         uint64(now.UnixNano()),
-			LastDataHash: types.Hash{},
-		},
-		Txs: make(types.Txs, 0),
-	}
-	dataHash := blockData.DACommitment()
-
-	rollkitHeader := types.Header{
-		BaseHeader: types.BaseHeader{
-			Height:  blockHeight,
-			Time:    uint64(now.UnixNano()),
-			ChainID: chainID,
-		},
-		Version:         types.Version{Block: 1, App: 1},
-		LastHeaderHash:  types.Hash{},
-		LastCommitHash:  types.Hash{},
-		DataHash:        dataHash,
-		ConsensusHash:   types.Hash{},
-		AppHash:         types.Hash{0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20},
-		LastResultsHash: types.Hash{},
-		ValidatorHash:   types.Hash{},
-		ProposerAddress: proposerAddress,
-	}
-
-	rollkitHeaderHash := rollkitHeader.Hash()
-
-	voteProto := cmtproto.Vote{
-		Type:             cmtproto.PrecommitType,
-		Height:           int64(rollkitHeader.Height()),
-		Round:            0,
-		BlockID:          cmtproto.BlockID{Hash: rollkitHeaderHash[:], PartSetHeader: cmtproto.PartSetHeader{Total: 1, Hash: dataHash[:]}},
-		Timestamp:        now,
-		ValidatorAddress: proposerAddress,
-		ValidatorIndex:   0,
-	}
-
-	payloadBytes := cmttypes.VoteSignBytes(chainID, &voteProto)
-
-	realSignature, err := mockPrivKey.Sign(payloadBytes)
-	require.NoError(t, err)
-
-	rollkitSignedHeader := &types.SignedHeader{
-		Header:    rollkitHeader,
-		Signature: types.Signature(realSignature),
-		Signer:    testSigner,
-	}
+func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing.T) {
+	require := require.New(t)
+	assert := assert.New(t)
 
 	mockTxIndexer := new(MockTxIndexer)
 	mockBlockIndexer := new(MockBlockIndexer)
 	mockApp := new(MockApp)
 	mockRollkitStore := new(MockRollkitStore)
 
-	originalEnv := env
 	env = &Environment{
 		Adapter: &adapter.Adapter{
 			RollkitStore: mockRollkitStore,
@@ -171,31 +116,137 @@ func TestCommit_VerifyCometBFTCommit_LightClient_Compatible(t *testing.T) {
 		BlockIndexer: mockBlockIndexer,
 		Logger:       cmtlog.NewNopLogger(),
 	}
-	t.Cleanup(func() { env = originalEnv })
 
-	heightForRPC := int64(blockHeight)
-	mockRollkitStore.On("GetBlockData", mock.Anything, blockHeight).Return(rollkitSignedHeader, blockData, nil)
+	privKey, pubKey, err := crypto.GenerateEd25519Key(nil)
+	require.NoError(err)
 
-	rpcCtx := newTestRPCContext()
-	resultCommit, err := Commit(rpcCtx, &heightForRPC)
+	pubKeyBytes, err := pubKey.Raw()
+	require.NoError(err)
+	var cmtEdPubKey cryptotypes.PubKey = ed25519.PubKey(pubKeyBytes)
 
-	require.NoError(t, err)
-	require.NotNil(t, resultCommit)
+	fixedValSet := &cmttypes.ValidatorSet{
+		Validators: []*cmttypes.Validator{
+			cmttypes.NewValidator(cmtEdPubKey, 1),
+		},
+		Proposer: cmttypes.NewValidator(cmtEdPubKey, 1),
+	}
 
-	assert.Equal(t, chainID, resultCommit.ChainID)
-	assert.Equal(t, heightForRPC, resultCommit.Height)
-	assert.EqualValues(t, rollkitHeader.AppHash[:], resultCommit.AppHash.Bytes(), "AppHash mismatch")
-	assert.NotNil(t, resultCommit.SignedHeader.Header, "CometBFT Header should not be nil")
-	assert.NotNil(t, resultCommit.SignedHeader.Commit, "CometBFT Commit should not be nil")
-	assert.Equal(t, heightForRPC, resultCommit.SignedHeader.Header.Height)
-	assert.Equal(t, proposerAddress, resultCommit.SignedHeader.Header.ProposerAddress.Bytes())
-	assert.Len(t, resultCommit.SignedHeader.Commit.Signatures, 1, "Should have one commit signature")
-	if len(resultCommit.SignedHeader.Commit.Signatures) == 1 {
-		commitSig := resultCommit.SignedHeader.Commit.Signatures[0]
-		assert.Equal(t, cmttypes.BlockIDFlagCommit, commitSig.BlockIDFlag, "CommitSig BlockIDFlag should be BlockIDFlagCommit")
-		assert.Equal(t, proposerAddress, commitSig.ValidatorAddress.Bytes())
-		assert.EqualValues(t, realSignature, commitSig.Signature, "Signature mismatch")
+	var trustedHeader cmttypes.SignedHeader
+	setTrustedHeader := false
+	var lastRollkitHeaderHash []byte
+	var lastRollkitCommitHash []byte
+	chainID := "test-chain-multiple-blocks"
+	now := time.Now()
+
+	for i := 1; i <= 3; i++ {
+		blockHeight := uint64(i)
+		heightForRPC := int64(blockHeight)
+
+		// Create Rollkit Block Data
+		blockData := &types.Data{
+			Metadata: &types.Metadata{
+				ChainID:      chainID,
+				Height:       blockHeight,
+				Time:         uint64(now.UnixNano() + int64(i-1)*int64(time.Second)),
+				LastDataHash: nil,
+			},
+			Txs: make(types.Txs, 0),
+		}
+		dataHash := blockData.DACommitment()
+
+		// Create Rollkit Header
+		rollkitHeader := types.Header{
+			BaseHeader: types.BaseHeader{
+				Height:  blockHeight,
+				Time:    uint64(now.UnixNano() + int64(i-1)*int64(time.Second)),
+				ChainID: chainID,
+			},
+			Version:         types.Version{Block: 1, App: 1},
+			LastHeaderHash:  lastRollkitHeaderHash,
+			LastCommitHash:  lastRollkitCommitHash,
+			DataHash:        dataHash,
+			ConsensusHash:   BytesToSliceHash([]byte{byte(i)}),
+			AppHash:         BytesToSliceHash([]byte{byte(i + 10)}),
+			LastResultsHash: BytesToSliceHash([]byte{byte(i + 20)}),
+			ValidatorHash:   BytesToSliceHash(fixedValSet.Hash()),
+			ProposerAddress: fixedValSet.Proposer.Address,
+		}
+
+		// Simulate conversion to ABCIHeader to get the hash and time that will be used in the actual Commit object
+		abciHeaderForSigning, err := goexeccommon.ToABCIHeader(&rollkitHeader)
+		require.NoError(err)
+		abciHeaderHashForSigning := abciHeaderForSigning.Hash()
+		abciHeaderTimeForSigning := abciHeaderForSigning.Time
+
+		// Create and sign CometBFT vote using data from the (simulated) ABCI header
+		voteProto := cmtproto.Vote{
+			Type:             cmtproto.PrecommitType,
+			Height:           heightForRPC,
+			Round:            0,
+			BlockID:          cmtproto.BlockID{Hash: abciHeaderHashForSigning, PartSetHeader: cmtproto.PartSetHeader{Total: 0, Hash: nil}},
+			Timestamp:        abciHeaderTimeForSigning,
+			ValidatorAddress: fixedValSet.Proposer.Address,
+			ValidatorIndex:   0,
+		}
+		payloadBytes := cmttypes.VoteSignBytes(chainID, &voteProto)
+		realSignature, err := privKey.Sign(payloadBytes)
+		require.NoError(err)
+
+		// Create Rollkit Signed Header with the new signature
+		signer, err := types.NewSigner(pubKey)
+		require.NoError(err)
+		rollkitSignedHeader := &types.SignedHeader{
+			Header:    rollkitHeader,
+			Signature: types.Signature(realSignature),
+			Signer:    signer,
+		}
+
+		// Mock RollkitStore
+		mockRollkitStore.On("GetBlockData", mock.Anything, blockHeight).Return(rollkitSignedHeader, blockData, nil).Once()
+
+		// Call the Commit RPC method
+		rpcCtx := newTestRPCContext()
+		commitResult, err := Commit(rpcCtx, &heightForRPC)
+		require.NoError(err)
+		require.NotNil(commitResult)
+		require.NotNil(commitResult.SignedHeader)
+		require.NotNil(commitResult.SignedHeader.Header)
+		require.NotNil(commitResult.SignedHeader.Commit)
+		assert.Equal(heightForRPC, commitResult.Height)
+		assert.EqualValues(rollkitHeader.AppHash, commitResult.AppHash.Bytes()) // AppHash is []byte vs HexBytes
+
+		// Verify with light client
+		if !setTrustedHeader {
+			trustedHeader = commitResult.SignedHeader
+			setTrustedHeader = true
+		} else {
+			trustingPeriod := 3 * time.Hour
+			trustLevel := math.Fraction{Numerator: 1, Denominator: 1}
+			maxClockDrift := 10 * time.Second
+
+			err = light.Verify(&trustedHeader, fixedValSet, &commitResult.SignedHeader, fixedValSet, trustingPeriod, time.Unix(0, int64(rollkitHeader.BaseHeader.Time)), maxClockDrift, trustLevel)
+			require.NoError(err, "failed to pass light.Verify() for block %d", blockHeight)
+			trustedHeader = commitResult.SignedHeader
+		}
+
+		// Update last hashes for the next iteration
+		currentRollkitHeaderHash := rollkitHeader.Hash()
+		lastRollkitHeaderHash = BytesToSliceHash(currentRollkitHeaderHash)
+
+		if commitResult.SignedHeader.Commit != nil {
+			lastRollkitCommitHash = BytesToSliceHash(commitResult.SignedHeader.Commit.Hash())
+		}
 	}
 
 	mockRollkitStore.AssertExpectations(t)
+	mockApp.AssertExpectations(t)
+	mockTxIndexer.AssertExpectations(t)
+	mockBlockIndexer.AssertExpectations(t)
+}
+
+// Renamed and modified helper function to return []byte of 32 length
+func BytesToSliceHash(b []byte) []byte {
+	h := make([]byte, 32)
+	copy(h, b) // copy will take min(len(h), len(b))
+	return h
 }

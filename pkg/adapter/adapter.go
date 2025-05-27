@@ -364,7 +364,6 @@ func (a *Adapter) ExecuteTxs(
 	// Update s to reflect state H.
 	s.AppHash = fbResp.AppHash
 	s.LastBlockHeight = int64(blockHeight) // Height is now H
-	//s.LastBlockID = cometCommit_H_minus_1.BlockID
 
 	nValSet := s.NextValidators.Copy()
 
@@ -464,21 +463,21 @@ func (a *Adapter) ExecuteTxs(
 	}
 
 	if blockHeight > 1 {
-		attestation, err := a.RollkitStore.GetSequencerAttestation(ctx, blockHeight-1)
+		header, data, err := a.RollkitStore.GetBlockData(ctx, blockHeight-1)
 		if err != nil {
-			return nil, 0, fmt.Errorf("failed to get sequencer attestation for height %d: %w", blockHeight, err)
+			return nil, 0, fmt.Errorf("failed to get previous block data: %w", err)
 		}
 
 		commit = &cmttypes.Commit{
-			Height:  int64(attestation.Height),
-			Round:   attestation.Round,
-			BlockID: cmttypes.BlockID{Hash: attestation.BlockHeaderHash, PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: attestation.BlockDataHash}},
+			Height:  int64(header.Height()),
+			Round:   0,
+			BlockID: cmttypes.BlockID{Hash: bytes.HexBytes(header.Hash()), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: bytes.HexBytes(data.Hash())}},
 			Signatures: []cmttypes.CommitSig{
 				{
 					BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-					ValidatorAddress: cmttypes.Address(attestation.SequencerAddress),
-					Timestamp:        attestation.Timestamp.AsTime(),
-					Signature:        attestation.Signature,
+					ValidatorAddress: cmttypes.Address(header.ProposerAddress),
+					Timestamp:        header.Time(),
+					Signature:        header.Signature,
 				},
 			},
 		}

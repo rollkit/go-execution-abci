@@ -21,17 +21,9 @@ func NewMsgServerImpl(keeper Keeper) types.MsgServer {
 	return &msgServer{Keeper: keeper}
 }
 
-func (k msgServer) ChangeSequencers(ctx context.Context, msg *types.MsgChangeSequencers) (*types.MsgChangeSequencersResponse, error) {
+func (k msgServer) MigrateToRollkit(ctx context.Context, msg *types.MsgRollkitMigrate) (*types.MsgMigrateToRollkitResponse, error) {
 	if k.authority != msg.Authority {
 		return nil, govtypes.ErrInvalidSigner.Wrapf("invalid authority; expected %s, got %s", k.authority, msg.Authority)
-	}
-
-	if len(msg.Sequencers) == 0 {
-		return nil, sdkerrors.ErrNotSupported.Wrapf("a sequencer is required.")
-	}
-
-	if len(msg.Sequencers) > 1 {
-		return nil, sdkerrors.ErrNotSupported.Wrapf("currently only one sequencer can be set at a time")
 	}
 
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
@@ -39,9 +31,11 @@ func (k msgServer) ChangeSequencers(ctx context.Context, msg *types.MsgChangeSeq
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("block height %d must be greater than current block height %d", msg.BlockHeight, sdkCtx.BlockHeight())
 	}
 
-	if err := k.NextSequencers.Set(ctx, msg.BlockHeight, msg.Sequencers[0]); err != nil {
+	// TODO: set attesters
+
+	if err := k.NextSequencers.Set(ctx, msg.BlockHeight, msg.Sequencer); err != nil {
 		return nil, err
 	}
 
-	return &types.MsgChangeSequencersResponse{}, nil
+	return &types.MsgMigrateToRollkitResponse{}, nil
 }

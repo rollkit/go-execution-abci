@@ -9,13 +9,13 @@ import (
 )
 
 func RegisterLegacyAminoCodec(cdc *codec.LegacyAmino) {
-	legacy.RegisterAminoMsg(cdc, &MsgChangeSequencers{}, "rollkitmngr/v1/MsgChangeSequencers")
+	legacy.RegisterAminoMsg(cdc, &MsgRollkitMigrate{}, "rollkitmngr/v1/MsgRollkitMigrate")
 }
 
 // RegisterInterfaces registers the x/sequencer interfaces types with the interface registry
 func RegisterInterfaces(registry types.InterfaceRegistry) {
 	registry.RegisterImplementations((*sdk.Msg)(nil),
-		&MsgChangeSequencers{},
+		&MsgRollkitMigrate{},
 	)
 
 	msgservice.RegisterMsgServiceDesc(registry, &_Msg_serviceDesc)

@@ -1,20 +1,24 @@
 package rollkitadapter
 
 import (
-	cmbytes "github.com/cometbft/cometbft/libs/bytes"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	cmtypes "github.com/cometbft/cometbft/types"
+	"github.com/rollkit/go-execution-abci/pkg/rpc"
 	"github.com/rollkit/rollkit/types"
 )
 
 func CreateCometBFTPayloadProvider() types.SignaturePayloadProvider {
 	return func(header *types.Header, data *types.Data) ([]byte, error) {
+		abciHeaderForSigning, err := rpc.ToABCIHeader(header)
+		if err != nil {
+			return nil, err
+		}
 		vote := cmtproto.Vote{
 			Type:   cmtproto.PrecommitType,
 			Height: int64(header.Height()), //nolint:gosec
 			Round:  0,
 			BlockID: cmtproto.BlockID{
-				Hash:          cmbytes.HexBytes(header.Hash()),
+				Hash:          abciHeaderForSigning.Hash(),
 				PartSetHeader: cmtproto.PartSetHeader{},
 			},
 			Timestamp:        header.Time(),

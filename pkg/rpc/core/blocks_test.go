@@ -172,13 +172,11 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 			ProposerAddress: fixedValSet.Proposer.Address,
 		}
 
-		// Simulate conversion to ABCIHeader to get the hash and time that will be used in the actual Commit object
 		abciHeaderForSigning, err := goexeccommon.ToABCIHeader(&rollkitHeader)
 		require.NoError(err)
 		abciHeaderHashForSigning := abciHeaderForSigning.Hash()
 		abciHeaderTimeForSigning := abciHeaderForSigning.Time
 
-		// Create and sign CometBFT vote using data from the (simulated) ABCI header
 		voteProto := cmtproto.Vote{
 			Type:             cmtproto.PrecommitType,
 			Height:           heightForRPC,

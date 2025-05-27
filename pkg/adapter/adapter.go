@@ -9,6 +9,7 @@ import (
 	"cosmossdk.io/log"
 	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/libs/bytes"
 	"github.com/cometbft/cometbft/mempool"
 	corep2p "github.com/cometbft/cometbft/p2p"
 	types1 "github.com/cometbft/cometbft/proto/tendermint/types"
@@ -26,9 +27,7 @@ import (
 	rollnode "github.com/rollkit/rollkit/node"
 	rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
 	rstore "github.com/rollkit/rollkit/pkg/store"
-	rlktypes "github.com/rollkit/rollkit/types"
 
-	"github.com/rollkit/go-execution-abci/pkg/common"
 	"github.com/rollkit/go-execution-abci/pkg/p2p"
 )
 
@@ -300,50 +299,35 @@ func (a *Adapter) ExecuteTxs(
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get sequencer attestation for height %d: %w", blockHeight, err)
 	}
-	header := attestation.Header
-
-	// Convert proto header to domain header
-	domainRolkitHeader := new(rlktypes.Header)
-	if err := domainRolkitHeader.FromProto(header.Header); err != nil {
-		return nil, 0, fmt.Errorf("failed to convert proto header to domain header: %w", err)
-	}
-
-	abciHeader, err := common.ToABCIHeader(domainRolkitHeader)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to convert header to ABCI header: %w", err)
-	}
 
 	var proposedLastCommit abci.CommitInfo
 	if blockHeight > 1 {
-		prevAttestation, err := a.RollkitStore.GetSequencerAttestation(ctx, blockHeight-1)
+		header, data, err := a.RollkitStore.GetBlockData(ctx, blockHeight-1)
 		if err != nil {
-			// If we can't get the previous attestation, we might proceed with an empty commit info
-			// or return an error, depending on the desired behavior. For now, log and use empty.
-			a.Logger.Error("failed to get previous sequencer attestation for ProposedLastCommit", "height", blockHeight-1, "err", err)
-			proposedLastCommit = abci.CommitInfo{Round: 0, Votes: []abci.VoteInfo{}}
-		} else {
-			commitForPrevBlock := &cmttypes.Commit{
-				Height:  int64(prevAttestation.Height),
-				Round:   prevAttestation.Round,
-				BlockID: cmttypes.BlockID{Hash: prevAttestation.BlockHeaderHash, PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: prevAttestation.BlockDataHash}},
-				Signatures: []cmttypes.CommitSig{
-					{
-						BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-						ValidatorAddress: cmttypes.Address(prevAttestation.SequencerAddress),
-						Timestamp:        prevAttestation.Timestamp.AsTime(),
-						Signature:        prevAttestation.Signature,
-					},
-				},
-			}
-			proposedLastCommit = cometCommitToABCICommitInfo(commitForPrevBlock)
+			return nil, 0, fmt.Errorf("failed to get previous block data: %w", err)
 		}
+
+		commitForPrevBlock := &cmttypes.Commit{
+			Height:  int64(header.Height()),
+			Round:   0,
+			BlockID: cmttypes.BlockID{Hash: bytes.HexBytes(header.Hash()), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: bytes.HexBytes(data.Hash())}},
+			Signatures: []cmttypes.CommitSig{
+				{
+					BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+					ValidatorAddress: cmttypes.Address(header.ProposerAddress),
+					Timestamp:        header.Time(),
+					Signature:        header.Signature,
+				},
+			},
+		}
+		proposedLastCommit = cometCommitToABCICommitInfo(commitForPrevBlock)
 	} else {
 		// For the first block, ProposedLastCommit is empty
 		proposedLastCommit = abci.CommitInfo{Round: 0, Votes: []abci.VoteInfo{}}
 	}
 
 	ppResp, err := a.App.ProcessProposal(&abci.RequestProcessProposal{
-		Hash:               abciHeader.Hash(),
+		Hash:               attestation.BlockHeaderHash,
 		Height:             int64(blockHeight),
 		Time:               timestamp,
 		Txs:                txs,
@@ -361,7 +345,7 @@ func (a *Adapter) ExecuteTxs(
 	}
 
 	fbResp, err := a.App.FinalizeBlock(&abci.RequestFinalizeBlock{
-		Hash:               abciHeader.Hash(),
+		Hash:               attestation.BlockHeaderHash,
 		NextValidatorsHash: s.NextValidators.Hash(),
 		ProposerAddress:    s.Validators.Proposer.Address,
 		Height:             int64(blockHeight),

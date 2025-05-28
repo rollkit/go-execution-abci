@@ -20,7 +20,6 @@ import (
 	"github.com/rollkit/rollkit/types"
 
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
-	pb "github.com/rollkit/rollkit/types/pb/rollkit/v1"
 )
 
 var _ txindex.TxIndexer = (*MockTxIndexer)(nil)
@@ -198,22 +197,8 @@ func (m *MockRollkitStore) SetHeight(ctx context.Context, height uint64) error {
 	return args.Error(0)
 }
 
-func (m *MockRollkitStore) GetSequencerAttestation(ctx context.Context, height uint64) (*pb.RollkitSequencerAttestation, error) {
-	args := m.Called(ctx, height)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*pb.RollkitSequencerAttestation), args.Error(1)
-}
-
 func (m *MockRollkitStore) UpdateState(ctx context.Context, state types.State) error {
 	args := m.Called(ctx, state)
-	return args.Error(0)
-}
-
-// SaveSequencerAttestation saves the sequencer attestation for a given height.
-func (m *MockRollkitStore) SaveSequencerAttestation(ctx context.Context, height uint64, attestation *pb.RollkitSequencerAttestation) error {
-	args := m.Called(ctx, height, attestation)
 	return args.Error(0)
 }
 

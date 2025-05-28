@@ -87,7 +87,7 @@ func TestExecuteFiresEvents(t *testing.T) {
 			require.NoError(t, adapter.Store.SaveState(ctx, stateFixture()))
 
 			// when
-			_, _, err := adapter.ExecuteTxs(ctx, spec.txs, 1, timestamp, bytes.Repeat([]byte{1}, 32))
+			_, _, err := adapter.ExecuteTxs(ctx, spec.txs, 1, timestamp, bytes.Repeat([]byte{1}, 32), nil)
 			if spec.expErr {
 				require.Error(t, err)
 				blockMx.RLock()

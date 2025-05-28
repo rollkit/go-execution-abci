@@ -27,8 +27,8 @@ require (
 	github.com/libp2p/go-libp2p-pubsub v0.13.1
 	github.com/multiformats/go-multiaddr v0.15.0
 	github.com/prometheus/client_golang v1.22.0
-	github.com/rollkit/rollkit v0.14.2-0.20250526094218-4a5686055970
-	github.com/rollkit/rollkit/core v0.0.0-20250526094218-4a5686055970
+	github.com/rollkit/rollkit v0.14.2-0.20250528210337-7eb60170181a
+	github.com/rollkit/rollkit/core v0.0.0-20250528210337-7eb60170181a
 	github.com/rollkit/rollkit/da v0.0.0-20250526094218-4a5686055970
 	github.com/rollkit/rollkit/sequencers/single v0.0.0-20250526094218-4a5686055970
 	github.com/rs/cors v1.11.1
@@ -355,5 +355,5 @@ tool (
 	github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
 )
 
-replace github.com/rollkit/rollkit => ../rollkit
-replace github.com/rollkit/rollkit/core => ../rollkit/core
+//replace github.com/rollkit/rollkit => ../rollkit
+//replace github.com/rollkit/rollkit/core => ../rollkit/core

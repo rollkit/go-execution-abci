@@ -10,7 +10,7 @@ require (
 	cosmossdk.io/api v0.7.6
 	cosmossdk.io/collections v0.4.0
 	cosmossdk.io/core v0.11.0
-	cosmossdk.io/depinject v1.2.0
+	cosmossdk.io/depinject v1.2.1
 	cosmossdk.io/errors v1.0.2
 	cosmossdk.io/log v1.6.0
 	cosmossdk.io/math v1.5.3
@@ -336,7 +336,7 @@ require (
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	gonum.org/v1/gonum v0.15.1 // indirect
 	google.golang.org/genproto v0.0.0-20240227224415-6ceb2ff114de // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250505200425-f936aa4a68b2 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250528174236-200df99c418a // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect

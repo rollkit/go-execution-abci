@@ -44,7 +44,7 @@ func (k Keeper) PreBlocker(ctx context.Context) error {
 			return sdkerrors.ErrLogic.Wrapf("failed to delete migration state: %v", err)
 		}
 
-		return errors.New("app migration to rollkit is in progress, switch to the new binary and run the rollkit migration command to complete the migration.")
+		return errors.New("app migration to rollkit is in progress, switch to the new binary and run the rollkit migration command to complete the migration")
 	}
 
 	return nil

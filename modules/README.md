@@ -12,7 +12,7 @@ Think of slashing, jailing or validator updates.
 
 ## Rollkit Manager
 
-The `rollkitmngr` module is a meant to define attesters and sequencers in a Rollkit chain. 
+The `rollkitmngr` module is a meant to define attesters and sequencers in a Rollkit chain.
 This is the module that handles the validator updates on the SDK side.
 Additionally, it has additional queries to get the sequencer information, and the attesters information.
 

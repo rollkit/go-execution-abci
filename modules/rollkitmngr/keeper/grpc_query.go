@@ -25,7 +25,7 @@ func NewQueryServer(keeper Keeper) types.QueryServer {
 func (q queryServer) Attesters(context.Context, *types.QueryAttestersRequest) (*types.QueryAttestersResponse, error) {
 	vals, err := q.stakingKeeper.GetLastValidators(context.Background())
 	if err != nil {
-		return nil, sdkerrors.ErrLogic.Wrapf("failed to get last validators: %w", err)
+		return nil, sdkerrors.ErrLogic.Wrapf("failed to get last validators: %v", err)
 	}
 
 	attesters := make([]types.Attester, len(vals))
@@ -61,7 +61,7 @@ func (q queryServer) Sequencer(ctx context.Context, _ *types.QuerySequencerReque
 
 	seq, err := q.Keeper.Sequencer.Get(ctx)
 	if err != nil {
-		return nil, sdkerrors.ErrLogic.Wrapf("failed to get sequencer: %w", err)
+		return nil, sdkerrors.ErrLogic.Wrapf("failed to get sequencer: %v", err)
 	}
 
 	return &types.QuerySequencerResponse{

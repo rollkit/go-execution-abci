@@ -25,13 +25,13 @@ func (k Keeper) migrateNow(
 		// no attesters, we are migrating to a single sequencer
 		initialValUpdates, err = migrateToSequencer(migrationData, lastValidatorSet)
 		if err != nil {
-			return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to migrate to sequencer: %w", err)
+			return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to migrate to sequencer: %v", err)
 		}
 	default:
 		// we are migrating the validator set to attesters
 		initialValUpdates, err = migrateToAttesters(migrationData, lastValidatorSet)
 		if err != nil {
-			return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to migrate to sequencer & attesters: %w", err)
+			return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to migrate to sequencer & attesters: %v", err)
 		}
 	}
 

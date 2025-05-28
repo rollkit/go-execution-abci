@@ -23,13 +23,13 @@ func (k Keeper) migrateNow(
 	switch len(migrationData.Attesters) {
 	case 0:
 		// no attesters, we are migrating to a single sequencer
-		initialValUpdates, err = migrateToSequencer(k, ctx, migrationData, lastValidatorSet)
+		initialValUpdates, err = migrateToSequencer(migrationData, lastValidatorSet)
 		if err != nil {
 			return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to migrate to sequencer: %w", err)
 		}
 	default:
 		// we are migrating the validator set to attesters
-		initialValUpdates, err = migrateToAttesters(k, ctx, migrationData, lastValidatorSet)
+		initialValUpdates, err = migrateToAttesters(migrationData, lastValidatorSet)
 		if err != nil {
 			return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to migrate to sequencer & attesters: %w", err)
 		}
@@ -48,8 +48,6 @@ func (k Keeper) migrateNow(
 // migrateToSequencer migrates the chain to a single sequencer.
 // the validator set is updated to include the sequencer and remove all other validators.
 func migrateToSequencer(
-	k Keeper,
-	ctx context.Context,
 	migrationData types.RollkitMigration,
 	lastValidatorSet []stakingtypes.Validator,
 ) (initialValUpdates []abci.ValidatorUpdate, err error) {
@@ -78,8 +76,6 @@ func migrateToSequencer(
 // migrateToAttesters migrates the chain to attesters.
 // the validator set is updated to include the attesters and remove all other validators.
 func migrateToAttesters(
-	k Keeper,
-	ctx context.Context,
 	migrationData types.RollkitMigration,
 	lastValidatorSet []stakingtypes.Validator,
 ) (initialValUpdates []abci.ValidatorUpdate, err error) {

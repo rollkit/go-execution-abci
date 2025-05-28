@@ -359,15 +359,13 @@ func (a *Adapter) ExecuteTxs(
 			Votes: nil,
 		},
 		Txs: txs,
-		//Misbehavior: abciBlock.Evidence.Evidence.ToABCI(),
 	})
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// Update s to reflect state H.
 	s.AppHash = fbResp.AppHash
-	s.LastBlockHeight = int64(blockHeight) // Height is now H
+	s.LastBlockHeight = int64(blockHeight)
 
 	nValSet := s.NextValidators.Copy()
 
@@ -489,10 +487,6 @@ func (a *Adapter) ExecuteTxs(
 
 	block := s.MakeBlock(int64(blockHeight), cmtTxs, commit, nil, s.Validators.Proposer.Address)
 
-	// The ADR implies Rollkit BlockManager retrieves `calculatedPrevBlockCommitHash` and sets it on RollkitHeader_H.LastCommitHash.
-	// The `fireEvents` function takes blockID cmttypes.BlockID as its 4th argument.
-	// We need the BlockID for the current block H.
-	// Constructing BlockID_H for fireEvents using Header_H.Hash and PartsHeader_H.Hash from the newly created block.
 	currentBlockID := cmttypes.BlockID{Hash: block.Header.Hash(), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: block.Header.DataHash}}
 
 	fireEvents(a.Logger, a.EventBus, block, currentBlockID, fbResp, validatorUpdates)
@@ -612,8 +606,6 @@ func (a *Adapter) SetFinal(ctx context.Context, blockHeight uint64) error {
 	return nil
 }
 
-// cometCommitToABCICommitInfo converts a CometBFT Commit to an ABCI CommitInfo.
-// This helper function is based on ADR Phase 2, step 7.
 func cometCommitToABCICommitInfo(commit *cmttypes.Commit) abci.CommitInfo {
 	if commit == nil {
 		return abci.CommitInfo{
@@ -634,7 +626,7 @@ func cometCommitToABCICommitInfo(commit *cmttypes.Commit) abci.CommitInfo {
 		votes[i] = abci.VoteInfo{
 			Validator: abci.Validator{
 				Address: sig.ValidatorAddress,
-				Power:   0, // Power is not in CommitSig; set to 0 as per ADR context.
+				Power:   0,
 			},
 			BlockIdFlag: types1.BlockIDFlag(sig.BlockIDFlag),
 		}

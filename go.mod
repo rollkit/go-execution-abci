@@ -356,3 +356,4 @@ tool (
 )
 
 replace github.com/rollkit/rollkit => ../rollkit
+replace github.com/rollkit/rollkit/core => ../rollkit/core

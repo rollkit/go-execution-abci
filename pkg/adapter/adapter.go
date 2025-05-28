@@ -27,6 +27,7 @@ import (
 	rollnode "github.com/rollkit/rollkit/node"
 	rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
 	rstore "github.com/rollkit/rollkit/pkg/store"
+	"github.com/rollkit/rollkit/types"
 
 	"github.com/rollkit/go-execution-abci/pkg/p2p"
 )
@@ -282,6 +283,7 @@ func (a *Adapter) ExecuteTxs(
 	blockHeight uint64,
 	timestamp time.Time,
 	prevStateRoot []byte,
+	metadata map[string]interface{},
 ) ([]byte, uint64, error) {
 	execStart := time.Now()
 	defer func() {
@@ -290,14 +292,16 @@ func (a *Adapter) ExecuteTxs(
 	a.Logger.Info("Executing block", "height", blockHeight, "num_txs", len(txs), "timestamp", timestamp)
 	a.Metrics.TxsExecutedPerBlock.Observe(float64(len(txs)))
 
+	var headerHash types.Hash
+	if headerHash, ok := metadata[types.HeaderHashKey]; ok {
+		headerHash = types.Hash(headerHash.(types.Hash))
+	} else {
+		a.Logger.Info("header hash not found in metadata, running genesis block")
+	}
+
 	s, err := a.Store.LoadState(ctx)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to load state: %w", err)
-	}
-
-	attestation, err := a.RollkitStore.GetSequencerAttestation(ctx, blockHeight)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to get sequencer attestation for height %d: %w", blockHeight, err)
 	}
 
 	var proposedLastCommit abci.CommitInfo
@@ -327,7 +331,7 @@ func (a *Adapter) ExecuteTxs(
 	}
 
 	ppResp, err := a.App.ProcessProposal(&abci.RequestProcessProposal{
-		Hash:               attestation.BlockHeaderHash,
+		Hash:               headerHash,
 		Height:             int64(blockHeight),
 		Time:               timestamp,
 		Txs:                txs,
@@ -345,7 +349,7 @@ func (a *Adapter) ExecuteTxs(
 	}
 
 	fbResp, err := a.App.FinalizeBlock(&abci.RequestFinalizeBlock{
-		Hash:               attestation.BlockHeaderHash,
+		Hash:               headerHash,
 		NextValidatorsHash: s.NextValidators.Hash(),
 		ProposerAddress:    s.Validators.Proposer.Address,
 		Height:             int64(blockHeight),

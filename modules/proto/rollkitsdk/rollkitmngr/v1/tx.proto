@@ -14,16 +14,16 @@ service Msg {
   option (cosmos.msg.v1.service) = true;
 
   // MigrateToRollkit defines a (governance) operation for the migration to rollkit. The authority defaults to the x/gov module account.
-  rpc MigrateToRollkit(MsgRollkitMigrate) returns (MsgMigrateToRollkitResponse);
+  rpc MigrateToRollkit(MsgMigrateToRollkit) returns (MsgMigrateToRollkitResponse);
 
   // EditAttesters defines a governance operation to edit the list of attesters.
   rpc EditAttesters(MsgEditAttesters) returns (MsgEditAttestersResponse);
 }
 
-// MsgRollkitMigrate is the Msg/RollkitMigrate request type.
-message MsgRollkitMigrate {
+// MsgMigrateToRollkit is the Msg/MsgMigrateToRollkit request type.
+message MsgMigrateToRollkit {
   option (cosmos.msg.v1.signer) = "authority";
-  option (amino.name) = "rollkitmngr/v1/MsgRollkitMigrate";
+  option (amino.name) = "rollkitmngr/v1/MsgMigrateToRollkit";
 
   // authority is the address that controls the module (defaults to x/gov unless
   // overwritten).

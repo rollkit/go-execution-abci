@@ -1,9 +1,9 @@
 package types
 
-// ModuleName is the name of the sequencer module
-const ModuleName = "sequencer"
+// ModuleName is the name of the rollkitmngr module
+const ModuleName = "rollkitmngr"
 
 var (
-	SequencerConsAddrKey = []byte{0x11}
-	NextSequencersKey    = []byte{0x13}
+	MigrationKey = []byte{0x13}
+	SequencerKey = []byte{0x14}
 )

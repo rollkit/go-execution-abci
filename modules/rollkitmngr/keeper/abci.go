@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"cosmossdk.io/collections"
 	abci "github.com/cometbft/cometbft/abci/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 )
 
 // Optimisations
@@ -30,15 +30,39 @@ import (
 	- Otherwise, slowly migrate the validator set to the attesters
 */
 
+// PreBlocker makes sure the chain halts at block height + 1 after the migration end.
+// This is to ensure that the migration is completed with a binary switch.
+func (k Keeper) PreBlocker(ctx context.Context) error {
+	_, end, _ := k.IsMigrating(ctx)
+	sdkCtx := sdk.UnwrapSDKContext(ctx)
+
+	// one block after the migration end, we halt forcing a binary switch
+	if end > 0 && end+1 == uint64(sdkCtx.BlockHeight()) {
+		// remove the migration state from the store
+		// this is to ensure at restart we won't halt the chain again
+		if err := k.Migration.Remove(ctx); err != nil {
+			return sdkerrors.ErrLogic.Wrapf("failed to delete migration state: %v", err)
+		}
+
+		return errors.New("app migration to rollkit is in progress, switch to the new binary and run the rollkit migration command to complete the migration.")
+	}
+
+	return nil
+}
+
 // EndBlocker is called at the end of every block and returns sequencer updates.
 func (k Keeper) EndBlock(ctx context.Context) ([]abci.ValidatorUpdate, error) {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
-	nextSequencer, err := k.NextSequencers.Get(sdkCtx, uint64(sdkCtx.BlockHeight()))
-	if errors.Is(err, collections.ErrNotFound) {
-		// no sequencer change scheduled for this block
+
+	start, _, shouldBeMigrating := k.IsMigrating(ctx)
+	if !shouldBeMigrating || start > uint64(sdkCtx.BlockHeight()) {
+		// no migration in progress, return empty updates
 		return []abci.ValidatorUpdate{}, nil
-	} else if err != nil {
-		return nil, err
+	}
+
+	migration, err := k.Migration.Get(ctx)
+	if err != nil {
+		return nil, sdkerrors.ErrLogic.Wrapf("failed to get migration state: %v", err)
 	}
 
 	validatorSet, err := k.stakingKeeper.GetLastValidators(sdkCtx)
@@ -46,5 +70,10 @@ func (k Keeper) EndBlock(ctx context.Context) ([]abci.ValidatorUpdate, error) {
 		return nil, err
 	}
 
-	return k.MigrateToSequencer(sdkCtx, nextSequencer, validatorSet)
+	if shouldBeMigrating && !k.isIBCEnabled(ctx) {
+		// if IBC is not enabled, we can migrate immediately
+		return k.migrateNow(ctx, migration, validatorSet)
+	}
+
+	return k.migrateOver(sdkCtx, migration, validatorSet)
 }

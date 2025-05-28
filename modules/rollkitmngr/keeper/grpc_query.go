@@ -20,47 +20,51 @@ func NewQueryServer(keeper Keeper) types.QueryServer {
 }
 
 // Attesters returns the current attesters.
-// Note it is only a wrapper around the staking module's query (iff the attesters are enabled).
+// Note it is only a wrapper around the staking module's query.
+// If the sequencer and attesters are equals, then the chain is not using attesters.
 func (q queryServer) Attesters(context.Context, *types.QueryAttestersRequest) (*types.QueryAttestersResponse, error) {
-	// err := q.NextSequencers.Walk(ctx, nil, func(key uint64, sequencer types.Sequencer) (bool, error) {
-	// 	sequencers = append(sequencers, types.SequencerChanges{
-	// 		BlockHeight: key,
-	// 		Sequencers:  []types.Sequencer{sequencer},
-	// 	})
-	// 	return false, nil
-	// })
-	// if err != nil && !errors.Is(err, collections.ErrNotFound) {
-	// 	return nil, err
-	// }
-
-	panic("unimplemented")
-}
-
-// IsMigrating implements types.QueryServer.
-func (q queryServer) IsMigrating(context.Context, *types.QueryIsMigratingRequest) (*types.QueryIsMigratingResponse, error) {
-	panic("unimplemented")
-}
-
-// Attesters returns the current attesters.
-// Note it is only a wrapper around the staking module's query (iff the attesters are disabled). Otherwise it fetches from the module state.
-func (q queryServer) Sequencer(ctx context.Context, _ *types.QuerySequencerRequest) (*types.QuerySequencerResponse, error) {
-	vals, err := q.stakingKeeper.GetLastValidators(ctx)
+	vals, err := q.stakingKeeper.GetLastValidators(context.Background())
 	if err != nil {
-		return nil, sdkerrors.ErrLogic.Wrapf("failed to get last validators")
+		return nil, sdkerrors.ErrLogic.Wrapf("failed to get last validators: %w", err)
 	}
 
-	// Eventually, refactor this when rollkit suppots multiple sequencers.
-	// In the meantime, this is enough to determine if the chain is using rollkit or not.
-	// There is one false positive for single validators chains, but those are more often local testnets.
-	if len(vals) > 1 {
-		// TODO
-		// chain is using attesters, fallback to something else
+	attesters := make([]types.Attester, len(vals))
+	for i, val := range vals {
+		attesters[i] = types.Attester{
+			Name:            val.GetMoniker(),
+			ConsensusPubkey: val.ConsensusPubkey,
+		}
+	}
+
+	return &types.QueryAttestersResponse{
+		Attesters: attesters,
+	}, nil
+}
+
+// IsMigrating checks if the migration to Rollkit is in progress.
+func (q queryServer) IsMigrating(ctx context.Context, _ *types.QueryIsMigratingRequest) (*types.QueryIsMigratingResponse, error) {
+	start, end, isMigrating := q.Keeper.IsMigrating(ctx)
+
+	return &types.QueryIsMigratingResponse{
+		IsMigrating:      isMigrating,
+		StartBlockHeight: start,
+		EndBlockHeight:   end,
+	}, nil
+}
+
+// Sequencer returns the current Sequencer.
+func (q queryServer) Sequencer(ctx context.Context, _ *types.QuerySequencerRequest) (*types.QuerySequencerResponse, error) {
+	_, _, done := q.Keeper.IsMigrating(ctx)
+	if !done {
+		return nil, sdkerrors.ErrLogic.Wrap("sequencer is not set, migration is in progress or not started yet")
+	}
+
+	seq, err := q.Keeper.Sequencer.Get(ctx)
+	if err != nil {
+		return nil, sdkerrors.ErrLogic.Wrapf("failed to get sequencer: %w", err)
 	}
 
 	return &types.QuerySequencerResponse{
-		Sequencer: types.Sequencer{
-			Name:            vals[0].GetMoniker(),
-			ConsensusPubkey: vals[0].ConsensusPubkey,
-		},
+		Sequencer: seq,
 	}, nil
 }

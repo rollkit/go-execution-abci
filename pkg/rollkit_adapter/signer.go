@@ -3,8 +3,9 @@ package rollkitadapter
 import (
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	cmtypes "github.com/cometbft/cometbft/types"
-	"github.com/rollkit/go-execution-abci/pkg/rpc"
 	"github.com/rollkit/rollkit/types"
+
+	"github.com/rollkit/go-execution-abci/pkg/rpc"
 )
 
 func CreateCometBFTPayloadProvider() types.SignaturePayloadProvider {

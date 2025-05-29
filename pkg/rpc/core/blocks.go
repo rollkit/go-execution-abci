@@ -183,10 +183,10 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 	}
 
 	commitForAbciHeader := common.ToABCICommit(
-		uint64(abciBlock.Header.Height),
-		abciBlock.Header.Hash(),
+		uint64(abciBlock.Height),
+		abciBlock.Hash(),
 		rollkitSignedHeader.ProposerAddress,
-		abciBlock.Header.Time,
+		abciBlock.Time,
 		rollkitSignedHeader.Signature,
 	)
 

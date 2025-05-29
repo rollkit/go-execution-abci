@@ -1,8 +1,9 @@
 package rollkitadapter
 
 import (
-	"github.com/rollkit/go-execution-abci/pkg/common"
 	"github.com/rollkit/rollkit/types"
+
+	"github.com/rollkit/go-execution-abci/pkg/common"
 )
 
 func CreateCometBFTHeaderHasher() types.HeaderHasher {

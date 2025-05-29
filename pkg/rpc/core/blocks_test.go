@@ -207,9 +207,8 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 		commitResult, err := Commit(rpcCtx, &heightForRPC)
 		require.NoError(err)
 		require.NotNil(commitResult)
-		require.NotNil(commitResult.SignedHeader)
-		require.NotNil(commitResult.SignedHeader.Header)
-		require.NotNil(commitResult.SignedHeader.Commit)
+		require.NotNil(commitResult.Header)
+		require.NotNil(commitResult.Commit)
 		assert.Equal(heightForRPC, commitResult.Height)
 		assert.EqualValues(rollkitHeader.AppHash, commitResult.AppHash.Bytes()) // AppHash is []byte vs HexBytes
 
@@ -231,8 +230,8 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 		currentRollkitHeaderHash := rollkitHeader.Hash()
 		lastRollkitHeaderHash = BytesToSliceHash(currentRollkitHeaderHash)
 
-		if commitResult.SignedHeader.Commit != nil {
-			lastRollkitCommitHash = BytesToSliceHash(commitResult.SignedHeader.Commit.Hash())
+		if commitResult.Commit != nil {
+			lastRollkitCommitHash = BytesToSliceHash(commitResult.Commit.Hash())
 		}
 	}
 

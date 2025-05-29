@@ -293,8 +293,8 @@ func (a *Adapter) ExecuteTxs(
 	a.Metrics.TxsExecutedPerBlock.Observe(float64(len(txs)))
 
 	var headerHash types.Hash
-	if headerHash, ok := metadata[types.HeaderHashKey]; ok {
-		headerHash = types.Hash(headerHash.(types.Hash))
+	if h, ok := metadata[types.HeaderHashKey]; ok {
+		headerHash = h.(types.Hash)
 	} else {
 		a.Logger.Info("header hash not found in metadata, running genesis block")
 	}
@@ -451,7 +451,7 @@ func (a *Adapter) ExecuteTxs(
 		cmtTxs[i] = txs[i]
 	}
 
-	var commit *cmttypes.Commit = &cmttypes.Commit{
+	var commit = &cmttypes.Commit{
 		Height: int64(blockHeight),
 		Round:  0,
 		Signatures: []cmttypes.CommitSig{
@@ -487,7 +487,7 @@ func (a *Adapter) ExecuteTxs(
 
 	block := s.MakeBlock(int64(blockHeight), cmtTxs, commit, nil, s.Validators.Proposer.Address)
 
-	currentBlockID := cmttypes.BlockID{Hash: block.Header.Hash(), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: block.Header.DataHash}}
+	currentBlockID := cmttypes.BlockID{Hash: block.Hash(), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: block.DataHash}}
 
 	fireEvents(a.Logger, a.EventBus, block, currentBlockID, fbResp, validatorUpdates)
 

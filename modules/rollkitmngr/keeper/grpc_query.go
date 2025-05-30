@@ -54,8 +54,8 @@ func (q queryServer) IsMigrating(ctx context.Context, _ *types.QueryIsMigratingR
 
 // Sequencer returns the current Sequencer.
 func (q queryServer) Sequencer(ctx context.Context, _ *types.QuerySequencerRequest) (*types.QuerySequencerResponse, error) {
-	_, _, done := q.Keeper.IsMigrating(ctx)
-	if !done {
+	_, _, migrationInProgress := q.Keeper.IsMigrating(ctx)
+	if migrationInProgress {
 		return nil, sdkerrors.ErrLogic.Wrap("sequencer is not set, migration is in progress or not started yet")
 	}
 

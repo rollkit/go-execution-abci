@@ -22,8 +22,8 @@ func NewQueryServer(keeper Keeper) types.QueryServer {
 // Attesters returns the current attesters.
 // Note it is only a wrapper around the staking module's query.
 // If the sequencer and attesters are equals, then the chain is not using attesters.
-func (q queryServer) Attesters(context.Context, *types.QueryAttestersRequest) (*types.QueryAttestersResponse, error) {
-	vals, err := q.stakingKeeper.GetLastValidators(context.Background())
+func (q queryServer) Attesters(ctx context.Context, _ *types.QueryAttestersRequest) (*types.QueryAttestersResponse, error) {
+	vals, err := q.stakingKeeper.GetLastValidators(ctx)
 	if err != nil {
 		return nil, sdkerrors.ErrLogic.Wrapf("failed to get last validators: %v", err)
 	}

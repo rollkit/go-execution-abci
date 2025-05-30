@@ -65,13 +65,15 @@ func (m *msgServer) EditAttesters(ctx context.Context, msg *types.MsgEditAtteste
 
 		attesters[attester.ConsensusPubkey.String()] = struct{}{}
 
-		consPub := attester.ConsensusPubkey.GetCachedValue().(cryptotypes.PubKey)
-		val, err := m.stakingKeeper.GetValidatorByConsAddr(ctx, sdk.ConsAddress(consPub.Address()))
+		consPubInterface := attester.ConsensusPubkey.GetCachedValue()
+		consPub, ok := consPubInterface.(cryptotypes.PubKey)
+		if !ok {
+			return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid consensus public key type for attester %s", attester.Name)
+		}
+
+		_, err := m.stakingKeeper.GetValidatorByConsAddr(ctx, sdk.ConsAddress(consPub.Address()))
 		if err != nil {
 			return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to get validator by consensus address %s: %v", consPub.Address(), err)
-		}
-		if val.GetMoniker() == "" {
-			return nil, sdkerrors.ErrInvalidRequest.Wrapf("no validator found for consensus public key %s", attester.ConsensusPubkey.String())
 		}
 	}
 

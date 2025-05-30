@@ -10,6 +10,7 @@ import (
 	tmcryptoed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	tmtypes "github.com/cometbft/cometbft/types"
 	"github.com/libp2p/go-libp2p/core/crypto"
+
 	rollkittypes "github.com/rollkit/rollkit/types"
 )
 

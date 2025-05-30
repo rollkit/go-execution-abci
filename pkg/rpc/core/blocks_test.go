@@ -4,22 +4,21 @@ import (
 	"testing"
 	"time"
 
+	cryptotypes "github.com/cometbft/cometbft/crypto"
+	"github.com/cometbft/cometbft/crypto/ed25519"
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 	"github.com/cometbft/cometbft/libs/math"
+	"github.com/cometbft/cometbft/light"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	cmttypes "github.com/cometbft/cometbft/types"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/libp2p/go-libp2p/core/crypto"
-
 	"github.com/rollkit/rollkit/types"
 
-	cryptotypes "github.com/cometbft/cometbft/crypto"
-	"github.com/cometbft/cometbft/crypto/ed25519"
-	"github.com/cometbft/cometbft/light"
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
 	goexeccommon "github.com/rollkit/go-execution-abci/pkg/common"
 )

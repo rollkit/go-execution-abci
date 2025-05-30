@@ -8,8 +8,9 @@ import (
 	"github.com/cometbft/cometbft/state/indexer"
 	"github.com/cometbft/cometbft/state/txindex"
 
-	"github.com/rollkit/go-execution-abci/pkg/adapter"
 	"github.com/rollkit/rollkit/types"
+
+	"github.com/rollkit/go-execution-abci/pkg/adapter"
 )
 
 var (

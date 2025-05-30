@@ -79,8 +79,23 @@ func migrateToAttesters(
 	migrationData types.RollkitMigration,
 	lastValidatorSet []stakingtypes.Validator,
 ) (initialValUpdates []abci.ValidatorUpdate, err error) {
-	attesters := migrationData.Attesters
-	for _, attester := range attesters {
+	// First, remove all existing validators that are not attesters
+	attesterPubKeys := make(map[string]bool)
+	for _, attester := range migrationData.Attesters {
+		key := attester.ConsensusPubkey.String()
+		attesterPubKeys[key] = true
+	}
+
+	// Remove validators that are not attesters
+	for _, val := range lastValidatorSet {
+		if !attesterPubKeys[val.ConsensusPubkey.String()] {
+			powerUpdate := val.ABCIValidatorUpdateZero()
+			initialValUpdates = append(initialValUpdates, powerUpdate)
+		}
+	}
+
+	// Add attesters with power 1
+	for _, attester := range migrationData.Attesters {
 		pk, err := attester.TmConsPublicKey()
 		if err != nil {
 			return nil, err
@@ -89,15 +104,6 @@ func migrateToAttesters(
 			PubKey: pk,
 			Power:  1,
 		}
-
-		for _, val := range lastValidatorSet {
-			powerUpdate := val.ABCIValidatorUpdateZero()
-			if val.ConsensusPubkey.Equal(attester.ConsensusPubkey) {
-				continue
-			}
-			initialValUpdates = append(initialValUpdates, powerUpdate)
-		}
-
 		initialValUpdates = append(initialValUpdates, attesterUpdate)
 	}
 

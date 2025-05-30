@@ -70,8 +70,8 @@ proto-gen:
 		go tool github.com/bufbuild/buf/cmd/buf dep update
 	@cd modules/proto && \
 		go tool github.com/bufbuild/buf/cmd/buf generate
-	@mv modules/github.com/rollkit/go-execution-abci/modules/sequencer/types/** modules/sequencer/types/ && \
-		mv modules/github.com/rollkit/go-execution-abci/modules/sequencer/module/* modules/sequencer/module/
+	@mv modules/github.com/rollkit/go-execution-abci/modules/rollkitmngr/types/** modules/rollkitmngr/types/ && \
+		mv modules/github.com/rollkit/go-execution-abci/modules/rollkitmngr/module/* modules/rollkitmngr/module/
 	@rm -r modules/github.com
 
 .PHONY: proto-gen

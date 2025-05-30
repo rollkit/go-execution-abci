@@ -1,4 +1,4 @@
-package sequencer
+package rollkitmngr
 
 import (
 	"context"
@@ -12,8 +12,8 @@ import (
 	"github.com/cosmos/cosmos-sdk/types/module"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 
-	"github.com/rollkit/go-execution-abci/modules/sequencer/keeper"
-	"github.com/rollkit/go-execution-abci/modules/sequencer/types"
+	"github.com/rollkit/go-execution-abci/modules/rollkitmngr/keeper"
+	"github.com/rollkit/go-execution-abci/modules/rollkitmngr/types"
 )
 
 var (
@@ -44,12 +44,12 @@ type AppModule struct {
 	keeper keeper.Keeper
 }
 
-// Name returns the sequencer module's name
+// Name returns the rollkitmngr module's name
 func (am AppModuleBasic) Name() string {
 	return types.ModuleName
 }
 
-// RegisterLegacyAminoCodec registers the sequencer module's types on the given LegacyAmino codec.
+// RegisterLegacyAminoCodec registers the rollkitmngr module's types on the given LegacyAmino codec.
 func (AppModuleBasic) RegisterLegacyAminoCodec(cdc *codec.LegacyAmino) {
 	types.RegisterLegacyAminoCodec(cdc)
 }
@@ -59,12 +59,12 @@ func (AppModuleBasic) RegisterInterfaces(registry cdctypes.InterfaceRegistry) {
 	types.RegisterInterfaces(registry)
 }
 
-// ValidateGenesis performs genesis state validation for the sequencer module.
+// ValidateGenesis performs genesis state validation for the rollkitmngr module.
 func (AppModuleBasic) ValidateGenesis(cdc codec.JSONCodec, config client.TxEncodingConfig, bz json.RawMessage) error {
 	return nil
 }
 
-// RegisterGRPCGatewayRoutes registers the gRPC Gateway routes for the sequencer module.
+// RegisterGRPCGatewayRoutes registers the gRPC Gateway routes for the rollkitmngr module.
 func (AppModuleBasic) RegisterGRPCGatewayRoutes(clientCtx client.Context, mux *gwruntime.ServeMux) {
 	if err := types.RegisterQueryHandlerClient(context.Background(), mux, types.NewQueryClient(clientCtx)); err != nil {
 		panic(err)

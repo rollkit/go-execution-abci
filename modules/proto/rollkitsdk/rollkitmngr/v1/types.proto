@@ -1,0 +1,48 @@
+syntax = "proto3";
+package rollkitsdk.rollkitmngr.v1;
+
+import "amino/amino.proto";
+import "gogoproto/gogo.proto";
+import "cosmos_proto/cosmos.proto";
+import "google/protobuf/any.proto";
+
+option go_package = "github.com/rollkit/go-execution-abci/modules/rollkitmngr/types";
+
+// RollkitMigration defines the migration state from cometbft to rollkit.
+message RollkitMigration {
+  // block height that trigger the rollkit migration.
+  // When IBC is enabled, the migration can take several blocks to complete.
+  // This is the block height at which the migration will be triggered.
+  uint64 block_height = 2;
+
+  // sequencer is the pubkey that will become new sequencer.
+  Sequencer sequencer = 3
+      [ (gogoproto.nullable) = false, (amino.dont_omitempty) = true ];
+  
+  // attesters is the list of attesters that will attest to blocks.
+  repeated Attester attesters = 4
+      [ (gogoproto.nullable) = false, (amino.dont_omitempty) = true ];
+}
+
+// Sequencer defines a sequence of instructions to be executed.
+message Sequencer {
+  // name is the human-readable name of the sequencer.
+  string name = 1;
+
+  // consensus_pubkey is the consensus public key of the sequencer, as a
+  // Protobuf Any.
+  google.protobuf.Any consensus_pubkey = 2
+      [ (cosmos_proto.accepts_interface) = "cosmos.crypto.PubKey" ];
+}
+
+
+// Attester defines an attester that can attest to blocks.
+message Attester {
+  // name is the human-readable name of the attester.
+  string name = 1;
+
+  // consensus_pubkey is the consensus public key of the attester, as a
+  // Protobuf Any.
+  google.protobuf.Any consensus_pubkey = 2
+      [ (cosmos_proto.accepts_interface) = "cosmos.crypto.PubKey" ];
+}

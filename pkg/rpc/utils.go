@@ -85,7 +85,7 @@ func ToABCIBlock(header *types.SignedHeader, data *types.Data) (*cmttypes.Block,
 		return nil, errors.New("proposer address is not set")
 	}
 
-	abciCommit := getABCICommit(header.Height(), header.Hash(), header.ProposerAddress, header.Time(), header.Signature)
+	abciCommit := GetABCICommit(header.Height(), header.Hash(), header.ProposerAddress, header.Time(), header.Signature)
 
 	// This assumes that we have only one signature
 	if len(abciCommit.Signatures) == 1 {
@@ -123,9 +123,9 @@ func ToABCIBlockMeta(header *types.SignedHeader, data *types.Data) (*cmttypes.Bl
 	}, nil
 }
 
-// getABCICommit returns a commit format defined by ABCI.
+// GetABCICommit returns a commit format defined by ABCI.
 // Other fields (especially ValidatorAddress and Timestamp of Signature) have to be filled by caller.
-func getABCICommit(height uint64, hash []byte, val cmttypes.Address, time time.Time, signature []byte) *cmttypes.Commit {
+func GetABCICommit(height uint64, hash []byte, val cmttypes.Address, time time.Time, signature []byte) *cmttypes.Commit {
 	tmCommit := cmttypes.Commit{
 		Height: int64(height), //nolint:gosec
 		Round:  0,

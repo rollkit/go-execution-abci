@@ -9,14 +9,6 @@ import (
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 )
 
-// Optimisations
-
-// 0.a Skip the slow migration if IBC is not enabled
-// 0.b Only from migration from CometBFT to Rollkit
-// 0.c BlockHeight is the height that starts the migration, as the migration can take several blocks to complete, we need to return the expected halt height.
-
-// Two options:
-
 // 1. Migrate to sequencer only
 /*
 	- Slowly migrate the validator set to the sequencer

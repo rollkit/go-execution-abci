@@ -1,6 +1,7 @@
 package rollkitmngr
 
 import (
+	"cosmossdk.io/core/address"
 	"cosmossdk.io/core/appmodule"
 	"cosmossdk.io/core/store"
 	"cosmossdk.io/depinject"
@@ -30,8 +31,8 @@ type ModuleInputs struct {
 	Config       *modulev1.Module
 	Cdc          codec.Codec
 	StoreService store.KVStoreService
+	AddressCodec address.Codec
 
-	AccountKeeper types.AccountKeeper
 	StakingKeeper types.StakingKeeper
 }
 
@@ -53,7 +54,7 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 	k := keeper.NewKeeper(
 		in.Cdc,
 		in.StoreService,
-		in.AccountKeeper,
+		in.AddressCodec,
 		in.StakingKeeper,
 		authority.String(),
 	)

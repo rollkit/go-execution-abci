@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"cosmossdk.io/collections"
+	"cosmossdk.io/core/address"
 	corestore "cosmossdk.io/core/store"
 	"cosmossdk.io/log"
 	storetypes "cosmossdk.io/store/types"
@@ -16,9 +17,9 @@ import (
 type Keeper struct {
 	storeService corestore.KVStoreService
 	cdc          codec.BinaryCodec
+	addressCodec address.Codec
 	authority    string
 
-	authKeeper    types.AccountKeeper
 	stakingKeeper types.StakingKeeper
 
 	Schema    collections.Schema
@@ -30,12 +31,12 @@ type Keeper struct {
 func NewKeeper(
 	cdc codec.BinaryCodec,
 	storeService corestore.KVStoreService,
-	ak types.AccountKeeper,
+	addressCodec address.Codec,
 	stakingKeeper types.StakingKeeper,
 	authority string,
 ) Keeper {
 	// ensure that authority is a valid account address
-	if _, err := ak.AddressCodec().StringToBytes(authority); err != nil {
+	if _, err := addressCodec.StringToBytes(authority); err != nil {
 		panic("authority is not a valid acc address")
 	}
 
@@ -44,7 +45,7 @@ func NewKeeper(
 		storeService:  storeService,
 		cdc:           cdc,
 		authority:     authority,
-		authKeeper:    ak,
+		addressCodec:  addressCodec,
 		stakingKeeper: stakingKeeper,
 		Sequencer: collections.NewItem(
 			sb,

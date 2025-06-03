@@ -1008,6 +1008,8 @@ github.com/rollkit/rollkit v0.14.2-0.20250529164851-d4b4a1e88558 h1:LenIlcgTjZ89
 github.com/rollkit/rollkit v0.14.2-0.20250529164851-d4b4a1e88558/go.mod h1:Gw1i+hGmPp9Y7b05SXlqGj+tnXhzaiW/xs4wboXsEL0=
 github.com/rollkit/rollkit v0.14.2-0.20250602134102-65ab03ca8f66 h1:AU5FQSQkWDYkYmVueiT0+q+TGkYAcW4cuutioHOWm20=
 github.com/rollkit/rollkit v0.14.2-0.20250602134102-65ab03ca8f66/go.mod h1:Gw1i+hGmPp9Y7b05SXlqGj+tnXhzaiW/xs4wboXsEL0=
+github.com/rollkit/rollkit v0.14.2-0.20250603093058-6a441b7b3018 h1:RjotQTsOsy2nah1IkMUmZyfNE3b6NlJ+hiXSVpVPJS8=
+github.com/rollkit/rollkit v0.14.2-0.20250603093058-6a441b7b3018/go.mod h1:Gw1i+hGmPp9Y7b05SXlqGj+tnXhzaiW/xs4wboXsEL0=
 github.com/rollkit/rollkit/core v0.0.0-20250529164851-d4b4a1e88558 h1:0jWzjfP/DQSdsRYnIMPNAD7itd8Oq7roV3cu9MddTEA=
 github.com/rollkit/rollkit/core v0.0.0-20250529164851-d4b4a1e88558/go.mod h1:0RhbqC8Is970KRhr6zPUQOZkmKt6/WqPRDQWfd2P7P0=
 github.com/rollkit/rollkit/da v0.0.0-20250526094218-4a5686055970 h1:PnnQLIkI119NALSqI91peceGsqnBVyBBeyunk6auTpM=

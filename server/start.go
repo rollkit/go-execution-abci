@@ -34,6 +34,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	rlkblock "github.com/rollkit/rollkit/block"
 	"github.com/rollkit/rollkit/da/jsonrpc"
 	"github.com/rollkit/rollkit/node"
 	"github.com/rollkit/rollkit/pkg/config"
@@ -442,10 +443,10 @@ func setupNodeAndExecutor(
 		database,
 		metrics,
 		logger,
-		cometBFTHasher,
-		cometBFTPayloadProvider,
-		cometBFTHeaderHasher,
-		cometBFTCommitHashProvider,
+		rlkblock.WithValidatorHasher(cometBFTHasher),
+		rlkblock.WithSignaturePayloadProvider(cometBFTPayloadProvider),
+		rlkblock.WithHeaderHasher(cometBFTHeaderHasher),
+		rlkblock.WithCommitHashProvider(cometBFTCommitHashProvider),
 	)
 	if err != nil {
 		return nil, nil, cleanupFn, err

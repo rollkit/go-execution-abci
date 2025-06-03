@@ -108,17 +108,16 @@ func (k Keeper) IsMigrating(ctx context.Context) (start, end uint64, ok bool) {
 func (k Keeper) isIBCEnabled(ctx context.Context) (enabled bool) {
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 
-	// ref https://github.com/cosmos/ibc-go/blob/v10.2.0/modules/core/exported/module.go
-	ibcStoreKey := storetypes.NewKVStoreKey("ibc")
-
 	ms := sdkCtx.MultiStore()
-	ms.GetKVStore(ibcStoreKey)
 	defer func() {
 		if r := recover(); r != nil {
 			// If we panic, it means the store does not exist, so IBC is not enabled.
 			enabled = false
 		}
 	}()
+	// ref https://github.com/cosmos/ibc-go/blob/v10.2.0/modules/core/exported/module.go
+	ibcStoreKey := storetypes.NewKVStoreKey("ibc")
+	ms.GetKVStore(ibcStoreKey)
 
 	enabled = true // has not panicked, so store exists
 

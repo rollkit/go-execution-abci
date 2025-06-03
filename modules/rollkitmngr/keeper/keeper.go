@@ -104,7 +104,8 @@ func (k Keeper) IsMigrating(ctx context.Context) (start, end uint64, ok bool) {
 	}
 
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
-	migrationInProgress := sdkCtx.BlockHeight() >= int64(migration.BlockHeight) && sdkCtx.BlockHeight() <= int64(migrationEndHeight)
+	currentHeight := uint64(sdkCtx.BlockHeight())
+	migrationInProgress := currentHeight >= migration.BlockHeight && currentHeight <= migrationEndHeight
 
 	return migration.BlockHeight, migrationEndHeight, migrationInProgress
 }

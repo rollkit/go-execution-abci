@@ -144,7 +144,7 @@ func TestIsMigrating_IBCEnabled(t *testing.T) {
 		storeService,
 		addressCodec,
 		stakingKeeper,
-		key,
+		func() *storetypes.KVStoreKey { return key },
 		sdk.AccAddress(address.Module(types.ModuleName)).String(),
 	)
 

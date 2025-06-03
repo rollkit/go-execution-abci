@@ -2,6 +2,7 @@ package keeper
 
 import (
 	"context"
+	"errors"
 
 	"cosmossdk.io/collections"
 	"cosmossdk.io/core/address"
@@ -16,7 +17,7 @@ import (
 
 // IbcStoreKey is the store key used for IBC-related data.
 // It is an alias for storetypes.StoreKey to allow depinject to resolve it as a dependency (as runtime assumes 1 module = 1 store key maximum).
-type IbcStoreKeyAlias = storetypes.StoreKey
+type IbcKVStoreKeyAlias = func() *storetypes.KVStoreKey
 
 type Keeper struct {
 	storeService corestore.KVStoreService
@@ -24,7 +25,7 @@ type Keeper struct {
 	addressCodec address.Codec
 	authority    string
 
-	ibcStoreKey   IbcStoreKeyAlias
+	ibcStoreKey   IbcKVStoreKeyAlias
 	stakingKeeper types.StakingKeeper
 
 	Schema    collections.Schema
@@ -38,7 +39,7 @@ func NewKeeper(
 	storeService corestore.KVStoreService,
 	addressCodec address.Codec,
 	stakingKeeper types.StakingKeeper,
-	ibcStoreKey IbcStoreKeyAlias,
+	ibcStoreKey IbcKVStoreKeyAlias,
 	authority string,
 ) Keeper {
 	// ensure that authority is a valid account address
@@ -88,7 +89,7 @@ func (k Keeper) Logger(ctx context.Context) log.Logger {
 // And if it does, it verifies we are past the block height that started the migration.
 func (k Keeper) IsMigrating(ctx context.Context) (start, end uint64, ok bool) {
 	migration, err := k.Migration.Get(ctx)
-	if err == collections.ErrNotFound {
+	if errors.Is(err, collections.ErrNotFound) {
 		return 0, 0, false
 	} else if err != nil {
 		k.Logger(ctx).Error("failed to get Rollkit migration state", "error", err)
@@ -127,7 +128,7 @@ func (k Keeper) isIBCEnabled(ctx context.Context) (enabled bool) {
 			enabled = false
 		}
 	}()
-	ms.GetKVStore(k.ibcStoreKey)
+	ms.GetKVStore(k.ibcStoreKey())
 
 	enabled = true // has not panicked, so store exists
 

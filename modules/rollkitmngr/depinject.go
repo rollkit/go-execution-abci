@@ -34,7 +34,7 @@ type ModuleInputs struct {
 	AddressCodec address.Codec
 	// optional, used to detect if IBC module is enabled.
 	// When IBC module is present, use `depinject.Provide(IBCStoreKey(ibcStoreKey))`
-	IBCStoreKey keeper.IbcStoreKeyAlias `optional:"true"`
+	IBCStoreKey keeper.IbcKVStoreKeyAlias `optional:"true"`
 
 	StakingKeeper types.StakingKeeper
 }

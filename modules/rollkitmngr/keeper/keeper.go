@@ -14,12 +14,17 @@ import (
 	"github.com/rollkit/go-execution-abci/modules/rollkitmngr/types"
 )
 
+// IbcStoreKey is the store key used for IBC-related data.
+// It is an alias for storetypes.StoreKey to allow depinject to resolve it as a dependency (as runtime assumes 1 module = 1 store key maximum).
+type IbcStoreKeyAlias = storetypes.StoreKey
+
 type Keeper struct {
 	storeService corestore.KVStoreService
 	cdc          codec.BinaryCodec
 	addressCodec address.Codec
 	authority    string
 
+	ibcStoreKey   IbcStoreKeyAlias
 	stakingKeeper types.StakingKeeper
 
 	Schema    collections.Schema
@@ -33,6 +38,7 @@ func NewKeeper(
 	storeService corestore.KVStoreService,
 	addressCodec address.Codec,
 	stakingKeeper types.StakingKeeper,
+	ibcStoreKey IbcStoreKeyAlias,
 	authority string,
 ) Keeper {
 	// ensure that authority is a valid account address
@@ -47,6 +53,7 @@ func NewKeeper(
 		authority:     authority,
 		addressCodec:  addressCodec,
 		stakingKeeper: stakingKeeper,
+		ibcStoreKey:   ibcStoreKey,
 		Sequencer: collections.NewItem(
 			sb,
 			types.SequencerKey,
@@ -106,18 +113,20 @@ func (k Keeper) IsMigrating(ctx context.Context) (start, end uint64, ok bool) {
 // In order to not import the IBC module, we only check if the IBC store exists,
 // but not the ibc params. This should be sufficient for our use case.
 func (k Keeper) isIBCEnabled(ctx context.Context) (enabled bool) {
+	if k.ibcStoreKey == nil {
+		return false
+	}
+
 	sdkCtx := sdk.UnwrapSDKContext(ctx)
 
-	ms := sdkCtx.MultiStore()
+	ms := sdkCtx.MultiStore().CacheMultiStore()
 	defer func() {
 		if r := recover(); r != nil {
 			// If we panic, it means the store does not exist, so IBC is not enabled.
 			enabled = false
 		}
 	}()
-	// ref https://github.com/cosmos/ibc-go/blob/v10.2.0/modules/core/exported/module.go
-	ibcStoreKey := storetypes.NewKVStoreKey("ibc")
-	ms.GetKVStore(ibcStoreKey)
+	ms.GetKVStore(k.ibcStoreKey)
 
 	enabled = true // has not panicked, so store exists
 

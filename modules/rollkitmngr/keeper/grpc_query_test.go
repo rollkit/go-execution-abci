@@ -51,10 +51,13 @@ func (m *mockStakingKeeper) IterateBondedValidatorsByPower(ctx context.Context, 
 }
 
 type fixture struct {
-	ctx           sdk.Context
+	ctx        sdk.Context
+	kvStoreKey *storetypes.KVStoreKey
+
 	stakingKeeper *mockStakingKeeper
 	keeper        keeper.Keeper
 	queryServer   types.QueryServer
+	msgServer     types.MsgServer
 }
 
 func initFixture(tb testing.TB) *fixture {
@@ -65,24 +68,24 @@ func initFixture(tb testing.TB) *fixture {
 	storeService := runtime.NewKVStoreService(key)
 	encCfg := moduletestutil.MakeTestEncodingConfig(rollkitmngr.AppModuleBasic{})
 	addressCodec := addresscodec.NewBech32Codec("cosmos")
-	ctx := testutil.DefaultContextWithKeys(map[string]*storetypes.KVStoreKey{
-		types.ModuleName: key,
-		"ibc":            storetypes.NewKVStoreKey("ibc"),
-	}, nil, nil)
+	ctx := testutil.DefaultContext(key, storetypes.NewTransientStoreKey("transient"))
 
 	k := keeper.NewKeeper(
 		encCfg.Codec,
 		storeService,
 		addressCodec,
 		stakingKeeper,
+		nil,
 		sdk.AccAddress(address.Module(types.ModuleName)).String(),
 	)
 
 	return &fixture{
 		ctx:           ctx,
+		kvStoreKey:    key,
 		stakingKeeper: stakingKeeper,
 		keeper:        k,
 		queryServer:   keeper.NewQueryServer(k),
+		msgServer:     keeper.NewMsgServerImpl(k),
 	}
 }
 
@@ -113,15 +116,51 @@ func TestIsMigrating(t *testing.T) {
 
 	// set up migration
 	require.NoError(t, s.keeper.Migration.Set(s.ctx, types.RollkitMigration{
-		BlockHeight: 10,
+		BlockHeight: 1,
 		Sequencer:   types.Sequencer{Name: "foo"},
 	}))
 
+	s.ctx = s.ctx.WithBlockHeight(1)
 	resp, err := s.queryServer.IsMigrating(s.ctx, &types.QueryIsMigratingRequest{})
 	require.NoError(t, err)
 	require.True(t, resp.IsMigrating)
-	require.Equal(t, uint64(10), resp.StartBlockHeight)
-	require.Equal(t, uint64(20), resp.EndBlockHeight)
+	require.Equal(t, uint64(1), resp.StartBlockHeight)
+	require.Equal(t, uint64(2), resp.EndBlockHeight)
+}
+
+func TestIsMigrating_IBCEnabled(t *testing.T) {
+	stakingKeeper := &mockStakingKeeper{}
+	key := storetypes.NewKVStoreKey(types.ModuleName)
+	storeService := runtime.NewKVStoreService(key)
+	encCfg := moduletestutil.MakeTestEncodingConfig(rollkitmngr.AppModuleBasic{})
+	addressCodec := addresscodec.NewBech32Codec("cosmos")
+	ibcKey := storetypes.NewKVStoreKey("ibc")
+	ctx := testutil.DefaultContextWithKeys(map[string]*storetypes.KVStoreKey{
+		types.ModuleName: key,
+		"ibc":            ibcKey,
+	}, nil, nil)
+
+	k := keeper.NewKeeper(
+		encCfg.Codec,
+		storeService,
+		addressCodec,
+		stakingKeeper,
+		key,
+		sdk.AccAddress(address.Module(types.ModuleName)).String(),
+	)
+
+	// set up migration
+	require.NoError(t, k.Migration.Set(ctx, types.RollkitMigration{
+		BlockHeight: 1,
+		Sequencer:   types.Sequencer{Name: "foo"},
+	}))
+
+	ctx = ctx.WithBlockHeight(1)
+	resp, err := keeper.NewQueryServer(k).IsMigrating(ctx, &types.QueryIsMigratingRequest{})
+	require.NoError(t, err)
+	require.True(t, resp.IsMigrating)
+	require.Equal(t, uint64(1), resp.StartBlockHeight)
+	require.Equal(t, 1+keeper.IBCSmoothingFactor, resp.EndBlockHeight)
 }
 
 func TestSequencer_Migrating(t *testing.T) {

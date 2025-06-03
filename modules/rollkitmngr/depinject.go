@@ -32,6 +32,9 @@ type ModuleInputs struct {
 	Cdc          codec.Codec
 	StoreService store.KVStoreService
 	AddressCodec address.Codec
+	// optional, used to detect if IBC module is enabled.
+	// When IBC module is present, use `depinject.Provide(IBCStoreKey(ibcStoreKey))`
+	IBCStoreKey keeper.IbcStoreKeyAlias `optional:"true"`
 
 	StakingKeeper types.StakingKeeper
 }
@@ -56,6 +59,7 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 		in.StoreService,
 		in.AddressCodec,
 		in.StakingKeeper,
+		in.IBCStoreKey,
 		authority.String(),
 	)
 	m := NewAppModule(in.Cdc, k)

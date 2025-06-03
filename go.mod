@@ -24,13 +24,13 @@ require (
 	github.com/hashicorp/go-metrics v0.5.4
 	github.com/ipfs/go-datastore v0.8.2
 	github.com/libp2p/go-libp2p v0.41.1
-	github.com/libp2p/go-libp2p-pubsub v0.13.1
+	github.com/libp2p/go-libp2p-pubsub v0.14.0
 	github.com/multiformats/go-multiaddr v0.15.0
 	github.com/prometheus/client_golang v1.22.0
-	github.com/rollkit/rollkit v0.14.2-0.20250526094218-4a5686055970
-	github.com/rollkit/rollkit/core v0.0.0-20250526094218-4a5686055970
-	github.com/rollkit/rollkit/da v0.0.0-20250526094218-4a5686055970
-	github.com/rollkit/rollkit/sequencers/single v0.0.0-20250526094218-4a5686055970
+	github.com/rollkit/rollkit v0.14.2-0.20250602221640-d561a3a1706d
+	github.com/rollkit/rollkit/core v0.0.0-20250602221640-d561a3a1706d
+	github.com/rollkit/rollkit/da v0.0.0-20250602221640-d561a3a1706d
+	github.com/rollkit/rollkit/sequencers/single v0.0.0-20250602221640-d561a3a1706d
 	github.com/rs/cors v1.11.1
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
@@ -132,7 +132,7 @@ require (
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
-	github.com/goccy/go-yaml v1.17.1 // indirect
+	github.com/goccy/go-yaml v1.18.0 // indirect
 	github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/gofrs/flock v0.12.1 // indirect

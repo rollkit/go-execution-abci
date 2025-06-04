@@ -62,7 +62,7 @@ func (k Keeper) EndBlock(ctx context.Context) ([]abci.ValidatorUpdate, error) {
 		return nil, err
 	}
 
-	if shouldBeMigrating && !k.isIBCEnabled(ctx) {
+	if !k.isIBCEnabled(ctx) {
 		// if IBC is not enabled, we can migrate immediately
 		return k.migrateNow(ctx, migration, validatorSet)
 	}

@@ -4,6 +4,7 @@ package types
 const ModuleName = "rollkitmngr"
 
 var (
-	MigrationKey = []byte{0x13}
-	SequencerKey = []byte{0x14}
+	MigrationKey     = []byte{0x13}
+	SequencerKey     = []byte{0x14}
+	MigrationStepKey = []byte{0x15}
 )

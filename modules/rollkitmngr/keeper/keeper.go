@@ -28,9 +28,10 @@ type Keeper struct {
 	ibcStoreKey   IbcKVStoreKeyAlias
 	stakingKeeper types.StakingKeeper
 
-	Schema    collections.Schema
-	Sequencer collections.Item[types.Sequencer]
-	Migration collections.Item[types.RollkitMigration]
+	Schema        collections.Schema
+	Sequencer     collections.Item[types.Sequencer]
+	Migration     collections.Item[types.RollkitMigration]
+	MigrationStep collections.Item[uint64]
 }
 
 // NewKeeper creates a new sequencer Keeper instance.
@@ -66,6 +67,12 @@ func NewKeeper(
 			types.MigrationKey,
 			"rollkit_migration",
 			codec.CollValue[types.RollkitMigration](cdc),
+		),
+		MigrationStep: collections.NewItem(
+			sb,
+			types.MigrationStepKey,
+			"migration_step",
+			collections.Uint64Value,
 		),
 	}
 

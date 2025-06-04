@@ -2,7 +2,9 @@ package keeper
 
 import (
 	"context"
+	"errors"
 
+	"cosmossdk.io/collections"
 	abci "github.com/cometbft/cometbft/abci/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
@@ -112,6 +114,92 @@ func migrateToAttesters(
 
 // migrateOver migrates the chain to rollkit over a period of blocks.
 // this is to ensure ibc light client verification keep working while changing the whole validator set.
-func (k Keeper) migrateOver(ctx context.Context, migrationData types.RollkitMigration, lastValidatorSet []stakingtypes.Validator) (initialValUpdates []abci.ValidatorUpdate, err error) {
-	panic("not implemented yet")
+// the migration step is tracked in store.
+func (k Keeper) migrateOver(
+	ctx context.Context,
+	migrationData types.RollkitMigration,
+	lastValidatorSet []stakingtypes.Validator,
+) (initialValUpdates []abci.ValidatorUpdate, err error) {
+	step, err := k.MigrationStep.Get(ctx)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to get migration step: %v", err)
+	}
+
+	if step >= IBCSmoothingFactor {
+		// migration complete, just return the final set (same as migrateNow)
+		if err := k.MigrationStep.Remove(ctx); err != nil {
+			return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to remove migration step: %v", err)
+		}
+		return k.migrateNow(ctx, migrationData, lastValidatorSet)
+	}
+
+	switch len(migrationData.Attesters) {
+	case 0:
+		// no attesters, migrate to a single sequencer over smoothing period
+		// remove all validators except the sequencer, add sequencer at the end
+		seq := migrationData.Sequencer
+		var oldValsToRemove []stakingtypes.Validator
+		for _, val := range lastValidatorSet {
+			if !val.ConsensusPubkey.Equal(seq.ConsensusPubkey) {
+				oldValsToRemove = append(oldValsToRemove, val)
+			}
+		}
+		removePerStep := (len(oldValsToRemove) + int(IBCSmoothingFactor) - 1) / int(IBCSmoothingFactor)
+		startRemove := int(step) * removePerStep
+		endRemove := min(startRemove+removePerStep, len(oldValsToRemove))
+		for _, val := range oldValsToRemove[startRemove:endRemove] {
+			powerUpdate := val.ABCIValidatorUpdateZero()
+			initialValUpdates = append(initialValUpdates, powerUpdate)
+		}
+	default:
+		// attesters present, migrate as before
+		attesterPubKeys := make(map[string]struct{})
+		for _, attester := range migrationData.Attesters {
+			attesterPubKeys[attester.ConsensusPubkey.String()] = struct{}{}
+		}
+		var oldValsToRemove []stakingtypes.Validator
+		for _, val := range lastValidatorSet {
+			if _, ok := attesterPubKeys[val.ConsensusPubkey.String()]; !ok {
+				oldValsToRemove = append(oldValsToRemove, val)
+			}
+		}
+		lastValPubKeys := make(map[string]struct{})
+		for _, val := range lastValidatorSet {
+			lastValPubKeys[val.ConsensusPubkey.String()] = struct{}{}
+		}
+		var newAttestersToAdd []types.Attester
+		for _, attester := range migrationData.Attesters {
+			if _, ok := lastValPubKeys[attester.ConsensusPubkey.String()]; !ok {
+				newAttestersToAdd = append(newAttestersToAdd, attester)
+			}
+		}
+		removePerStep := (len(oldValsToRemove) + int(IBCSmoothingFactor) - 1) / int(IBCSmoothingFactor)
+		addPerStep := (len(newAttestersToAdd) + int(IBCSmoothingFactor) - 1) / int(IBCSmoothingFactor)
+		startRemove := int(step) * removePerStep
+		endRemove := min(startRemove+removePerStep, len(oldValsToRemove))
+		for _, val := range oldValsToRemove[startRemove:endRemove] {
+			powerUpdate := val.ABCIValidatorUpdateZero()
+			initialValUpdates = append(initialValUpdates, powerUpdate)
+		}
+		startAdd := int(step) * addPerStep
+		endAdd := min(startAdd+addPerStep, len(newAttestersToAdd))
+		for _, attester := range newAttestersToAdd[startAdd:endAdd] {
+			pk, err := attester.TmConsPublicKey()
+			if err != nil {
+				return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to get attester pubkey: %v", err)
+			}
+			attesterUpdate := abci.ValidatorUpdate{
+				PubKey: pk,
+				Power:  1,
+			}
+			initialValUpdates = append(initialValUpdates, attesterUpdate)
+		}
+	}
+
+	// increment and persist the step
+	if err := k.MigrationStep.Set(ctx, step+1); err != nil {
+		return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to set migration step: %v", err)
+	}
+
+	return initialValUpdates, nil
 }

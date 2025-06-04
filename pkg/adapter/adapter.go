@@ -9,8 +9,10 @@ import (
 	"cosmossdk.io/log"
 	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/libs/bytes"
 	"github.com/cometbft/cometbft/mempool"
 	corep2p "github.com/cometbft/cometbft/p2p"
+	types1 "github.com/cometbft/cometbft/proto/tendermint/types"
 	cmtstate "github.com/cometbft/cometbft/state"
 	cmttypes "github.com/cometbft/cometbft/types"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
@@ -25,6 +27,7 @@ import (
 	rollnode "github.com/rollkit/rollkit/node"
 	rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
 	rstore "github.com/rollkit/rollkit/pkg/store"
+	"github.com/rollkit/rollkit/types"
 
 	"github.com/rollkit/go-execution-abci/pkg/p2p"
 )
@@ -244,6 +247,7 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 	} else {
 		s.ConsensusParams = cmttypes.ConsensusParamsFromProto(consensusParams)
 	}
+	s.ChainID = chainID
 
 	vals, err := cmttypes.PB2TM.ValidatorUpdates(res.Validators)
 	if err != nil {
@@ -279,6 +283,7 @@ func (a *Adapter) ExecuteTxs(
 	blockHeight uint64,
 	timestamp time.Time,
 	prevStateRoot []byte,
+	metadata map[string]interface{},
 ) ([]byte, uint64, error) {
 	execStart := time.Now()
 	defer func() {
@@ -287,19 +292,53 @@ func (a *Adapter) ExecuteTxs(
 	a.Logger.Info("Executing block", "height", blockHeight, "num_txs", len(txs), "timestamp", timestamp)
 	a.Metrics.TxsExecutedPerBlock.Observe(float64(len(txs)))
 
+	var headerHash types.Hash
+	if h, ok := metadata[types.HeaderHashKey]; ok {
+		headerHash = h.(types.Hash)
+	} else {
+		a.Logger.Info("header hash not found in metadata, running genesis block")
+	}
+
 	s, err := a.Store.LoadState(ctx)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to load state: %w", err)
 	}
 
+	var proposedLastCommit abci.CommitInfo
+	if blockHeight > 1 {
+		header, data, err := a.RollkitStore.GetBlockData(ctx, blockHeight-1)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to get previous block data: %w", err)
+		}
+
+		commitForPrevBlock := &cmttypes.Commit{
+			Height:  int64(header.Height()),
+			Round:   0,
+			BlockID: cmttypes.BlockID{Hash: bytes.HexBytes(header.Hash()), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: bytes.HexBytes(data.Hash())}},
+			Signatures: []cmttypes.CommitSig{
+				{
+					BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+					ValidatorAddress: cmttypes.Address(header.ProposerAddress),
+					Timestamp:        header.Time(),
+					Signature:        header.Signature,
+				},
+			},
+		}
+		proposedLastCommit = cometCommitToABCICommitInfo(commitForPrevBlock)
+	} else {
+		// For the first block, ProposedLastCommit is empty
+		proposedLastCommit = abci.CommitInfo{Round: 0, Votes: []abci.VoteInfo{}}
+	}
+
 	ppResp, err := a.App.ProcessProposal(&abci.RequestProcessProposal{
-		Txs:                txs,
-		ProposedLastCommit: abci.CommitInfo{},
-		Hash:               prevStateRoot,
+		Hash:               headerHash,
 		Height:             int64(blockHeight),
 		Time:               timestamp,
-		NextValidatorsHash: s.NextValidators.Hash(),
+		Txs:                txs,
+		ProposedLastCommit: proposedLastCommit,
+		Misbehavior:        []abci.Misbehavior{},
 		ProposerAddress:    s.Validators.Proposer.Address,
+		NextValidatorsHash: s.NextValidators.Hash(),
 	})
 	if err != nil {
 		return nil, 0, err
@@ -310,16 +349,23 @@ func (a *Adapter) ExecuteTxs(
 	}
 
 	fbResp, err := a.App.FinalizeBlock(&abci.RequestFinalizeBlock{
-		Txs:                txs,
-		Hash:               prevStateRoot,
-		Height:             int64(blockHeight),
-		Time:               timestamp,
+		Hash:               headerHash,
 		NextValidatorsHash: s.NextValidators.Hash(),
 		ProposerAddress:    s.Validators.Proposer.Address,
+		Height:             int64(blockHeight),
+		Time:               timestamp,
+		DecidedLastCommit: abci.CommitInfo{
+			Round: 0,
+			Votes: nil,
+		},
+		Txs: txs,
 	})
 	if err != nil {
 		return nil, 0, err
 	}
+
+	s.AppHash = fbResp.AppHash
+	s.LastBlockHeight = int64(blockHeight)
 
 	nValSet := s.NextValidators.Copy()
 
@@ -404,8 +450,46 @@ func (a *Adapter) ExecuteTxs(
 	for i := range txs {
 		cmtTxs[i] = txs[i]
 	}
-	block := s.MakeBlock(int64(blockHeight), cmtTxs, &cmttypes.Commit{Height: int64(blockHeight)}, nil, s.Validators.Proposer.Address)
-	fireEvents(a.Logger, a.EventBus, block, cmttypes.BlockID{}, fbResp, validatorUpdates)
+
+	var commit = &cmttypes.Commit{
+		Height: int64(blockHeight),
+		Round:  0,
+		Signatures: []cmttypes.CommitSig{
+			{
+				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+				ValidatorAddress: s.Validators.Proposer.Address,
+				Timestamp:        time.Now(),
+				Signature:        []byte{},
+			},
+		},
+	}
+
+	if blockHeight > 1 {
+		header, data, err := a.RollkitStore.GetBlockData(ctx, blockHeight-1)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to get previous block data: %w", err)
+		}
+
+		commit = &cmttypes.Commit{
+			Height:  int64(header.Height()),
+			Round:   0,
+			BlockID: cmttypes.BlockID{Hash: bytes.HexBytes(header.Hash()), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: bytes.HexBytes(data.Hash())}},
+			Signatures: []cmttypes.CommitSig{
+				{
+					BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+					ValidatorAddress: cmttypes.Address(header.ProposerAddress),
+					Timestamp:        header.Time(),
+					Signature:        header.Signature,
+				},
+			},
+		}
+	}
+
+	block := s.MakeBlock(int64(blockHeight), cmtTxs, commit, nil, s.Validators.Proposer.Address)
+
+	currentBlockID := cmttypes.BlockID{Hash: block.Hash(), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: block.DataHash}}
+
+	fireEvents(a.Logger, a.EventBus, block, currentBlockID, fbResp, validatorUpdates)
 
 	a.Logger.Info("block executed successfully", "height", blockHeight, "appHash", fmt.Sprintf("%X", fbResp.AppHash))
 	return fbResp.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
@@ -520,4 +604,35 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 // For a Cosmos SDK app, this is a no-op we do not need to do anything to mark the block as finalized.
 func (a *Adapter) SetFinal(ctx context.Context, blockHeight uint64) error {
 	return nil
+}
+
+func cometCommitToABCICommitInfo(commit *cmttypes.Commit) abci.CommitInfo {
+	if commit == nil {
+		return abci.CommitInfo{
+			Round: 0,
+			Votes: []abci.VoteInfo{},
+		}
+	}
+
+	if len(commit.Signatures) == 0 {
+		return abci.CommitInfo{
+			Round: commit.Round,
+			Votes: []abci.VoteInfo{},
+		}
+	}
+
+	votes := make([]abci.VoteInfo, len(commit.Signatures))
+	for i, sig := range commit.Signatures {
+		votes[i] = abci.VoteInfo{
+			Validator: abci.Validator{
+				Address: sig.ValidatorAddress,
+				Power:   0,
+			},
+			BlockIdFlag: types1.BlockIDFlag(sig.BlockIDFlag),
+		}
+	}
+	return abci.CommitInfo{
+		Round: commit.Round,
+		Votes: votes,
+	}
 }

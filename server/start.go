@@ -445,7 +445,6 @@ func setupNodeAndExecutor(
 		logger,
 		rlkblock.WithValidatorHasher(cometBFTHasher),
 		rlkblock.WithSignaturePayloadProvider(cometBFTPayloadProvider),
-		rlkblock.WithHeaderHasher(cometBFTHeaderHasher),
 		rlkblock.WithCommitHashProvider(cometBFTCommitHashProvider),
 	)
 	if err != nil {

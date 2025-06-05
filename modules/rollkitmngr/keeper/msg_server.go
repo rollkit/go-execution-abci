@@ -3,7 +3,6 @@ package keeper
 import (
 	"context"
 
-	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
@@ -43,41 +42,4 @@ func (m *msgServer) MigrateToRollkit(ctx context.Context, msg *types.MsgMigrateT
 	}
 
 	return &types.MsgMigrateToRollkitResponse{}, nil
-}
-
-// EditAttesters is a gov gated method that allows the authority to edit the list of attesters.
-func (m *msgServer) EditAttesters(ctx context.Context, msg *types.MsgEditAttesters) (*types.MsgEditAttestersResponse, error) {
-	if m.authority != msg.Authority {
-		return nil, govtypes.ErrInvalidSigner.Wrapf("invalid authority; expected %s, got %s", m.authority, msg.Authority)
-	}
-
-	// TODO support adding attesters after the fact.
-
-	attesters := make(map[string]struct{})
-	for _, attester := range msg.Attesters {
-		if attester.Name == "" || attester.ConsensusPubkey == nil {
-			return nil, sdkerrors.ErrInvalidRequest.Wrap("attester name and consensus public key must not be empty")
-		}
-
-		if _, exists := attesters[attester.ConsensusPubkey.String()]; exists {
-			return nil, sdkerrors.ErrInvalidRequest.Wrapf("duplicate attester consensus public key: %s", attester.ConsensusPubkey.String())
-		}
-
-		attesters[attester.ConsensusPubkey.String()] = struct{}{}
-
-		consPubInterface := attester.ConsensusPubkey.GetCachedValue()
-		consPub, ok := consPubInterface.(cryptotypes.PubKey)
-		if !ok {
-			return nil, sdkerrors.ErrInvalidRequest.Wrapf("invalid consensus public key type for attester %s", attester.Name)
-		}
-
-		_, err := m.stakingKeeper.GetValidatorByConsAddr(ctx, sdk.ConsAddress(consPub.Address()))
-		if err != nil {
-			return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to get validator by consensus address %s: %v", consPub.Address(), err)
-		}
-	}
-
-	// update the validators
-
-	return &types.MsgEditAttestersResponse{}, nil
 }

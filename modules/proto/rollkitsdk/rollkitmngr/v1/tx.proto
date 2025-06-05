@@ -15,9 +15,6 @@ service Msg {
 
   // MigrateToRollkit defines a (governance) operation for the migration to rollkit. The authority defaults to the x/gov module account.
   rpc MigrateToRollkit(MsgMigrateToRollkit) returns (MsgMigrateToRollkitResponse);
-
-  // EditAttesters defines a governance operation to edit the list of attesters.
-  rpc EditAttesters(MsgEditAttesters) returns (MsgEditAttestersResponse);
 }
 
 // MsgMigrateToRollkit is the Msg/MsgMigrateToRollkit request type.
@@ -46,21 +43,3 @@ message MsgMigrateToRollkit {
 // MsgMigrateToRollkitResponse defines the response structure for executing a
 // MsgRollkitMigrate message.
 message MsgMigrateToRollkitResponse {};
-
-// MsgEditAttesters is the Msg/EditAttesters request type.
-message MsgEditAttesters {
-  option (cosmos.msg.v1.signer) = "authority";
-  option (amino.name) = "rollkitmngr/v1/MsgEditAttesters";
-
-  // authority is the address that controls the module (defaults to x/gov unless
-  // overwritten).
-  string authority = 1 [ (cosmos_proto.scalar) = "cosmos.AddressString" ];
-
-  // attesters is the list of attesters to add or remove.
-  repeated Attester attesters = 2
-      [ (gogoproto.nullable) = false, (amino.dont_omitempty) = true ];
-}
-
-// MsgEditAttestersResponse defines the response structure for executing a
-// MsgEditAttesters message.
-message MsgEditAttestersResponse {};

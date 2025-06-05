@@ -145,105 +145,9 @@ func (m *MsgMigrateToRollkitResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_MsgMigrateToRollkitResponse proto.InternalMessageInfo
 
-// MsgEditAttesters is the Msg/EditAttesters request type.
-type MsgEditAttesters struct {
-	// authority is the address that controls the module (defaults to x/gov unless
-	// overwritten).
-	Authority string `protobuf:"bytes,1,opt,name=authority,proto3" json:"authority,omitempty"`
-	// attesters is the list of attesters to add or remove.
-	Attesters []Attester `protobuf:"bytes,2,rep,name=attesters,proto3" json:"attesters"`
-}
-
-func (m *MsgEditAttesters) Reset()         { *m = MsgEditAttesters{} }
-func (m *MsgEditAttesters) String() string { return proto.CompactTextString(m) }
-func (*MsgEditAttesters) ProtoMessage()    {}
-func (*MsgEditAttesters) Descriptor() ([]byte, []int) {
-	return fileDescriptor_43700acb817b0d03, []int{2}
-}
-func (m *MsgEditAttesters) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *MsgEditAttesters) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_MsgEditAttesters.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *MsgEditAttesters) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_MsgEditAttesters.Merge(m, src)
-}
-func (m *MsgEditAttesters) XXX_Size() int {
-	return m.Size()
-}
-func (m *MsgEditAttesters) XXX_DiscardUnknown() {
-	xxx_messageInfo_MsgEditAttesters.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_MsgEditAttesters proto.InternalMessageInfo
-
-func (m *MsgEditAttesters) GetAuthority() string {
-	if m != nil {
-		return m.Authority
-	}
-	return ""
-}
-
-func (m *MsgEditAttesters) GetAttesters() []Attester {
-	if m != nil {
-		return m.Attesters
-	}
-	return nil
-}
-
-// MsgEditAttestersResponse defines the response structure for executing a
-// MsgEditAttesters message.
-type MsgEditAttestersResponse struct {
-}
-
-func (m *MsgEditAttestersResponse) Reset()         { *m = MsgEditAttestersResponse{} }
-func (m *MsgEditAttestersResponse) String() string { return proto.CompactTextString(m) }
-func (*MsgEditAttestersResponse) ProtoMessage()    {}
-func (*MsgEditAttestersResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_43700acb817b0d03, []int{3}
-}
-func (m *MsgEditAttestersResponse) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *MsgEditAttestersResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_MsgEditAttestersResponse.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *MsgEditAttestersResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_MsgEditAttestersResponse.Merge(m, src)
-}
-func (m *MsgEditAttestersResponse) XXX_Size() int {
-	return m.Size()
-}
-func (m *MsgEditAttestersResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_MsgEditAttestersResponse.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_MsgEditAttestersResponse proto.InternalMessageInfo
-
 func init() {
 	proto.RegisterType((*MsgMigrateToRollkit)(nil), "rollkitsdk.rollkitmngr.v1.MsgMigrateToRollkit")
 	proto.RegisterType((*MsgMigrateToRollkitResponse)(nil), "rollkitsdk.rollkitmngr.v1.MsgMigrateToRollkitResponse")
-	proto.RegisterType((*MsgEditAttesters)(nil), "rollkitsdk.rollkitmngr.v1.MsgEditAttesters")
-	proto.RegisterType((*MsgEditAttestersResponse)(nil), "rollkitsdk.rollkitmngr.v1.MsgEditAttestersResponse")
 }
 
 func init() {
@@ -251,38 +155,35 @@ func init() {
 }
 
 var fileDescriptor_43700acb817b0d03 = []byte{
-	// 494 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xa4, 0x53, 0xbf, 0x6f, 0xd3, 0x40,
-	0x14, 0xce, 0x25, 0x05, 0xc9, 0x17, 0x90, 0x8a, 0xa9, 0x84, 0x6b, 0x84, 0x1b, 0x0c, 0x48, 0x51,
-	0x50, 0x6c, 0x35, 0x15, 0x1d, 0x18, 0x90, 0x1a, 0x09, 0x89, 0x01, 0x2f, 0x2e, 0x03, 0x62, 0xa9,
-	0x1c, 0xfb, 0x74, 0x39, 0x25, 0xf6, 0xa5, 0xf7, 0xce, 0x55, 0xcb, 0x84, 0x18, 0x99, 0xf8, 0x33,
-	0x18, 0x33, 0xf0, 0x27, 0x30, 0x74, 0x60, 0xa8, 0x98, 0x98, 0x10, 0x4a, 0x86, 0xfc, 0x11, 0x2c,
-	0x28, 0xfe, 0x41, 0x70, 0x13, 0x2c, 0x85, 0x2e, 0xd6, 0xdd, 0xf7, 0x3e, 0x7f, 0xef, 0x7d, 0x9f,
-	0xee, 0x61, 0x53, 0xf0, 0xe1, 0x70, 0xc0, 0x24, 0x04, 0x03, 0x3b, 0x3b, 0x86, 0x11, 0x15, 0xf6,
-	0xc9, 0xae, 0x2d, 0x4f, 0xad, 0x91, 0xe0, 0x92, 0xab, 0xdb, 0x0b, 0x8e, 0xf5, 0x17, 0xc7, 0x3a,
-	0xd9, 0xd5, 0x6f, 0x79, 0x21, 0x8b, 0xb8, 0x9d, 0x7c, 0x53, 0xb6, 0x7e, 0xc7, 0xe7, 0x10, 0x72,
-	0xb0, 0x43, 0xa0, 0x73, 0x95, 0x10, 0x68, 0x56, 0xd8, 0x4e, 0x0b, 0x47, 0xc9, 0xcd, 0x4e, 0x2f,
-	0x59, 0x69, 0x8b, 0x72, 0xca, 0x53, 0x7c, 0x7e, 0xca, 0xd0, 0x47, 0x25, 0xb3, 0x9d, 0x8d, 0x48,
-	0xf6, 0xb3, 0xf9, 0xa5, 0x8a, 0x6f, 0x3b, 0x40, 0x1d, 0x46, 0x85, 0x27, 0xc9, 0x2b, 0xee, 0xa6,
-	0x54, 0x75, 0x1f, 0x2b, 0x5e, 0x2c, 0xfb, 0x5c, 0x30, 0x79, 0xa6, 0xa1, 0x06, 0x6a, 0x2a, 0x5d,
-	0xed, 0xdb, 0xe7, 0xf6, 0x56, 0xd6, 0xf9, 0x20, 0x08, 0x04, 0x01, 0x38, 0x94, 0x82, 0x45, 0xd4,
-	0x5d, 0x50, 0xd5, 0xfb, 0xf8, 0x46, 0x6f, 0xc8, 0xfd, 0xc1, 0x51, 0x9f, 0x30, 0xda, 0x97, 0x5a,
-	0xb5, 0x81, 0x9a, 0x1b, 0x6e, 0x3d, 0xc1, 0x5e, 0x24, 0x90, 0xea, 0x60, 0x05, 0xc8, 0x71, 0x4c,
-	0x22, 0x9f, 0x08, 0xad, 0xd6, 0x40, 0xcd, 0x7a, 0xe7, 0xa1, 0xf5, 0xcf, 0x94, 0xac, 0xc3, 0x9c,
-	0xdb, 0x55, 0xce, 0x7f, 0xec, 0x54, 0x3e, 0xcd, 0xc6, 0x2d, 0xe4, 0x2e, 0x14, 0xd4, 0x97, 0x58,
-	0xf1, 0xa4, 0x24, 0x20, 0x89, 0x00, 0x6d, 0xa3, 0x51, 0x6b, 0xd6, 0x3b, 0x0f, 0x4a, 0xe4, 0x0e,
-	0x32, 0x6e, 0x41, 0xed, 0x8f, 0xc0, 0xd3, 0x27, 0xef, 0x67, 0xe3, 0xd6, 0xc2, 0xcf, 0x87, 0xd9,
-	0xb8, 0x65, 0x5e, 0x8a, 0x6f, 0x45, 0x5c, 0xe6, 0x3d, 0x7c, 0x77, 0x05, 0xec, 0x12, 0x18, 0xf1,
-	0x08, 0x88, 0xf9, 0x15, 0xe1, 0x4d, 0x07, 0xe8, 0xf3, 0x80, 0xc9, 0xbc, 0x3f, 0xfc, 0x77, 0xc4,
-	0x05, 0xc3, 0xd5, 0xab, 0x1a, 0xee, 0x2c, 0x1b, 0xde, 0x59, 0x36, 0x5c, 0x98, 0xdc, 0xd4, 0xb1,
-	0x76, 0x19, 0xcb, 0xad, 0x76, 0x7e, 0x21, 0x5c, 0x73, 0x80, 0xaa, 0x6f, 0xf1, 0xe6, 0xd2, 0xa3,
-	0xb2, 0x4a, 0xc6, 0x5c, 0x11, 0x9f, 0xbe, 0xbf, 0x1e, 0x3f, 0x9f, 0x41, 0x3d, 0xc6, 0x37, 0x8b,
-	0x51, 0x3f, 0x2e, 0x17, 0x2a, 0x90, 0xf5, 0xbd, 0x35, 0xc8, 0x79, 0x4b, 0xfd, 0xda, 0xbb, 0x79,
-	0xb0, 0xdd, 0xd7, 0xe7, 0x13, 0x03, 0x5d, 0x4c, 0x0c, 0xf4, 0x73, 0x62, 0xa0, 0x8f, 0x53, 0xa3,
-	0x72, 0x31, 0x35, 0x2a, 0xdf, 0xa7, 0x46, 0xe5, 0xcd, 0x33, 0xca, 0x64, 0x3f, 0xee, 0x59, 0x3e,
-	0x0f, 0xf3, 0x7d, 0xb4, 0x29, 0x6f, 0x93, 0x53, 0xe2, 0xc7, 0x92, 0xf1, 0xa8, 0xed, 0xf5, 0x7c,
-	0x66, 0x87, 0x3c, 0x88, 0x87, 0x04, 0x0a, 0x1b, 0x9b, 0xac, 0x6b, 0xef, 0x7a, 0xb2, 0xaf, 0x7b,
-	0xbf, 0x03, 0x00, 0x00, 0xff, 0xff, 0xaf, 0xdd, 0x78, 0xaa, 0x74, 0x04, 0x00, 0x00,
+	// 435 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x52, 0x2a, 0xca, 0xcf, 0xc9,
+	0xc9, 0xce, 0x2c, 0x29, 0x4e, 0xc9, 0xd6, 0x87, 0x32, 0x73, 0xf3, 0xd2, 0x8b, 0xf4, 0xcb, 0x0c,
+	0xf5, 0x4b, 0x2a, 0xf4, 0x0a, 0x8a, 0xf2, 0x4b, 0xf2, 0x85, 0x24, 0x11, 0x6a, 0xf4, 0x90, 0xd4,
+	0xe8, 0x95, 0x19, 0x4a, 0x09, 0x26, 0xe6, 0x66, 0xe6, 0xe5, 0xeb, 0x83, 0x49, 0x88, 0x6a, 0x29,
+	0xf1, 0xe4, 0xfc, 0xe2, 0xdc, 0xfc, 0x62, 0xfd, 0xdc, 0xe2, 0x74, 0x90, 0x29, 0xb9, 0xc5, 0xe9,
+	0x50, 0x09, 0x49, 0x88, 0x44, 0x3c, 0x98, 0xa7, 0x0f, 0xe1, 0x40, 0xa5, 0x44, 0xd2, 0xf3, 0xd3,
+	0xf3, 0x21, 0xe2, 0x20, 0x16, 0x54, 0x54, 0x15, 0x8f, 0xdb, 0x2a, 0x0b, 0x52, 0xa1, 0x9a, 0x95,
+	0x8e, 0x30, 0x71, 0x09, 0xfb, 0x16, 0xa7, 0xfb, 0x66, 0xa6, 0x17, 0x25, 0x96, 0xa4, 0x86, 0xe4,
+	0x07, 0x41, 0x94, 0x0a, 0x99, 0x71, 0x71, 0x26, 0x96, 0x96, 0x64, 0xe4, 0x17, 0x65, 0x96, 0x54,
+	0x4a, 0x30, 0x2a, 0x30, 0x6a, 0x70, 0x3a, 0x49, 0x5c, 0xda, 0xa2, 0x2b, 0x02, 0xb5, 0xd9, 0x31,
+	0x25, 0xa5, 0x28, 0xb5, 0xb8, 0x38, 0xb8, 0xa4, 0x28, 0x33, 0x2f, 0x3d, 0x08, 0xa1, 0x54, 0x48,
+	0x91, 0x8b, 0x27, 0x29, 0x27, 0x3f, 0x39, 0x3b, 0x3e, 0x23, 0x35, 0x33, 0x3d, 0xa3, 0x44, 0x82,
+	0x49, 0x81, 0x51, 0x83, 0x25, 0x88, 0x1b, 0x2c, 0xe6, 0x01, 0x16, 0x12, 0xf2, 0xe5, 0xe2, 0x2c,
+	0x4e, 0x2d, 0x2c, 0x4d, 0xcd, 0x4b, 0x4e, 0x2d, 0x92, 0x60, 0x56, 0x60, 0xd4, 0xe0, 0x36, 0x52,
+	0xd1, 0xc3, 0x19, 0x4a, 0x7a, 0xc1, 0x30, 0xb5, 0x4e, 0x9c, 0x27, 0xee, 0xc9, 0x33, 0xac, 0x78,
+	0xbe, 0x41, 0x8b, 0x31, 0x08, 0x61, 0x82, 0x90, 0x0f, 0x17, 0x67, 0x62, 0x49, 0x49, 0x6a, 0x71,
+	0x49, 0x6a, 0x51, 0xb1, 0x04, 0x8b, 0x02, 0xb3, 0x06, 0xb7, 0x91, 0x32, 0x1e, 0xe3, 0x1c, 0xa1,
+	0x6a, 0x51, 0x4c, 0x83, 0x1b, 0x60, 0x65, 0xda, 0xf4, 0x7c, 0x83, 0x16, 0xc2, 0x3f, 0x5d, 0xcf,
+	0x37, 0x68, 0x29, 0xa1, 0x05, 0x1f, 0x96, 0xe0, 0x52, 0x92, 0xe5, 0x92, 0xc6, 0x22, 0x1c, 0x94,
+	0x5a, 0x5c, 0x90, 0x9f, 0x57, 0x9c, 0x6a, 0xd4, 0xc1, 0xc8, 0xc5, 0xec, 0x5b, 0x9c, 0x2e, 0x54,
+	0xc5, 0x25, 0x80, 0x11, 0xd2, 0x7a, 0x78, 0x1c, 0x8b, 0xc5, 0x4c, 0x29, 0x33, 0xd2, 0xd4, 0xc3,
+	0xdc, 0x20, 0xc5, 0xda, 0x00, 0xf2, 0xab, 0x53, 0xc4, 0x89, 0x47, 0x72, 0x8c, 0x17, 0x1e, 0xc9,
+	0x31, 0x3e, 0x78, 0x24, 0xc7, 0x38, 0xe1, 0xb1, 0x1c, 0xc3, 0x85, 0xc7, 0x72, 0x0c, 0x37, 0x1e,
+	0xcb, 0x31, 0x44, 0xd9, 0xa5, 0x67, 0x96, 0x64, 0x94, 0x26, 0xe9, 0x25, 0xe7, 0xe7, 0xc2, 0x52,
+	0x8c, 0x7e, 0x7a, 0xbe, 0x6e, 0x6a, 0x45, 0x6a, 0x72, 0x69, 0x49, 0x66, 0x7e, 0x9e, 0x6e, 0x62,
+	0x52, 0x72, 0xa6, 0x7e, 0x6e, 0x7e, 0x4a, 0x69, 0x4e, 0x6a, 0x31, 0x4a, 0x9a, 0x02, 0x27, 0xa8,
+	0x24, 0x36, 0x70, 0x8a, 0x32, 0x06, 0x04, 0x00, 0x00, 0xff, 0xff, 0x40, 0xc2, 0xbd, 0xe7, 0x16,
+	0x03, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -299,8 +200,6 @@ const _ = grpc.SupportPackageIsVersion4
 type MsgClient interface {
 	// MigrateToRollkit defines a (governance) operation for the migration to rollkit. The authority defaults to the x/gov module account.
 	MigrateToRollkit(ctx context.Context, in *MsgMigrateToRollkit, opts ...grpc.CallOption) (*MsgMigrateToRollkitResponse, error)
-	// EditAttesters defines a governance operation to edit the list of attesters.
-	EditAttesters(ctx context.Context, in *MsgEditAttesters, opts ...grpc.CallOption) (*MsgEditAttestersResponse, error)
 }
 
 type msgClient struct {
@@ -320,21 +219,10 @@ func (c *msgClient) MigrateToRollkit(ctx context.Context, in *MsgMigrateToRollki
 	return out, nil
 }
 
-func (c *msgClient) EditAttesters(ctx context.Context, in *MsgEditAttesters, opts ...grpc.CallOption) (*MsgEditAttestersResponse, error) {
-	out := new(MsgEditAttestersResponse)
-	err := c.cc.Invoke(ctx, "/rollkitsdk.rollkitmngr.v1.Msg/EditAttesters", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // MsgServer is the server API for Msg service.
 type MsgServer interface {
 	// MigrateToRollkit defines a (governance) operation for the migration to rollkit. The authority defaults to the x/gov module account.
 	MigrateToRollkit(context.Context, *MsgMigrateToRollkit) (*MsgMigrateToRollkitResponse, error)
-	// EditAttesters defines a governance operation to edit the list of attesters.
-	EditAttesters(context.Context, *MsgEditAttesters) (*MsgEditAttestersResponse, error)
 }
 
 // UnimplementedMsgServer can be embedded to have forward compatible implementations.
@@ -343,9 +231,6 @@ type UnimplementedMsgServer struct {
 
 func (*UnimplementedMsgServer) MigrateToRollkit(ctx context.Context, req *MsgMigrateToRollkit) (*MsgMigrateToRollkitResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MigrateToRollkit not implemented")
-}
-func (*UnimplementedMsgServer) EditAttesters(ctx context.Context, req *MsgEditAttesters) (*MsgEditAttestersResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method EditAttesters not implemented")
 }
 
 func RegisterMsgServer(s grpc1.Server, srv MsgServer) {
@@ -370,24 +255,6 @@ func _Msg_MigrateToRollkit_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Msg_EditAttesters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(MsgEditAttesters)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(MsgServer).EditAttesters(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/rollkitsdk.rollkitmngr.v1.Msg/EditAttesters",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MsgServer).EditAttesters(ctx, req.(*MsgEditAttesters))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 var Msg_serviceDesc = _Msg_serviceDesc
 var _Msg_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "rollkitsdk.rollkitmngr.v1.Msg",
@@ -396,10 +263,6 @@ var _Msg_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MigrateToRollkit",
 			Handler:    _Msg_MigrateToRollkit_Handler,
-		},
-		{
-			MethodName: "EditAttesters",
-			Handler:    _Msg_EditAttesters_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -488,73 +351,6 @@ func (m *MsgMigrateToRollkitResponse) MarshalToSizedBuffer(dAtA []byte) (int, er
 	return len(dAtA) - i, nil
 }
 
-func (m *MsgEditAttesters) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *MsgEditAttesters) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *MsgEditAttesters) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if len(m.Attesters) > 0 {
-		for iNdEx := len(m.Attesters) - 1; iNdEx >= 0; iNdEx-- {
-			{
-				size, err := m.Attesters[iNdEx].MarshalToSizedBuffer(dAtA[:i])
-				if err != nil {
-					return 0, err
-				}
-				i -= size
-				i = encodeVarintTx(dAtA, i, uint64(size))
-			}
-			i--
-			dAtA[i] = 0x12
-		}
-	}
-	if len(m.Authority) > 0 {
-		i -= len(m.Authority)
-		copy(dAtA[i:], m.Authority)
-		i = encodeVarintTx(dAtA, i, uint64(len(m.Authority)))
-		i--
-		dAtA[i] = 0xa
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *MsgEditAttestersResponse) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *MsgEditAttestersResponse) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *MsgEditAttestersResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	return len(dAtA) - i, nil
-}
-
 func encodeVarintTx(dAtA []byte, offset int, v uint64) int {
 	offset -= sovTx(v)
 	base := offset
@@ -591,34 +387,6 @@ func (m *MsgMigrateToRollkit) Size() (n int) {
 }
 
 func (m *MsgMigrateToRollkitResponse) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	return n
-}
-
-func (m *MsgEditAttesters) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	l = len(m.Authority)
-	if l > 0 {
-		n += 1 + l + sovTx(uint64(l))
-	}
-	if len(m.Attesters) > 0 {
-		for _, e := range m.Attesters {
-			l = e.Size()
-			n += 1 + l + sovTx(uint64(l))
-		}
-	}
-	return n
-}
-
-func (m *MsgEditAttestersResponse) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -828,172 +596,6 @@ func (m *MsgMigrateToRollkitResponse) Unmarshal(dAtA []byte) error {
 		}
 		if fieldNum <= 0 {
 			return fmt.Errorf("proto: MsgMigrateToRollkitResponse: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		default:
-			iNdEx = preIndex
-			skippy, err := skipTx(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthTx
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *MsgEditAttesters) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowTx
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: MsgEditAttesters: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: MsgEditAttesters: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Authority", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTx
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthTx
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthTx
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Authority = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Attesters", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTx
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthTx
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthTx
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Attesters = append(m.Attesters, Attester{})
-			if err := m.Attesters[len(m.Attesters)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipTx(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthTx
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *MsgEditAttestersResponse) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowTx
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: MsgEditAttestersResponse: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: MsgEditAttestersResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		default:

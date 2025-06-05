@@ -1,0 +1,61 @@
+syntax = "proto3";
+package rollkitsdk.rollkitmngr.v1;
+
+import "amino/amino.proto";
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+import "rollkitsdk/rollkitmngr/v1/types.proto";
+
+option go_package = "github.com/rollkit/go-execution-abci/modules/rollkitmngr/types";
+
+// Query defines the gRPC querier service.
+service Query {
+  // IsMigrating queries the sequencer changes.
+  rpc IsMigrating(QueryIsMigratingRequest) returns (QueryIsMigratingResponse) {
+    option (google.api.http).get = "/rollkit/rollkitmngr/v1/is_migrating";
+  }
+
+  // Sequencer queries the sequencer.
+  rpc Sequencer(QuerySequencerRequest) returns (QuerySequencerResponse) {
+    option (google.api.http).get = "/rollkit/rollkitmngr/v1/sequencer";
+  }
+
+  // Attesters queries the list of attesters.
+  rpc Attesters(QueryAttestersRequest) returns (QueryAttestersResponse) {
+    option (google.api.http).get = "/rollkit/rollkitmngr/v1/attesters";
+  }
+}
+
+// QueryIsMigratingRequest is request type for the Query/IsMigrating RPC method.
+message QueryIsMigratingRequest {}
+
+// QueryIsMigratingResponse is response type for the Query/IsMigrating RPC method.
+message QueryIsMigratingResponse {
+  // is_migrating indicates whether the chain is migrating to rollkit.
+  bool is_migrating = 1;
+
+  // start_block_height is the block height at which the migration will start.
+  uint64 start_block_height = 2;
+
+  // end_block_height is the block height at which the migration will end.
+  uint64 end_block_height = 3;
+}
+
+// QuerySequencerRequest is request type for the Query/Sequencer RPC method.
+message QuerySequencerRequest {}
+
+// QuerySequencerResponse is response type for the Query/Sequencer RPC method.
+message QuerySequencerResponse {
+  // sequencer is the requested sequencer.
+  Sequencer sequencer = 1 [(gogoproto.nullable) = false, (amino.dont_omitempty) = true];
+}
+
+// QueryAttestersRequest is request type for the Query/Attesters RPC method.
+message QueryAttestersRequest {}
+
+// QueryAttestersResponse is response type for the Query/Attesters RPC method.
+message QueryAttestersResponse {
+  // attesters is the list of attesters.
+  repeated Attester attesters = 1
+      [ (gogoproto.nullable) = false, (amino.dont_omitempty) = true ];
+}

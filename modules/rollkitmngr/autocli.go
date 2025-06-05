@@ -33,8 +33,8 @@ func (am AppModule) AutoCLIOptions() *autocliv1.ModuleOptions {
 			Service: types.Msg_serviceDesc.ServiceName,
 			RpcCommandOptions: []*autocliv1.RpcCommandOptions{
 				{
-					RpcMethod: "MigrateToRollkit",
-					Skip:      true, // skipped because authority gated
+					RpcMethod:   "MigrateToRollkit",
+					GovProposal: true,
 				},
 			},
 		},

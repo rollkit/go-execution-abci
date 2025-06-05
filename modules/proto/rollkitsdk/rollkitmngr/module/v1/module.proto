@@ -1,14 +1,14 @@
 syntax = "proto3";
-package rollkitsdk.sequencer.module.v1;
+package rollkitsdk.rollkitmngr.module.v1;
 
 import "cosmos/app/v1alpha1/module.proto";
 
-option go_package = "github.com/rollkit/go-execution-abci/modules/sequencer/module";
+option go_package = "github.com/rollkit/go-execution-abci/modules/rollkitmngr/module";
 
 // Module is the config object for the module.
 message Module {
   option (cosmos.app.v1alpha1.module) = {
-    go_import : "github.com/rollkit/go-execution-abci/modules/sequencer"
+    go_import : "github.com/rollkit/go-execution-abci/modules/rollkitmngr"
   };
 
   // authority defines the custom module authority. If not set, defaults to the

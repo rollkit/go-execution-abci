@@ -5,46 +5,21 @@ import (
 	"time"
 
 	cmbytes "github.com/cometbft/cometbft/libs/bytes"
-	cmproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	cmversion "github.com/cometbft/cometbft/proto/tendermint/version"
 	cmttypes "github.com/cometbft/cometbft/types"
+	"github.com/libp2p/go-libp2p/core/crypto"
 
 	"github.com/rollkit/rollkit/types"
 )
 
-// ToABCIHeaderPB converts Rollkit header to Header format defined in ABCI.
-// Caller should fill all the fields that are not available in Rollkit header (like ChainID).
-func ToABCIHeaderPB(header *types.Header) (cmproto.Header, error) {
-	return cmproto.Header{
-		Version: cmversion.Consensus{
-			Block: header.Version.Block,
-			App:   header.Version.App,
-		},
-		Height: int64(header.Height()), //nolint:gosec
-		Time:   header.Time(),
-		LastBlockId: cmproto.BlockID{
-			Hash: header.LastHeaderHash[:],
-			PartSetHeader: cmproto.PartSetHeader{
-				Total: 0,
-				Hash:  nil,
-			},
-		},
-		LastCommitHash:     header.LastCommitHash[:],
-		DataHash:           header.DataHash[:],
-		ConsensusHash:      header.ConsensusHash[:],
-		AppHash:            header.AppHash[:],
-		LastResultsHash:    header.LastResultsHash[:],
-		EvidenceHash:       new(cmttypes.EvidenceData).Hash(),
-		ProposerAddress:    header.ProposerAddress,
-		ChainID:            header.ChainID(),
-		ValidatorsHash:     header.ValidatorHash,
-		NextValidatorsHash: header.ValidatorHash,
-	}, nil
-}
-
 // ToABCIHeader converts Rollkit header to Header format defined in ABCI.
 // Caller should fill all the fields that are not available in Rollkit header (like ChainID).
-func ToABCIHeader(header *types.Header) (cmttypes.Header, error) {
+func ToABCIHeader(proposerKey crypto.PubKey, header *types.Header) (cmttypes.Header, error) {
+	validatorHash, err := ValidatorHasher(header.ProposerAddress, proposerKey)
+	if err != nil {
+		return cmttypes.Header{}, err
+	}
+
 	return cmttypes.Header{
 		Version: cmversion.Consensus{
 			Block: header.Version.Block,
@@ -67,15 +42,15 @@ func ToABCIHeader(header *types.Header) (cmttypes.Header, error) {
 		EvidenceHash:       new(cmttypes.EvidenceData).Hash(),
 		ProposerAddress:    header.ProposerAddress,
 		ChainID:            header.ChainID(),
-		ValidatorsHash:     cmbytes.HexBytes(header.ValidatorHash),
-		NextValidatorsHash: cmbytes.HexBytes(header.ValidatorHash),
+		ValidatorsHash:     cmbytes.HexBytes(validatorHash),
+		NextValidatorsHash: cmbytes.HexBytes(validatorHash),
 	}, nil
 }
 
 // ToABCIBlock converts Rolkit block into block format defined by ABCI.
 // Returned block should pass `ValidateBasic`.
-func ToABCIBlock(header *types.SignedHeader, data *types.Data) (*cmttypes.Block, error) {
-	abciHeader, err := ToABCIHeader(&header.Header)
+func ToABCIBlock(proposerKey crypto.PubKey, header *types.SignedHeader, data *types.Data) (*cmttypes.Block, error) {
+	abciHeader, err := ToABCIHeader(proposerKey, &header.Header)
 	if err != nil {
 		return nil, err
 	}
@@ -108,8 +83,8 @@ func ToABCIBlock(header *types.SignedHeader, data *types.Data) (*cmttypes.Block,
 }
 
 // ToABCIBlockMeta converts Rollkit block into BlockMeta format defined by ABCI
-func ToABCIBlockMeta(header *types.SignedHeader, data *types.Data) (*cmttypes.BlockMeta, error) {
-	cmblock, err := ToABCIBlock(header, data)
+func ToABCIBlockMeta(proposerPubKey crypto.PubKey, header *types.SignedHeader, data *types.Data) (*cmttypes.BlockMeta, error) {
+	cmblock, err := ToABCIBlock(proposerPubKey, header, data)
 	if err != nil {
 		return nil, err
 	}
@@ -144,4 +119,23 @@ func GetABCICommit(height uint64, hash []byte, val cmttypes.Address, time time.T
 	tmCommit.Signatures[0] = commitSig
 
 	return &tmCommit
+}
+
+// ToABCICommit returns a commit format defined by ABCI.
+// Other fields (especially ValidatorAddress and Timestamp of Signature) have to be filled by caller.
+func ToABCICommit(height uint64, hash []byte, val cmttypes.Address, time time.Time, signature types.Signature) *cmttypes.Commit {
+	return &cmttypes.Commit{
+		Height: int64(height), //nolint:gosec
+		Round:  0,
+		BlockID: cmttypes.BlockID{
+			Hash:          cmbytes.HexBytes(hash),
+			PartSetHeader: cmttypes.PartSetHeader{},
+		},
+		Signatures: []cmttypes.CommitSig{{
+			BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+			Signature:        signature,
+			ValidatorAddress: val,
+			Timestamp:        time,
+		}},
+	}
 }

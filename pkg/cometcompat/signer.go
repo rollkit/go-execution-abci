@@ -3,15 +3,17 @@ package cometcompat
 import (
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	cmtypes "github.com/cometbft/cometbft/types"
+	"github.com/libp2p/go-libp2p/core/crypto"
 
 	"github.com/rollkit/rollkit/types"
 )
 
-func SignaturePayloadProvider(header *types.Header) ([]byte, error) {
-	abciHeaderForSigning, err := ToABCIHeader(header)
+func SignaturePayloadProvider(proposerKey crypto.PubKey, header *types.Header) ([]byte, error) {
+	abciHeaderForSigning, err := ToABCIHeader(proposerKey, header)
 	if err != nil {
 		return nil, err
 	}
+
 	vote := cmtproto.Vote{
 		Type:   cmtproto.PrecommitType,
 		Height: int64(header.Height()), //nolint:gosec

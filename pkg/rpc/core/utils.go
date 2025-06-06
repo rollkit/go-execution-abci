@@ -13,7 +13,7 @@ import (
 
 	rlktypes "github.com/rollkit/rollkit/types"
 
-	"github.com/rollkit/go-execution-abci/pkg/common"
+	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
 )
 
 const NodeIDByteLength = 20
@@ -57,7 +57,7 @@ func getBlockMeta(ctx context.Context, n uint64) *cmttypes.BlockMeta {
 		return nil
 	}
 	// Assuming ToABCIBlockMeta is now in pkg/rpc/provider/provider_utils.go
-	bmeta, err := common.ToABCIBlockMeta(header, data) // Removed rpc. prefix
+	bmeta, err := cometcompat.ToABCIBlockMeta(nil /* TODO */, header, data) // Removed rpc. prefix
 	if err != nil {
 		env.Logger.Error("Failed to convert block to ABCI block meta", "height", n, "err", err)
 		return nil
@@ -131,7 +131,7 @@ func getHeightFromEntry(field string, value []byte) (uint64, error) {
 type blockFilter struct { // needs this for the Filter interface
 	max   int64
 	min   int64
-	field string //need this field for differentiation between getting headers and getting data
+	field string // need this field for differentiation between getting headers and getting data
 }
 
 func (f *blockFilter) Filter(e dsq.Entry) bool {
@@ -178,7 +178,7 @@ func BlockIterator(ctx context.Context, max int64, min int64) []BlockResponse {
 	defer rHeader.Close() //nolint:errcheck
 	defer rData.Close()   //nolint:errcheck
 
-	//we need to match the data to the header using the height, for that we use a map
+	// we need to match the data to the header using the height, for that we use a map
 	headerMap := make(map[uint64]*rlktypes.SignedHeader)
 	for res := range rHeader.Next() {
 		if res.Error != nil {
@@ -203,14 +203,14 @@ func BlockIterator(ctx context.Context, max int64, min int64) []BlockResponse {
 		dataMap[data.Height()] = data
 	}
 
-	//maps the headers to the data
+	// maps the headers to the data
 	for height, header := range headerMap {
 		if data, ok := dataMap[height]; ok {
 			blocks = append(blocks, BlockResponse{header: header, data: data})
 		}
 	}
 
-	//sort blocks by height descending
+	// sort blocks by height descending
 	sort.Slice(blocks, func(i, j int) bool {
 		return blocks[i].header.Height() > blocks[j].header.Height()
 	})

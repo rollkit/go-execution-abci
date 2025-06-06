@@ -16,7 +16,6 @@ import (
 	rlktypes "github.com/rollkit/rollkit/types"
 
 	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
-	"github.com/rollkit/go-execution-abci/pkg/common"
 )
 
 // BlockSearch searches for a paginated set of blocks matching BeginBlock and
@@ -72,7 +71,7 @@ func BlockSearch(
 		if err != nil {
 			return nil, err
 		}
-		block, err := common.ToABCIBlock(header, data)
+		block, err := cometcompat.ToABCIBlock(nil /* TODO */, header, data)
 		if err != nil {
 			return nil, err
 		}
@@ -116,12 +115,12 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 		return nil, err
 	}
 
-	hash, err := cometcompat.HeaderHasher(&header.Header)
+	hash, err := cometcompat.HeaderHasher(nil /* TODO */, &header.Header)
 	if err != nil {
 		return nil, err
 	}
 
-	abciBlock, err := common.ToABCIBlock(header, data)
+	abciBlock, err := cometcompat.ToABCIBlock(nil /* TODO */, header, data)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +144,7 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 		return nil, err
 	}
 
-	abciBlock, err := common.ToABCIBlock(header, data)
+	abciBlock, err := cometcompat.ToABCIBlock(nil /* TODO */, header, data)
 	if err != nil {
 		return nil, err
 	}
@@ -178,12 +177,12 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 	}
 
 	// Convert to CometBFT block to get the correct CometBFT header and its hash
-	abciBlock, err := common.ToABCIBlock(rollkitSignedHeader, rollkitData)
+	abciBlock, err := cometcompat.ToABCIBlock(nil /* TODO */, rollkitSignedHeader, rollkitData)
 	if err != nil {
 		return nil, err
 	}
 
-	commitForAbciHeader := common.ToABCICommit(
+	commitForAbciHeader := cometcompat.ToABCICommit(
 		uint64(abciBlock.Height),
 		abciBlock.Hash(),
 		rollkitSignedHeader.ProposerAddress,
@@ -251,7 +250,7 @@ func HeaderByHash(ctx *rpctypes.Context, hash cmbytes.HexBytes) (*ctypes.ResultH
 		return nil, err
 	}
 
-	blockMeta, err := common.ToABCIBlockMeta(header, data)
+	blockMeta, err := cometcompat.ToABCIBlockMeta(nil /* TODO */, header, data)
 	if err != nil {
 		return nil, err
 	}
@@ -289,7 +288,7 @@ func BlockchainInfo(ctx *rpctypes.Context, minHeight, maxHeight int64) (*ctypes.
 	blocks := make([]*cmttypes.BlockMeta, 0, maxHeight-minHeight+1)
 	for _, block := range BlockIterator(ctx.Context(), maxHeight, minHeight) {
 		if block.header != nil && block.data != nil {
-			cmblockmeta, err := common.ToABCIBlockMeta(block.header, block.data)
+			cmblockmeta, err := cometcompat.ToABCIBlockMeta(nil /* TODO */, block.header, block.data)
 			if err != nil {
 				return nil, err
 			}

@@ -303,13 +303,11 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("rollkit header not found in context")
 	}
 
-	signatureBz, err := cometcompat.SignaturePayloadProvider(&header.Header)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to compute signature payload: %w", err)
-	}
-	_ = signatureBz // what to do with this?
-
-	headerHash, err := cometcompat.CommitHasher(&header.Signature, &header.Header, s.Validators.Proposer.Address)
+	headerHash, err := cometcompat.CommitHasher(
+		&header.Signature,
+		&header.Header,
+		s.Validators.Proposer.Address,
+	)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to compute header hash: %w", err)
 	}

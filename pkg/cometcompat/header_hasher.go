@@ -1,13 +1,13 @@
 package cometcompat
 
 import (
-	rollkittypes "github.com/rollkit/rollkit/types"
+	"github.com/libp2p/go-libp2p/core/crypto"
 
-	"github.com/rollkit/go-execution-abci/pkg/common"
+	rollkittypes "github.com/rollkit/rollkit/types"
 )
 
-func HeaderHasher(header *rollkittypes.Header) (rollkittypes.Hash, error) {
-	abciHeader, err := common.ToABCIHeader(header)
+func HeaderHasher(proposerKey crypto.PubKey, header *rollkittypes.Header) (rollkittypes.Hash, error) {
+	abciHeader, err := ToABCIHeader(proposerKey, header)
 	if err != nil {
 		return nil, err
 	}

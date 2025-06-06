@@ -15,6 +15,7 @@ import (
 	"github.com/rollkit/rollkit/block"
 	rlktypes "github.com/rollkit/rollkit/types"
 
+	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
 	"github.com/rollkit/go-execution-abci/pkg/common"
 )
 
@@ -115,7 +116,7 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 		return nil, err
 	}
 
-	hash, err := env.HeaderHasher(&header.Header)
+	hash, err := cometcompat.HeaderHasher(&header.Header)
 	if err != nil {
 		return nil, err
 	}

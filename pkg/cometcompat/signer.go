@@ -5,12 +5,10 @@ import (
 	cmtypes "github.com/cometbft/cometbft/types"
 
 	"github.com/rollkit/rollkit/types"
-
-	"github.com/rollkit/go-execution-abci/pkg/rpc"
 )
 
 func SignaturePayloadProvider(header *types.Header) ([]byte, error) {
-	abciHeaderForSigning, err := rpc.ToABCIHeader(header)
+	abciHeaderForSigning, err := ToABCIHeader(header)
 	if err != nil {
 		return nil, err
 	}

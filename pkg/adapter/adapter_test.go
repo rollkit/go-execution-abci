@@ -87,7 +87,7 @@ func TestExecuteFiresEvents(t *testing.T) {
 			require.NoError(t, adapter.Store.SaveState(ctx, stateFixture()))
 
 			// when
-			_, _, err := adapter.ExecuteTxs(ctx, spec.txs, 1, timestamp, bytes.Repeat([]byte{1}, 32), nil)
+			_, _, err := adapter.ExecuteTxs(ctx, spec.txs, 1, timestamp, bytes.Repeat([]byte{1}, 32))
 			if spec.expErr {
 				require.Error(t, err)
 				blockMx.RLock()
@@ -199,6 +199,7 @@ func (m *MockABCIApp) ProcessProposal(r *abci.RequestProcessProposal) (*abci.Res
 	}
 	return m.ProcessProposalFn(r)
 }
+
 func (m *MockABCIApp) FinalizeBlock(r *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
 	if m.FinalizeBlockFn == nil {
 		panic("not expected to be called")

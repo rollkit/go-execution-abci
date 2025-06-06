@@ -87,6 +87,8 @@ func newValidState() cmtstate.State {
 
 // setupTestValidatorsEnv helper for TestValidators
 func setupTestValidatorsEnv(t *testing.T, gvs []cmttypes.GenesisValidator, consensusParams *cmttypes.ConsensusParams) *MockRollkitStore {
+	t.Helper()
+
 	mockStore := new(MockRollkitStore)
 	adapterInstance := &adapter.Adapter{
 		RollkitStore: mockStore,

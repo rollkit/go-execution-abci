@@ -131,7 +131,7 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 	}
 
 	// hashe is calculcated in ToABCIBlock, so we should overide it before hashing the header
-	header.Header.ValidatorHash = rlktypes.Hash(abciBlock.Header.ValidatorsHash)
+	header.Header.ValidatorHash = rlktypes.Hash(abciBlock.ValidatorsHash)
 
 	hash, err := cometcompat.HeaderHasher(signerPubKey, &header.Header)
 	if err != nil {

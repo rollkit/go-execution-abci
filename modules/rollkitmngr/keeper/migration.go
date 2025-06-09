@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"cosmossdk.io/collections"
+	"cosmossdk.io/math"
 	abci "github.com/cometbft/cometbft/abci/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
@@ -199,6 +200,28 @@ func (k Keeper) migrateOver(
 	// increment and persist the step
 	if err := k.MigrationStep.Set(ctx, step+1); err != nil {
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to set migration step: %v", err)
+	}
+
+	// the first time, we set the whole validator set to the same validator power. This is to avoid a validator ends up with >= 33% or worse >= 66%
+	// vp during the migration.
+	// TODO: add a test
+	if step == 0 {
+		// set the whole validator set to the same power
+		for _, val := range lastValidatorSet {
+			var isAlreadyUpdated bool
+			for _, powerUpdate := range initialValUpdates {
+				if powerUpdate.PubKey.Equal(val.ConsensusPubkey) {
+					// if the power update already exists, we skip it
+					isAlreadyUpdated = true
+					break
+				}
+			}
+
+			if !isAlreadyUpdated {
+				powerUpdate := val.ABCIValidatorUpdate(math.OneInt())
+				initialValUpdates = append(initialValUpdates, powerUpdate)
+			}
+		}
 	}
 
 	return initialValUpdates, nil

@@ -65,13 +65,18 @@ func BlockSearch(
 	skipCount := validateSkipCount(pageVal, perPageVal)
 	pageSize := min(perPageVal, totalCount-skipCount)
 
+	signerPubKey, err := env.Adapter.Signer.GetPublic()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get signer public key: %w", err)
+	}
+
 	blocks := make([]*ctypes.ResultBlock, 0, pageSize)
 	for i := skipCount; i < skipCount+pageSize; i++ {
 		header, data, err := env.Adapter.RollkitStore.GetBlockData(wrappedCtx, uint64(results[i]))
 		if err != nil {
 			return nil, err
 		}
-		block, err := cometcompat.ToABCIBlock(nil /* TODO */, header, data)
+		block, err := cometcompat.ToABCIBlock(signerPubKey, header, data)
 		if err != nil {
 			return nil, err
 		}
@@ -115,12 +120,17 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 		return nil, err
 	}
 
-	hash, err := cometcompat.HeaderHasher(nil /* TODO */, &header.Header)
+	signerPubKey, err := env.Adapter.Signer.GetPublic()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get signer public key: %w", err)
+	}
+
+	hash, err := cometcompat.HeaderHasher(signerPubKey, &header.Header)
 	if err != nil {
 		return nil, err
 	}
 
-	abciBlock, err := cometcompat.ToABCIBlock(nil /* TODO */, header, data)
+	abciBlock, err := cometcompat.ToABCIBlock(signerPubKey, header, data)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +154,12 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 		return nil, err
 	}
 
-	abciBlock, err := cometcompat.ToABCIBlock(nil /* TODO */, header, data)
+	signerPubKey, err := env.Adapter.Signer.GetPublic()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get signer public key: %w", err)
+	}
+
+	abciBlock, err := cometcompat.ToABCIBlock(signerPubKey, header, data)
 	if err != nil {
 		return nil, err
 	}
@@ -176,8 +191,13 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 		return nil, errors.New("empty proposer address found in block header")
 	}
 
+	signerPubKey, err := env.Adapter.Signer.GetPublic()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get signer public key: %w", err)
+	}
+
 	// Convert to CometBFT block to get the correct CometBFT header and its hash
-	abciBlock, err := cometcompat.ToABCIBlock(nil /* TODO */, rollkitSignedHeader, rollkitData)
+	abciBlock, err := cometcompat.ToABCIBlock(signerPubKey, rollkitSignedHeader, rollkitData)
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +270,12 @@ func HeaderByHash(ctx *rpctypes.Context, hash cmbytes.HexBytes) (*ctypes.ResultH
 		return nil, err
 	}
 
-	blockMeta, err := cometcompat.ToABCIBlockMeta(nil /* TODO */, header, data)
+	signerPubKey, err := env.Adapter.Signer.GetPublic()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get signer public key: %w", err)
+	}
+
+	blockMeta, err := cometcompat.ToABCIBlockMeta(signerPubKey, header, data)
 	if err != nil {
 		return nil, err
 	}
@@ -285,10 +310,15 @@ func BlockchainInfo(ctx *rpctypes.Context, minHeight, maxHeight int64) (*ctypes.
 	}
 	env.Logger.Debug("BlockchainInfo", "maxHeight", maxHeight, "minHeight", minHeight)
 
+	signerPubKey, err := env.Adapter.Signer.GetPublic()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get signer public key: %w", err)
+	}
+
 	blocks := make([]*cmttypes.BlockMeta, 0, maxHeight-minHeight+1)
 	for _, block := range BlockIterator(ctx.Context(), maxHeight, minHeight) {
 		if block.header != nil && block.data != nil {
-			cmblockmeta, err := cometcompat.ToABCIBlockMeta(nil /* TODO */, block.header, block.data)
+			cmblockmeta, err := cometcompat.ToABCIBlockMeta(signerPubKey, block.header, block.data)
 			if err != nil {
 				return nil, err
 			}

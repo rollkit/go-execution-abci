@@ -368,6 +368,7 @@ func setupNodeAndExecutor(
 		cfg,
 		appGenesis,
 		adapterMetrics,
+		signer,
 	)
 
 	cmtApp := server.NewCometABCIWrapper(app)

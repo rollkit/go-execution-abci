@@ -27,6 +27,7 @@ import (
 	"github.com/rollkit/rollkit/core/execution"
 	rollnode "github.com/rollkit/rollkit/node"
 	rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
+	"github.com/rollkit/rollkit/pkg/signer"
 	rstore "github.com/rollkit/rollkit/pkg/store"
 	rolltypes "github.com/rollkit/rollkit/types"
 
@@ -61,6 +62,8 @@ type Adapter struct {
 	RollkitStore rstore.Store
 	Mempool      mempool.Mempool
 	MempoolIDs   *mempoolIDs
+	// Signer is only used to be passed down to RPC via environment.
+	Signer signer.Signer
 
 	P2PClient  P2PClientInfo
 	TxGossiper *p2p.Gossiper
@@ -84,6 +87,7 @@ func NewABCIExecutor(
 	cfg *config.Config,
 	appGenesis *genutiltypes.AppGenesis,
 	metrics *Metrics,
+	signer signer.Signer,
 ) *Adapter {
 	if metrics == nil {
 		metrics = NopMetrics()
@@ -106,6 +110,7 @@ func NewABCIExecutor(
 		p2pMetrics:   p2pMetrics,
 		AppGenesis:   appGenesis,
 		MempoolIDs:   newMempoolIDs(),
+		Signer:       signer,
 		Metrics:      metrics,
 	}
 

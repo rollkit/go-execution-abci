@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/rollkit/rollkit/block"
 	"github.com/rollkit/rollkit/types"
 )
 
@@ -77,7 +78,7 @@ func TestExecuteFiresEvents(t *testing.T) {
 			myMockApp := mockApp(myExecResult, spec.mockMutator)
 
 			originStore := ds.NewMapDatastore()
-			adapter := NewABCIExecutor(myMockApp, originStore, nil, nil, log.NewTestLogger(t), nil, nil, NopMetrics())
+			adapter := NewABCIExecutor(myMockApp, originStore, nil, nil, log.NewTestLogger(t), nil, nil, NopMetrics(), nil)
 			adapter.EventBus = eventBus
 			adapter.MempoolIDs = newMempoolIDs()
 			adapter.Mempool = &mempool.NopMempool{}
@@ -87,6 +88,7 @@ func TestExecuteFiresEvents(t *testing.T) {
 			require.NoError(t, adapter.Store.SaveState(ctx, stateFixture()))
 
 			// when
+			ctx = context.WithValue(ctx, block.HeaderContextKey, headerFixture().Header)
 			_, _, err := adapter.ExecuteTxs(ctx, spec.txs, 1, timestamp, bytes.Repeat([]byte{1}, 32))
 			if spec.expErr {
 				require.Error(t, err)

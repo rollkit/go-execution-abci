@@ -56,8 +56,15 @@ func getBlockMeta(ctx context.Context, n uint64) *cmttypes.BlockMeta {
 		env.Logger.Error("Nil header or data returned from GetBlockData", "height", n)
 		return nil
 	}
+
+	signerPubKey, err := env.Adapter.Signer.GetPublic()
+	if err != nil {
+		env.Logger.Error("Failed to get signer public key", "height", n, "err", err)
+		return nil
+	}
+
 	// Assuming ToABCIBlockMeta is now in pkg/rpc/provider/provider_utils.go
-	bmeta, err := cometcompat.ToABCIBlockMeta(nil /* TODO */, header, data) // Removed rpc. prefix
+	bmeta, err := cometcompat.ToABCIBlockMeta(signerPubKey, header, data) // Removed rpc. prefix
 	if err != nil {
 		env.Logger.Error("Failed to convert block to ABCI block meta", "height", n, "err", err)
 		return nil

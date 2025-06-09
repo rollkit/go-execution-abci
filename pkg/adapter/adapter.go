@@ -308,6 +308,17 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("rollkit header not found in context")
 	}
 
+	signerPubKey, err := a.Signer.GetPublic()
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get signer public key: %w", err)
+	}
+
+	if err := header.SetCustomVerifier(func(header *rolltypes.Header) ([]byte, error) {
+		return cometcompat.SignaturePayloadProvider(signerPubKey, header)
+	}); err != nil {
+		return nil, 0, fmt.Errorf("failed to set custom verifier: %w", err)
+	}
+
 	headerHash, err := cometcompat.CommitHasher(
 		&header.Signature,
 		&header.Header,

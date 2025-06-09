@@ -125,15 +125,19 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 		return nil, fmt.Errorf("failed to get signer public key: %w", err)
 	}
 
+	abciBlock, err := cometcompat.ToABCIBlock(signerPubKey, header, data)
+	if err != nil {
+		return nil, err
+	}
+
+	// hashe is calculcated in ToABCIBlock, so we should overide it before hashing the header
+	header.Header.ValidatorHash = rlktypes.Hash(abciBlock.Header.ValidatorsHash)
+
 	hash, err := cometcompat.HeaderHasher(signerPubKey, &header.Header)
 	if err != nil {
 		return nil, err
 	}
 
-	abciBlock, err := cometcompat.ToABCIBlock(signerPubKey, header, data)
-	if err != nil {
-		return nil, err
-	}
 	return &ctypes.ResultBlock{
 		BlockID: cmttypes.BlockID{
 			Hash: cmbytes.HexBytes(hash),

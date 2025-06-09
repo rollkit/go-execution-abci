@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package rollkitsdk.network.v1;
+
+option go_package = "github.com/rollkit/go-execution-abci/modules/network/types";
+
+import "gogoproto/gogo.proto";
+import "google/api/annotations.proto";
+import "cosmos/base/query/v1beta1/pagination.proto";
+import "rollkitsdk/network/v1/types.proto";
+
+// Query defines the gRPC querier service for the network module.
+service Query {
+  // Params queries the module parameters
+  rpc Params(QueryParamsRequest) returns (QueryParamsResponse) {
+    option (google.api.http).get = "/rollkit/network/v1/params";
+  }
+  
+  // AttestationBitmap queries the attestation bitmap for a specific height
+  rpc AttestationBitmap(QueryAttestationBitmapRequest) returns (QueryAttestationBitmapResponse) {
+    option (google.api.http).get = "/rollkit/network/v1/attestation/{height}";
+  }
+  
+  // EpochInfo queries information about a specific epoch
+  rpc EpochInfo(QueryEpochInfoRequest) returns (QueryEpochInfoResponse) {
+    option (google.api.http).get = "/rollkit/network/v1/epoch/{epoch}";
+  }
+  
+  // ValidatorIndex queries the bitmap index for a validator
+  rpc ValidatorIndex(QueryValidatorIndexRequest) returns (QueryValidatorIndexResponse) {
+    option (google.api.http).get = "/rollkit/network/v1/validator/{address}";
+  }
+  
+  // SoftConfirmationStatus queries if a height is soft-confirmed
+  rpc SoftConfirmationStatus(QuerySoftConfirmationStatusRequest) returns (QuerySoftConfirmationStatusResponse) {
+    option (google.api.http).get = "/rollkit/network/v1/soft-confirmation/{height}";
+  }
+}
+
+// QueryParamsRequest is the request type for the Query/Params RPC method.
+message QueryParamsRequest {}
+
+// QueryParamsResponse is the response type for the Query/Params RPC method.
+message QueryParamsResponse {
+  // params holds all the parameters of this module.
+  Params params = 1 [(gogoproto.nullable) = false];
+}
+
+// QueryAttestationBitmapRequest is the request type for the Query/AttestationBitmap RPC method.
+message QueryAttestationBitmapRequest {
+  int64 height = 1;
+}
+
+// QueryAttestationBitmapResponse is the response type for the Query/AttestationBitmap RPC method.
+message QueryAttestationBitmapResponse {
+  AttestationBitmap bitmap = 1;
+}
+
+// QueryEpochInfoRequest is the request type for the Query/EpochInfo RPC method.
+message QueryEpochInfoRequest {
+  uint64 epoch = 1;
+}
+
+// QueryEpochInfoResponse is the response type for the Query/EpochInfo RPC method.
+message QueryEpochInfoResponse {
+  uint64 epoch = 1;
+  int64 start_height = 2;
+  int64 end_height = 3;
+  bytes participation_bitmap = 4;
+  uint64 active_validators = 5;
+  uint64 participating_validators = 6;
+}
+
+// QueryValidatorIndexRequest is the request type for the Query/ValidatorIndex RPC method.
+message QueryValidatorIndexRequest {
+  string address = 1;
+}
+
+// QueryValidatorIndexResponse is the response type for the Query/ValidatorIndex RPC method.
+message QueryValidatorIndexResponse {
+  ValidatorIndex index = 1;
+}
+
+// QuerySoftConfirmationStatusRequest is the request type for the Query/SoftConfirmationStatus RPC method.
+message QuerySoftConfirmationStatusRequest {
+  int64 height = 1;
+}
+
+// QuerySoftConfirmationStatusResponse is the response type for the Query/SoftConfirmationStatus RPC method.
+message QuerySoftConfirmationStatusResponse {
+  bool is_soft_confirmed = 1;
+  uint64 voted_power = 2;
+  uint64 total_power = 3;
+  string quorum_fraction = 4;
+}

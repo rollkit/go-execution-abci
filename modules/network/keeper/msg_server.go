@@ -1,0 +1,177 @@
+package keeper
+
+import (
+	"context"
+
+	"cosmossdk.io/errors"
+	"cosmossdk.io/math"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
+	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
+
+	"github.com/rollkit/go-execution-abci/modules/network/types"
+)
+
+type msgServer struct {
+	Keeper
+}
+
+// NewMsgServerImpl returns an implementation of the MsgServer interface
+func NewMsgServerImpl(keeper Keeper) types.MsgServer {
+	return &msgServer{Keeper: keeper}
+}
+
+var _ types.MsgServer = msgServer{}
+
+// Attest handles MsgAttest
+func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.MsgAttestResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	if !k.IsCheckpointHeight(ctx, msg.Height) {
+		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "height %d is not a checkpoint", msg.Height)
+	}
+
+	if !k.IsInAttesterSet(ctx, msg.Validator) {
+		return nil, errors.Wrapf(sdkerrors.ErrUnauthorized, "validator %s not in attester set", msg.Validator)
+	}
+
+	index, found := k.GetValidatorIndex(ctx, msg.Validator)
+	if !found {
+		return nil, errors.Wrapf(sdkerrors.ErrNotFound, "validator index not found for %s", msg.Validator)
+	}
+
+	bitmap := k.GetAttestationBitmap(ctx, msg.Height)
+	if bitmap == nil {
+		validators := k.stakingKeeper.GetLastValidators(ctx)
+		numValidators := 0
+		for _, v := range validators {
+			if v.IsBonded() {
+				numValidators++
+			}
+		}
+		bitmap = k.bitmapHelper.NewBitmap(numValidators)
+	}
+
+	if k.bitmapHelper.IsSet(bitmap, int(index)) {
+		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator %s already attested for height %d", msg.Validator, msg.Height)
+	}
+
+	// TODO: Verify the vote signature here once we implement vote parsing
+
+	// Set the bit
+	k.bitmapHelper.SetBit(bitmap, int(index))
+	if err := k.SetAttestationBitmap(ctx, msg.Height, bitmap); err != nil {
+		return nil, errors.Wrap(err, "failed to set attestation bitmap")
+	}
+
+	// Store signature using the new collection method
+	if err := k.SetSignature(ctx, msg.Height, msg.Validator, msg.Vote); err != nil {
+		return nil, errors.Wrap(err, "failed to store signature")
+	}
+
+	epoch := k.GetCurrentEpoch(ctx)
+	epochBitmap := k.GetEpochBitmap(ctx, epoch)
+	if epochBitmap == nil {
+		validators := k.stakingKeeper.GetLastValidators(ctx)
+		numValidators := 0
+		for _, v := range validators {
+			if v.IsBonded() {
+				numValidators++
+			}
+		}
+		epochBitmap = k.bitmapHelper.NewBitmap(numValidators)
+	}
+	k.bitmapHelper.SetBit(epochBitmap, int(index))
+	if err := k.SetEpochBitmap(ctx, epoch, epochBitmap); err != nil {
+		return nil, errors.Wrap(err, "failed to set epoch bitmap")
+	}
+
+	// Emit event
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.TypeMsgAttest,
+			sdk.NewAttribute("validator", msg.Validator),
+			sdk.NewAttribute("height", math.NewInt(msg.Height).String()),
+		),
+	)
+
+	return &types.MsgAttestResponse{}, nil
+}
+
+// JoinAttesterSet handles MsgJoinAttesterSet
+func (k msgServer) JoinAttesterSet(goCtx context.Context, msg *types.MsgJoinAttesterSet) (*types.MsgJoinAttesterSetResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	valAddr, err := sdk.ValAddressFromBech32(msg.Validator)
+	if err != nil {
+		return nil, errors.Wrapf(sdkerrors.ErrInvalidAddress, "invalid validator address: %s", err)
+	}
+
+	validator, found := k.stakingKeeper.GetValidator(ctx, valAddr)
+	if !found {
+		return nil, errors.Wrapf(sdkerrors.ErrNotFound, "validator not found: %s", msg.Validator)
+	}
+
+	if !validator.IsBonded() {
+		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator must be bonded to join attester set")
+	}
+
+	if k.IsInAttesterSet(ctx, msg.Validator) {
+		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator already in attester set")
+	}
+
+	k.SetAttesterSetMember(ctx, msg.Validator)
+
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.TypeMsgJoinAttesterSet,
+			sdk.NewAttribute("validator", msg.Validator),
+		),
+	)
+
+	return &types.MsgJoinAttesterSetResponse{}, nil
+}
+
+// LeaveAttesterSet handles MsgLeaveAttesterSet
+func (k msgServer) LeaveAttesterSet(goCtx context.Context, msg *types.MsgLeaveAttesterSet) (*types.MsgLeaveAttesterSetResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	if !k.IsInAttesterSet(ctx, msg.Validator) {
+		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator not in attester set")
+	}
+
+	k.RemoveAttesterSetMember(ctx, msg.Validator)
+
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.TypeMsgLeaveAttesterSet,
+			sdk.NewAttribute("validator", msg.Validator),
+		),
+	)
+
+	return &types.MsgLeaveAttesterSetResponse{}, nil
+}
+
+// UpdateParams handles MsgUpdateParams
+func (k msgServer) UpdateParams(goCtx context.Context, msg *types.MsgUpdateParams) (*types.MsgUpdateParamsResponse, error) {
+	ctx := sdk.UnwrapSDKContext(goCtx)
+
+	if k.GetAuthority() != msg.Authority {
+		return nil, errors.Wrapf(govtypes.ErrInvalidSigner, "invalid authority; expected %s, got %s", k.GetAuthority(), msg.Authority)
+	}
+
+	if err := msg.Params.Validate(); err != nil {
+		return nil, err
+	}
+
+	k.SetParams(ctx, msg.Params)
+
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.TypeMsgUpdateParams,
+			sdk.NewAttribute("authority", msg.Authority),
+		),
+	)
+
+	return &types.MsgUpdateParamsResponse{}, nil
+}

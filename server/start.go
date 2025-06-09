@@ -295,7 +295,7 @@ func setupNodeAndExecutor(
 	srvCtx *server.Context,
 	cfg *cmtcfg.Config,
 	app sdktypes.Application,
-) (rolllkitNode node.Node, executor *adapter.Adapter, cleanupFn func(), err error) {
+) (rollkitNode node.Node, executor *adapter.Adapter, cleanupFn func(), err error) {
 	logger := srvCtx.Logger.With("module", "rollkit")
 	logger.Info("starting node with Rollkit in-process")
 
@@ -424,7 +424,7 @@ func setupNodeAndExecutor(
 		return nil, nil, cleanupFn, err
 	}
 
-	rolllkitNode, err = node.NewNode(
+	rollkitNode, err = node.NewNode(
 		ctx,
 		rollkitcfg,
 		executor,
@@ -476,7 +476,7 @@ func setupNodeAndExecutor(
 		}
 	}
 
-	return rolllkitNode, executor, cleanupFn, nil
+	return rollkitNode, executor, cleanupFn, nil
 }
 
 func createAndStartEventBus(logger log.Logger) (*cmttypes.EventBus, error) {

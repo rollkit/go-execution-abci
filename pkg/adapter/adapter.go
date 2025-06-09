@@ -319,6 +319,10 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("failed to set custom verifier: %w", err)
 	}
 
+	if err := header.ValidateBasic(); err != nil {
+		return nil, 0, fmt.Errorf("header validation failed: %w", err)
+	}
+
 	headerHash, err := cometcompat.CommitHasher(
 		&header.Signature,
 		&header.Header,

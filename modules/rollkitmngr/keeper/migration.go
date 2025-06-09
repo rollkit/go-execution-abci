@@ -202,27 +202,29 @@ func (k Keeper) migrateOver(
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to set migration step: %v", err)
 	}
 
-	// the first time, we set the whole validator set to the same validator power. This is to avoid a validator ends up with >= 33% or worse >= 66%
-	// vp during the migration.
-	// TODO: add a test
-	if step == 0 {
-		// set the whole validator set to the same power
-		for _, val := range lastValidatorSet {
-			var isAlreadyUpdated bool
-			for _, powerUpdate := range initialValUpdates {
-				if powerUpdate.PubKey.Equal(val.ConsensusPubkey) {
-					// if the power update already exists, we skip it
-					isAlreadyUpdated = true
-					break
-				}
-			}
+    // the first time, we set the whole validator set to the same validator power. This is to avoid a validator ends up with >= 33% or worse >= 66%
+    // vp during the migration.
+    // TODO: add a test
+    if step == 0 {
+        // Create a map of existing updates for O(1) lookup
+        existingUpdates := make(map[string]bool)
+        for _, powerUpdate := range initialValUpdates {
+            existingUpdates[powerUpdate.PubKey.String()] = true
+        }
 
-			if !isAlreadyUpdated {
-				powerUpdate := val.ABCIValidatorUpdate(math.OneInt())
-				initialValUpdates = append(initialValUpdates, powerUpdate)
-			}
-		}
-	}
+        // set the whole validator set to the same power
+        for _, val := range lastValidatorSet {
+            valPubKey, err := val.TmConsPublicKey()
+            if err != nil {
+                return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to get validator pubkey: %v", err)
+            }
+
+            if !existingUpdates[valPubKey.String()] {
+                powerUpdate := val.ABCIValidatorUpdate(math.OneInt())
+                initialValUpdates = append(initialValUpdates, powerUpdate)
+            }
+        }
+    }
 
 	return initialValUpdates, nil
 }

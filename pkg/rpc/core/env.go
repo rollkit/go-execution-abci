@@ -13,10 +13,8 @@ import (
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
 )
 
-var (
-	// set by Node
-	env *Environment
-)
+// set by Node
+var env *Environment
 
 // SetEnvironment sets up the given Environment.
 // It will race if multiple Node call SetEnvironment.

@@ -1,4 +1,4 @@
-package rollkitadapter
+package cometcompat
 
 import (
 	"bytes"

@@ -34,7 +34,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	rlkblock "github.com/rollkit/rollkit/block"
 	"github.com/rollkit/rollkit/da/jsonrpc"
 	"github.com/rollkit/rollkit/node"
 	"github.com/rollkit/rollkit/pkg/config"
@@ -46,7 +45,7 @@ import (
 	"github.com/rollkit/rollkit/sequencers/single"
 
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
-	rollkit_adapter "github.com/rollkit/go-execution-abci/pkg/rollkit_adapter"
+	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
 	"github.com/rollkit/go-execution-abci/pkg/rpc"
 	"github.com/rollkit/go-execution-abci/pkg/rpc/core"
 	execsigner "github.com/rollkit/go-execution-abci/pkg/signer"
@@ -412,10 +411,7 @@ func setupNodeAndExecutor(
 		}
 	}
 
-	cometBFTHasher := rollkit_adapter.CreateCometBFTValidatorHasher(logger.With("module", "CometBFTValidatorHasher"))
-	cometBFTPayloadProvider := rollkit_adapter.CreateCometBFTPayloadProvider()
-	cometBFTHeaderHasher := rollkit_adapter.CreateCometBFTHeaderHasher()
-	cometBFTCommitHashProvider := rollkit_adapter.CreateCometBFTCommitHasher()
+	cometBFTHeaderHasher := cometcompat.CreateCometBFTHeaderHasher()
 
 	sequencer, err := single.NewSequencer(
 		ctx,
@@ -443,9 +439,7 @@ func setupNodeAndExecutor(
 		database,
 		metrics,
 		logger,
-		rlkblock.WithValidatorHasher(cometBFTHasher),
-		rlkblock.WithSignaturePayloadProvider(cometBFTPayloadProvider),
-		rlkblock.WithCommitHashProvider(cometBFTCommitHashProvider),
+		cometcompat.CreateCometBFTPayloadProvider(),
 	)
 	if err != nil {
 		return nil, nil, cleanupFn, err

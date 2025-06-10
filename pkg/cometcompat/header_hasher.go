@@ -1,4 +1,4 @@
-package rollkitadapter
+package cometcompat
 
 import (
 	rollkittypes "github.com/rollkit/rollkit/types"

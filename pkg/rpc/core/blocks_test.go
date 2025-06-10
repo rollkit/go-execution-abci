@@ -20,7 +20,7 @@ import (
 	"github.com/rollkit/rollkit/types"
 
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
-	goexeccommon "github.com/rollkit/go-execution-abci/pkg/common"
+	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
 )
 
 func newTestRPCContext() *rpctypes.Context {
@@ -106,18 +106,22 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 	mockApp := new(MockApp)
 	mockRollkitStore := new(MockRollkitStore)
 
+	privKey, pubKey, err := crypto.GenerateEd25519Key(nil)
+	require.NoError(err)
+
+	signer, err := types.NewSigner(pubKey)
+	require.NoError(err)
+
 	env = &Environment{
 		Adapter: &adapter.Adapter{
 			RollkitStore: mockRollkitStore,
 			App:          mockApp,
+			ProposerKey:  pubKey,
 		},
 		TxIndexer:    mockTxIndexer,
 		BlockIndexer: mockBlockIndexer,
 		Logger:       cmtlog.NewNopLogger(),
 	}
-
-	privKey, pubKey, err := crypto.GenerateEd25519Key(nil)
-	require.NoError(err)
 
 	pubKeyBytes, err := pubKey.Raw()
 	require.NoError(err)
@@ -171,7 +175,7 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 			ProposerAddress: fixedValSet.Proposer.Address,
 		}
 
-		abciHeaderForSigning, err := goexeccommon.ToABCIHeader(&rollkitHeader)
+		abciHeaderForSigning, err := cometcompat.ToABCIHeader(pubKey, &rollkitHeader)
 		require.NoError(err)
 		abciHeaderHashForSigning := abciHeaderForSigning.Hash()
 		abciHeaderTimeForSigning := abciHeaderForSigning.Time
@@ -190,8 +194,6 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 		require.NoError(err)
 
 		// Create Rollkit Signed Header with the new signature
-		signer, err := types.NewSigner(pubKey)
-		require.NoError(err)
 		rollkitSignedHeader := &types.SignedHeader{
 			Header:    rollkitHeader,
 			Signature: types.Signature(realSignature),

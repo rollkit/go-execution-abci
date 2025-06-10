@@ -20,15 +20,18 @@ import (
 	ds "github.com/ipfs/go-datastore"
 	kt "github.com/ipfs/go-datastore/keytransform"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	host "github.com/libp2p/go-libp2p/core/host"
 	ma "github.com/multiformats/go-multiaddr"
 
+	"github.com/rollkit/rollkit/block"
 	"github.com/rollkit/rollkit/core/execution"
 	rollnode "github.com/rollkit/rollkit/node"
 	rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
 	rstore "github.com/rollkit/rollkit/pkg/store"
-	"github.com/rollkit/rollkit/types"
+	rolltypes "github.com/rollkit/rollkit/types"
 
+	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
 	"github.com/rollkit/go-execution-abci/pkg/p2p"
 )
 
@@ -59,6 +62,8 @@ type Adapter struct {
 	RollkitStore rstore.Store
 	Mempool      mempool.Mempool
 	MempoolIDs   *mempoolIDs
+	// ProposerKey is only used to be passed down to RPC via environment.
+	ProposerKey crypto.PubKey
 
 	P2PClient  P2PClientInfo
 	TxGossiper *p2p.Gossiper
@@ -82,6 +87,7 @@ func NewABCIExecutor(
 	cfg *config.Config,
 	appGenesis *genutiltypes.AppGenesis,
 	metrics *Metrics,
+	proposerKey crypto.PubKey,
 ) *Adapter {
 	if metrics == nil {
 		metrics = NopMetrics()
@@ -104,6 +110,7 @@ func NewABCIExecutor(
 		p2pMetrics:   p2pMetrics,
 		AppGenesis:   appGenesis,
 		MempoolIDs:   newMempoolIDs(),
+		ProposerKey:  proposerKey,
 		Metrics:      metrics,
 	}
 
@@ -283,7 +290,6 @@ func (a *Adapter) ExecuteTxs(
 	blockHeight uint64,
 	timestamp time.Time,
 	prevStateRoot []byte,
-	metadata map[string]interface{},
 ) ([]byte, uint64, error) {
 	execStart := time.Now()
 	defer func() {
@@ -292,16 +298,33 @@ func (a *Adapter) ExecuteTxs(
 	a.Logger.Info("Executing block", "height", blockHeight, "num_txs", len(txs), "timestamp", timestamp)
 	a.Metrics.TxsExecutedPerBlock.Observe(float64(len(txs)))
 
-	var headerHash types.Hash
-	if h, ok := metadata[types.HeaderHashKey]; ok {
-		headerHash = h.(types.Hash)
-	} else {
-		a.Logger.Info("header hash not found in metadata, running genesis block")
-	}
-
 	s, err := a.Store.LoadState(ctx)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to load state: %w", err)
+	}
+
+	header, ok := ctx.Value(block.HeaderContextKey).(*rolltypes.SignedHeader)
+	if !ok {
+		return nil, 0, fmt.Errorf("rollkit header not found in context")
+	}
+
+	if err := header.SetCustomVerifier(func(header *rolltypes.Header) ([]byte, error) {
+		return cometcompat.SignaturePayloadProvider(a.ProposerKey, header)
+	}); err != nil {
+		return nil, 0, fmt.Errorf("failed to set custom verifier: %w", err)
+	}
+
+	if err := header.ValidateBasic(); err != nil {
+		return nil, 0, fmt.Errorf("header validation failed: %w", err)
+	}
+
+	headerHash, err := cometcompat.CommitHasher(
+		&header.Signature,
+		&header.Header,
+		s.Validators.Proposer.Address,
+	)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to compute header hash: %w", err)
 	}
 
 	var proposedLastCommit abci.CommitInfo
@@ -451,7 +474,7 @@ func (a *Adapter) ExecuteTxs(
 		cmtTxs[i] = txs[i]
 	}
 
-	var commit = &cmttypes.Commit{
+	commit := &cmttypes.Commit{
 		Height: int64(blockHeight),
 		Round:  0,
 		Signatures: []cmttypes.CommitSig{

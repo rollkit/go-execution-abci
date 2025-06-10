@@ -30,11 +30,11 @@ import (
 	"github.com/cosmos/cosmos-sdk/version"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	"github.com/hashicorp/go-metrics"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	rlkblock "github.com/rollkit/rollkit/block"
 	"github.com/rollkit/rollkit/da/jsonrpc"
 	"github.com/rollkit/rollkit/node"
 	"github.com/rollkit/rollkit/pkg/config"
@@ -46,7 +46,6 @@ import (
 	"github.com/rollkit/rollkit/sequencers/single"
 
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
-	rollkit_adapter "github.com/rollkit/go-execution-abci/pkg/rollkit_adapter"
 	"github.com/rollkit/go-execution-abci/pkg/rpc"
 	"github.com/rollkit/go-execution-abci/pkg/rpc/core"
 	execsigner "github.com/rollkit/go-execution-abci/pkg/signer"
@@ -297,7 +296,7 @@ func setupNodeAndExecutor(
 	srvCtx *server.Context,
 	cfg *cmtcfg.Config,
 	app sdktypes.Application,
-) (rolllkitNode node.Node, executor *adapter.Adapter, cleanupFn func(), err error) {
+) (rollkitNode node.Node, executor *adapter.Adapter, cleanupFn func(), err error) {
 	logger := srvCtx.Logger.With("module", "rollkit")
 	logger.Info("starting node with Rollkit in-process")
 
@@ -319,11 +318,19 @@ func setupNodeAndExecutor(
 	}
 
 	// only load signer if rollkit.node.aggregator == true
-	var signer signer.Signer
+	var (
+		signer       signer.Signer
+		signerPubKey crypto.PubKey
+	)
 	if rollkitcfg.Node.Aggregator {
 		signer, err = execsigner.NewSignerWrapper(pval.Key.PrivKey)
 		if err != nil {
 			return nil, nil, cleanupFn, err
+		}
+
+		signerPubKey, err = signer.GetPublic()
+		if err != nil {
+			return nil, nil, cleanupFn, fmt.Errorf("failed to get public key from private key: %w", err)
 		}
 	}
 
@@ -370,6 +377,7 @@ func setupNodeAndExecutor(
 		cfg,
 		appGenesis,
 		adapterMetrics,
+		signerPubKey,
 	)
 
 	cmtApp := server.NewCometABCIWrapper(app)
@@ -412,11 +420,6 @@ func setupNodeAndExecutor(
 		}
 	}
 
-	cometBFTHasher := rollkit_adapter.CreateCometBFTValidatorHasher(logger.With("module", "CometBFTValidatorHasher"))
-	cometBFTPayloadProvider := rollkit_adapter.CreateCometBFTPayloadProvider()
-	cometBFTHeaderHasher := rollkit_adapter.CreateCometBFTHeaderHasher()
-	cometBFTCommitHashProvider := rollkit_adapter.CreateCometBFTCommitHasher()
-
 	sequencer, err := single.NewSequencer(
 		ctx,
 		logger,
@@ -431,7 +434,7 @@ func setupNodeAndExecutor(
 		return nil, nil, cleanupFn, err
 	}
 
-	rolllkitNode, err = node.NewNode(
+	rollkitNode, err = node.NewNode(
 		ctx,
 		rollkitcfg,
 		executor,
@@ -443,9 +446,6 @@ func setupNodeAndExecutor(
 		database,
 		metrics,
 		logger,
-		rlkblock.WithValidatorHasher(cometBFTHasher),
-		rlkblock.WithSignaturePayloadProvider(cometBFTPayloadProvider),
-		rlkblock.WithCommitHashProvider(cometBFTCommitHashProvider),
 	)
 	if err != nil {
 		return nil, nil, cleanupFn, err
@@ -466,7 +466,6 @@ func setupNodeAndExecutor(
 		BlockIndexer: blockIndexer,
 		Logger:       servercmtlog.CometLoggerWrapper{Logger: logger},
 		Config:       *cfg.RPC,
-		HeaderHasher: cometBFTHeaderHasher,
 	})
 
 	// Pass the created handler to the RPC server constructor
@@ -487,7 +486,7 @@ func setupNodeAndExecutor(
 		}
 	}
 
-	return rolllkitNode, executor, cleanupFn, nil
+	return rollkitNode, executor, cleanupFn, nil
 }
 
 func createAndStartEventBus(logger log.Logger) (*cmttypes.EventBus, error) {

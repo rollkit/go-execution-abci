@@ -15,7 +15,7 @@ import (
 	"github.com/rollkit/rollkit/block"
 	rlktypes "github.com/rollkit/rollkit/types"
 
-	"github.com/rollkit/go-execution-abci/pkg/common"
+	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
 )
 
 // BlockSearch searches for a paginated set of blocks matching BeginBlock and
@@ -71,7 +71,7 @@ func BlockSearch(
 		if err != nil {
 			return nil, err
 		}
-		block, err := common.ToABCIBlock(header, data)
+		block, err := cometcompat.ToABCIBlock(env.Adapter.ProposerKey, header, data)
 		if err != nil {
 			return nil, err
 		}
@@ -115,15 +115,19 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 		return nil, err
 	}
 
-	hash, err := env.HeaderHasher(&header.Header)
+	abciBlock, err := cometcompat.ToABCIBlock(env.Adapter.ProposerKey, header, data)
 	if err != nil {
 		return nil, err
 	}
 
-	abciBlock, err := common.ToABCIBlock(header, data)
+	// hashe is calculcated in ToABCIBlock, so we should overide it before hashing the header
+	header.Header.ValidatorHash = rlktypes.Hash(abciBlock.ValidatorsHash)
+
+	hash, err := cometcompat.HeaderHasher(env.Adapter.ProposerKey, &header.Header)
 	if err != nil {
 		return nil, err
 	}
+
 	return &ctypes.ResultBlock{
 		BlockID: cmttypes.BlockID{
 			Hash: cmbytes.HexBytes(hash),
@@ -144,7 +148,7 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 		return nil, err
 	}
 
-	abciBlock, err := common.ToABCIBlock(header, data)
+	abciBlock, err := cometcompat.ToABCIBlock(env.Adapter.ProposerKey, header, data)
 	if err != nil {
 		return nil, err
 	}
@@ -177,12 +181,12 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 	}
 
 	// Convert to CometBFT block to get the correct CometBFT header and its hash
-	abciBlock, err := common.ToABCIBlock(rollkitSignedHeader, rollkitData)
+	abciBlock, err := cometcompat.ToABCIBlock(env.Adapter.ProposerKey, rollkitSignedHeader, rollkitData)
 	if err != nil {
 		return nil, err
 	}
 
-	commitForAbciHeader := common.ToABCICommit(
+	commitForAbciHeader := cometcompat.ToABCICommit(
 		uint64(abciBlock.Height),
 		abciBlock.Hash(),
 		rollkitSignedHeader.ProposerAddress,
@@ -250,7 +254,7 @@ func HeaderByHash(ctx *rpctypes.Context, hash cmbytes.HexBytes) (*ctypes.ResultH
 		return nil, err
 	}
 
-	blockMeta, err := common.ToABCIBlockMeta(header, data)
+	blockMeta, err := cometcompat.ToABCIBlockMeta(env.Adapter.ProposerKey, header, data)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +292,7 @@ func BlockchainInfo(ctx *rpctypes.Context, minHeight, maxHeight int64) (*ctypes.
 	blocks := make([]*cmttypes.BlockMeta, 0, maxHeight-minHeight+1)
 	for _, block := range BlockIterator(ctx.Context(), maxHeight, minHeight) {
 		if block.header != nil && block.data != nil {
-			cmblockmeta, err := common.ToABCIBlockMeta(block.header, block.data)
+			cmblockmeta, err := cometcompat.ToABCIBlockMeta(env.Adapter.ProposerKey, block.header, block.data)
 			if err != nil {
 				return nil, err
 			}

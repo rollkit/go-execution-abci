@@ -307,10 +307,12 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("rollkit header not found in context")
 	}
 
-	headerHash, err := cometcompat.CreateCometBFTCommitHasher(
-		&header.Signature,
+	// first override the validator hashes
+
+	// override last commit hash
+
+	headerHash, err := cometcompat.ProvideHeaderHasher()(
 		&header.Header,
-		s.Validators.Proposer.Address,
 	)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to compute header hash: %w", err)

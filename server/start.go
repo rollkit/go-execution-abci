@@ -411,8 +411,6 @@ func setupNodeAndExecutor(
 		}
 	}
 
-	cometBFTHeaderHasher := cometcompat.CreateCometBFTHeaderHasher()
-
 	sequencer, err := single.NewSequencer(
 		ctx,
 		logger,
@@ -439,7 +437,7 @@ func setupNodeAndExecutor(
 		database,
 		metrics,
 		logger,
-		cometcompat.CreateCometBFTPayloadProvider(),
+		cometcompat.PayloadProvider(),
 	)
 	if err != nil {
 		return nil, nil, cleanupFn, err
@@ -460,7 +458,7 @@ func setupNodeAndExecutor(
 		BlockIndexer: blockIndexer,
 		Logger:       servercmtlog.CometLoggerWrapper{Logger: logger},
 		Config:       *cfg.RPC,
-		HeaderHasher: cometBFTHeaderHasher,
+		HeaderHasher: cometcompat.ProvideHeaderHasher(),
 	})
 
 	// Pass the created handler to the RPC server constructor

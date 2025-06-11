@@ -20,7 +20,7 @@ import (
 	"github.com/rollkit/rollkit/types"
 
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
-	goexeccommon "github.com/rollkit/go-execution-abci/pkg/common"
+	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
 )
 
 func newTestRPCContext() *rpctypes.Context {
@@ -171,7 +171,7 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 			ProposerAddress: fixedValSet.Proposer.Address,
 		}
 
-		abciHeaderForSigning, err := goexeccommon.ToABCIHeader(&rollkitHeader)
+		abciHeaderForSigning, err := cometcompat.ToABCIHeader(&rollkitHeader)
 		require.NoError(err)
 		abciHeaderHashForSigning := abciHeaderForSigning.Hash()
 		abciHeaderTimeForSigning := abciHeaderForSigning.Time

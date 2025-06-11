@@ -1,4 +1,4 @@
-package common
+package cometcompat
 
 import (
 	"errors"
@@ -17,7 +17,7 @@ import (
 func ToABCIHeader(header *rlktypes.Header) (cmttypes.Header, error) {
 	return cmttypes.Header{
 		Version: cmprotoversion.Consensus{
-			Block: cmtversion.BlockProtocol,
+			Block: cmtversion.BlockProtocol, // TODO: check is header.Version.Block is good as well.
 			App:   header.Version.App,
 		},
 		Height: int64(header.Height()), //nolint:gosec
@@ -37,8 +37,8 @@ func ToABCIHeader(header *rlktypes.Header) (cmttypes.Header, error) {
 		EvidenceHash:       new(cmttypes.EvidenceData).Hash(),
 		ProposerAddress:    header.ProposerAddress,
 		ChainID:            header.ChainID(),
-		ValidatorsHash:     cmbytes.HexBytes(header.ValidatorHash),
-		NextValidatorsHash: cmbytes.HexBytes(header.ValidatorHash),
+		ValidatorsHash:     cmbytes.HexBytes(header.ValidatorHash), // TODO: override
+		NextValidatorsHash: cmbytes.HexBytes(header.ValidatorHash), // TODO: override
 	}, nil
 }
 
@@ -58,7 +58,7 @@ func ToABCIBlock(header *rlktypes.SignedHeader, data *rlktypes.Data) (*cmttypes.
 	abciCommit := ToABCICommit(header.Height(), header.Hash(), header.ProposerAddress, header.Time(), header.Signature)
 
 	// This assumes that we have only one signature
-	if len(abciCommit.Signatures) == 1 {
+	if len(abciCommit.Signatures) == 1 { // TODO: verify if still valid
 		abciCommit.Signatures[0].ValidatorAddress = header.ProposerAddress
 	}
 	abciBlock := cmttypes.Block{

@@ -3,7 +3,6 @@ package cometcompat
 import (
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	cmtypes "github.com/cometbft/cometbft/types"
-	"github.com/libp2p/go-libp2p/core/crypto"
 
 	"github.com/rollkit/rollkit/types"
 
@@ -11,7 +10,7 @@ import (
 )
 
 func CreateCometBFTPayloadProvider() types.SignaturePayloadProvider {
-	return func(proposerKey crypto.PubKey, header *types.Header) ([]byte, error) {
+	return func(header *types.Header) ([]byte, error) {
 		abciHeaderForSigning, err := rpc.ToABCIHeader(header)
 		if err != nil {
 			return nil, err

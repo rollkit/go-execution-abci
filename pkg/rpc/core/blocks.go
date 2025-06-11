@@ -205,7 +205,23 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 		return nil, err
 	}
 
-	return ctypes.NewResultCommit(&abciBlock.Header, abciBlock.LastCommit, true), nil
+	// create abci commit
+	abciCommit := &cmttypes.Commit{
+		Height: int64(header.Height()), //nolint:gosec
+		Round:  0,
+		BlockID: cmttypes.BlockID{
+			Hash:          cmbytes.HexBytes(abciBlock.Hash()),
+			PartSetHeader: cmttypes.PartSetHeader{},
+		},
+		Signatures: []cmttypes.CommitSig{{
+			BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+			Signature:        header.Signature,
+			ValidatorAddress: header.ProposerAddress,
+			Timestamp:        header.Time(),
+		}},
+	}
+
+	return ctypes.NewResultCommit(&abciBlock.Header, abciCommit, true), nil
 }
 
 // BlockResults is not fully implemented as in FullClient because

@@ -13,7 +13,7 @@ import (
 )
 
 // ToABCIBlock converts Rolkit block into block format defined by ABCI.
-func ToABCIBlock(header *rlktypes.SignedHeader, data *rlktypes.Data) (*cmttypes.Block, error) {
+func ToABCIBlock(header *rlktypes.SignedHeader, data *rlktypes.Data, lastCommit *cmttypes.Commit) (*cmttypes.Block, error) {
 	abciHeader, err := ToABCIHeader(&header.Header)
 	if err != nil {
 		return nil, err
@@ -24,24 +24,8 @@ func ToABCIBlock(header *rlktypes.SignedHeader, data *rlktypes.Data) (*cmttypes.
 		return nil, errors.New("proposer address is not set")
 	}
 
-	// create abci commit
-	abciCommit := &cmttypes.Commit{
-		Height: int64(header.Height()), //nolint:gosec
-		Round:  0,
-		BlockID: cmttypes.BlockID{
-			Hash:          cmbytes.HexBytes(abciHeader.Hash()),
-			PartSetHeader: cmttypes.PartSetHeader{},
-		},
-		Signatures: []cmttypes.CommitSig{{
-			BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-			Signature:        header.Signature,
-			ValidatorAddress: header.ProposerAddress,
-			Timestamp:        header.Time(),
-		}},
-	}
-
 	// set commit hash
-	abciHeader.LastCommitHash = abciCommit.Hash()
+	abciHeader.LastCommitHash = lastCommit.Hash()
 
 	// set validator hash
 	if header.Signer.Address != nil {
@@ -58,7 +42,7 @@ func ToABCIBlock(header *rlktypes.SignedHeader, data *rlktypes.Data) (*cmttypes.
 		Evidence: cmttypes.EvidenceData{
 			Evidence: nil,
 		},
-		LastCommit: abciCommit,
+		LastCommit: lastCommit,
 	}
 	abciBlock.Txs = make([]cmttypes.Tx, len(data.Txs))
 	for i := range data.Txs {
@@ -70,8 +54,8 @@ func ToABCIBlock(header *rlktypes.SignedHeader, data *rlktypes.Data) (*cmttypes.
 }
 
 // ToABCIBlockMeta converts Rollkit block into BlockMeta format defined by ABCI
-func ToABCIBlockMeta(header *rlktypes.SignedHeader, data *rlktypes.Data) (*cmttypes.BlockMeta, error) {
-	cmblock, err := ToABCIBlock(header, data)
+func ToABCIBlockMeta(header *rlktypes.SignedHeader, data *rlktypes.Data, lastCommit *cmttypes.Commit) (*cmttypes.BlockMeta, error) {
+	cmblock, err := ToABCIBlock(header, data, lastCommit)
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,7 @@
-package sequencer
+package rollkitmngr
 
 import (
+	"cosmossdk.io/core/address"
 	"cosmossdk.io/core/appmodule"
 	"cosmossdk.io/core/store"
 	"cosmossdk.io/depinject"
@@ -9,9 +10,9 @@ import (
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 
-	"github.com/rollkit/go-execution-abci/modules/sequencer/keeper"
-	modulev1 "github.com/rollkit/go-execution-abci/modules/sequencer/module"
-	"github.com/rollkit/go-execution-abci/modules/sequencer/types"
+	"github.com/rollkit/go-execution-abci/modules/rollkitmngr/keeper"
+	modulev1 "github.com/rollkit/go-execution-abci/modules/rollkitmngr/module"
+	"github.com/rollkit/go-execution-abci/modules/rollkitmngr/types"
 )
 
 // IsOnePerModuleType implements the depinject.OnePerModuleType interface.
@@ -30,8 +31,11 @@ type ModuleInputs struct {
 	Config       *modulev1.Module
 	Cdc          codec.Codec
 	StoreService store.KVStoreService
+	AddressCodec address.Codec
+	// optional, used to detect if IBC module is enabled.
+	// When IBC module is present, use `depinject.Provide(IBCStoreKey(ibcStoreKey))`
+	IBCStoreKey keeper.IbcKVStoreKeyAlias `optional:"true"`
 
-	AccountKeeper types.AccountKeeper
 	StakingKeeper types.StakingKeeper
 }
 
@@ -53,8 +57,9 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 	k := keeper.NewKeeper(
 		in.Cdc,
 		in.StoreService,
-		in.AccountKeeper,
+		in.AddressCodec,
 		in.StakingKeeper,
+		in.IBCStoreKey,
 		authority.String(),
 	)
 	m := NewAppModule(in.Cdc, k)

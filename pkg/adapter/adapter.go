@@ -12,7 +12,7 @@ import (
 	"github.com/cometbft/cometbft/libs/bytes"
 	"github.com/cometbft/cometbft/mempool"
 	corep2p "github.com/cometbft/cometbft/p2p"
-	types1 "github.com/cometbft/cometbft/proto/tendermint/types"
+	cmtprototypes "github.com/cometbft/cometbft/proto/tendermint/types"
 	cmtstate "github.com/cometbft/cometbft/state"
 	cmttypes "github.com/cometbft/cometbft/types"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
@@ -476,7 +476,7 @@ func (a *Adapter) ExecuteTxs(
 			{
 				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
 				ValidatorAddress: s.Validators.Proposer.Address,
-				Timestamp:        time.Now(),
+				Timestamp:        time.Now().UTC(),
 				Signature:        []byte{},
 			},
 		},
@@ -646,7 +646,7 @@ func cometCommitToABCICommitInfo(commit *cmttypes.Commit) abci.CommitInfo {
 				Address: sig.ValidatorAddress,
 				Power:   0,
 			},
-			BlockIdFlag: types1.BlockIDFlag(sig.BlockIDFlag),
+			BlockIdFlag: cmtprototypes.BlockIDFlag(sig.BlockIDFlag),
 		}
 	}
 	return abci.CommitInfo{

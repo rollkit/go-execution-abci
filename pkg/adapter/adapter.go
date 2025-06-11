@@ -23,7 +23,6 @@ import (
 	host "github.com/libp2p/go-libp2p/core/host"
 	ma "github.com/multiformats/go-multiaddr"
 
-	"github.com/rollkit/rollkit/block"
 	"github.com/rollkit/rollkit/core/execution"
 	rollnode "github.com/rollkit/rollkit/node"
 	rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
@@ -298,7 +297,7 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("failed to load state: %w", err)
 	}
 
-	header, ok := ctx.Value(block.HeaderContextKey).(*types.SignedHeader)
+	header, ok := types.SignedHeaderFromContext(ctx)
 	if !ok {
 		return nil, 0, fmt.Errorf("rollkit header not found in context")
 	}

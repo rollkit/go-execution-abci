@@ -302,21 +302,7 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("rollkit header not found in context")
 	}
 
-	// override validator hash with comet logic
-	validatorHash, err := cometcompat.ValidatorHasher(header.ProposerAddress, header.Signer.PubKey)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to compute validator hash: %w", err)
-	}
-	header.ValidatorHash = validatorHash
-
-	// override last commit hash with comet logic
-	commitHash, err := cometcompat.CommitHasher(&header.Signature, &header.Header, header.ProposerAddress)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to compute commit hash: %w", err)
-	}
-	header.LastCommitHash = commitHash
-
-	headerHash, err := cometcompat.HeaderHasher(&header.Header)
+	emptyBlock, err := cometcompat.ToABCIBlock(header, &types.Data{})
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to compute header hash: %w", err)
 	}
@@ -348,7 +334,7 @@ func (a *Adapter) ExecuteTxs(
 	}
 
 	ppResp, err := a.App.ProcessProposal(&abci.RequestProcessProposal{
-		Hash:               headerHash,
+		Hash:               emptyBlock.Header.Hash(),
 		Height:             int64(blockHeight),
 		Time:               timestamp,
 		Txs:                txs,
@@ -366,7 +352,7 @@ func (a *Adapter) ExecuteTxs(
 	}
 
 	fbResp, err := a.App.FinalizeBlock(&abci.RequestFinalizeBlock{
-		Hash:               headerHash,
+		Hash:               emptyBlock.Header.Hash(),
 		NextValidatorsHash: s.NextValidators.Hash(),
 		ProposerAddress:    s.Validators.Proposer.Address,
 		Height:             int64(blockHeight),

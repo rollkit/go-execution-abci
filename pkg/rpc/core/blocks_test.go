@@ -77,7 +77,6 @@ func TestBlockSearch_Success(t *testing.T) {
 	mockRollkitStore.On("GetBlockData", mock.Anything, uint64(3)).Return(header2, data2, nil)
 
 	result, err := BlockSearch(ctx, query, &page, &perPage, orderBy)
-
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Len(t, result.Blocks, 2)

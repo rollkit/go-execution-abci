@@ -453,6 +453,7 @@ func setupNodeAndExecutor(
 		return nil, nil, cleanupFn, fmt.Errorf("start indexer service: %w", err)
 	}
 	core.SetEnvironment(&core.Environment{
+		Signer:       signer,
 		Adapter:      executor,
 		TxIndexer:    txIndexer,
 		BlockIndexer: blockIndexer,

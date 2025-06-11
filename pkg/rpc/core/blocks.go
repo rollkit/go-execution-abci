@@ -71,10 +71,12 @@ func BlockSearch(
 		if err != nil {
 			return nil, err
 		}
+
 		block, err := cometcompat.ToABCIBlock(header, data)
 		if err != nil {
 			return nil, err
 		}
+
 		blocks = append(blocks, &ctypes.ResultBlock{
 			Block: block,
 			BlockID: cmttypes.BlockID{
@@ -116,32 +118,28 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 		return nil, err
 	}
 
-	// override validator hash with comet logic
-	validatorHash, err := cometcompat.ValidatorHasher(header.ProposerAddress, header.Signer.PubKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compute validator hash: %w", err)
-	}
-	header.ValidatorHash = validatorHash
+	// override header signature with comet logic
+	// when querying an aggregator
+	if env.Signer != nil {
+		payload, err := cometcompat.PayloadProvider()(&header.Header)
+		if err != nil {
+			return nil, fmt.Errorf("failed to compute payload hash: %w", err)
+		}
 
-	// override last commit hash with comet logic
-	commitHash, err := cometcompat.CommitHasher(&header.Signature, &header.Header, header.ProposerAddress)
-	if err != nil {
-		return nil, fmt.Errorf("failed to compute commit hash: %w", err)
-	}
-	header.LastCommitHash = commitHash
-
-	hash, err := cometcompat.HeaderHasher(&header.Header)
-	if err != nil {
-		return nil, err
+		header.Signature, err = env.Signer.Sign(payload)
+		if err != nil {
+			return nil, fmt.Errorf("failed to sign header: %w", err)
+		}
 	}
 
 	abciBlock, err := cometcompat.ToABCIBlock(header, data)
 	if err != nil {
 		return nil, err
 	}
+
 	return &ctypes.ResultBlock{
 		BlockID: cmttypes.BlockID{
-			Hash: cmbytes.HexBytes(hash),
+			Hash: cmbytes.HexBytes(abciBlock.Hash()),
 			PartSetHeader: cmttypes.PartSetHeader{
 				Total: 0,
 				Hash:  nil,
@@ -163,6 +161,7 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 	if err != nil {
 		return nil, err
 	}
+
 	return &ctypes.ResultBlock{
 		BlockID: cmttypes.BlockID{
 			Hash: cmbytes.HexBytes(hash),
@@ -181,31 +180,32 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, error) {
 	wrappedCtx := ctx.Context()
 	heightValue := normalizeHeight(heightPtr)
-	rollkitSignedHeader, rollkitData, err := env.Adapter.RollkitStore.GetBlockData(wrappedCtx, heightValue)
+	header, rollkitData, err := env.Adapter.RollkitStore.GetBlockData(wrappedCtx, heightValue)
 	if err != nil {
 		return nil, err
 	}
 
-	// we should have a single validator
-	if len(rollkitSignedHeader.ProposerAddress) == 0 {
-		return nil, errors.New("empty proposer address found in block header")
+	// override header signature with comet logic
+	// when querying an aggregator
+	if env.Signer != nil {
+		payload, err := cometcompat.PayloadProvider()(&header.Header)
+		if err != nil {
+			return nil, fmt.Errorf("failed to compute payload hash: %w", err)
+		}
+
+		header.Signature, err = env.Signer.Sign(payload)
+		if err != nil {
+			return nil, fmt.Errorf("failed to sign header: %w", err)
+		}
 	}
 
 	// Convert to CometBFT block to get the correct CometBFT header and its hash
-	abciBlock, err := cometcompat.ToABCIBlock(rollkitSignedHeader, rollkitData)
+	abciBlock, err := cometcompat.ToABCIBlock(header, rollkitData)
 	if err != nil {
 		return nil, err
 	}
 
-	commitForAbciHeader := cometcompat.ToABCICommit(
-		uint64(abciBlock.Height),
-		abciBlock.Hash(),
-		rollkitSignedHeader.ProposerAddress,
-		abciBlock.Time,
-		rollkitSignedHeader.Signature,
-	)
-
-	return ctypes.NewResultCommit(&abciBlock.Header, commitForAbciHeader, true), nil
+	return ctypes.NewResultCommit(&abciBlock.Header, abciBlock.LastCommit, true), nil
 }
 
 // BlockResults is not fully implemented as in FullClient because

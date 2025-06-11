@@ -13,9 +13,9 @@ import (
 	rollkittypes "github.com/rollkit/rollkit/types"
 )
 
-// ValidatorHasher returns a function that calculates the ValidatorHash
+// validatorHasher returns a function that calculates the ValidatorHash
 // compatible with CometBFT. This function is intended to be injected into Rollkit's Manager.
-func ValidatorHasher(proposerAddress []byte, pubKey crypto.PubKey) (rollkittypes.Hash, error) {
+func validatorHasher(proposerAddress []byte, pubKey crypto.PubKey) (rollkittypes.Hash, error) {
 	var calculatedHash rollkittypes.Hash
 
 	var cometBftPubKey tmcryptoed25519.PubKey

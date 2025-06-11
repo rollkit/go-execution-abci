@@ -9,7 +9,6 @@ import (
 	"github.com/cometbft/cometbft/state/txindex"
 
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
-	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
 )
 
 // set by Node
@@ -29,8 +28,6 @@ type Environment struct {
 	BlockIndexer indexer.BlockIndexer
 	Logger       cmtlog.Logger
 	Config       cmtcfg.RPCConfig
-
-	HeaderHasher cometcompat.HeaderHasher
 }
 
 func validateSkipCount(page, perPage int) int {

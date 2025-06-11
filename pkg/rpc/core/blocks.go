@@ -116,11 +116,21 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 		return nil, err
 	}
 
-	// TODO: first override the validator hashes
+	// override validator hash with comet logic
+	validatorHash, err := cometcompat.ValidatorHasher(header.ProposerAddress, header.Signer.PubKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compute validator hash: %w", err)
+	}
+	header.ValidatorHash = validatorHash
 
-	// TODO: override last commit hash
+	// override last commit hash with comet logic
+	commitHash, err := cometcompat.CommitHasher(&header.Signature, &header.Header, header.ProposerAddress)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compute commit hash: %w", err)
+	}
+	header.LastCommitHash = commitHash
 
-	hash, err := env.HeaderHasher(&header.Header)
+	hash, err := cometcompat.HeaderHasher(&header.Header)
 	if err != nil {
 		return nil, err
 	}

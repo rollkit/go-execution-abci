@@ -458,7 +458,6 @@ func setupNodeAndExecutor(
 		BlockIndexer: blockIndexer,
 		Logger:       servercmtlog.CometLoggerWrapper{Logger: logger},
 		Config:       *cfg.RPC,
-		HeaderHasher: cometcompat.ProvideHeaderHasher(),
 	})
 
 	// Pass the created handler to the RPC server constructor

@@ -17,7 +17,7 @@ import (
 func ToABCIHeader(header *rlktypes.Header) (cmttypes.Header, error) {
 	return cmttypes.Header{
 		Version: cmprotoversion.Consensus{
-			Block: cmtversion.BlockProtocol, // TODO: check is header.Version.Block is good as well.
+			Block: cmtversion.BlockProtocol,
 			App:   header.Version.App,
 		},
 		Height: int64(header.Height()), //nolint:gosec
@@ -37,8 +37,8 @@ func ToABCIHeader(header *rlktypes.Header) (cmttypes.Header, error) {
 		EvidenceHash:       new(cmttypes.EvidenceData).Hash(),
 		ProposerAddress:    header.ProposerAddress,
 		ChainID:            header.ChainID(),
-		ValidatorsHash:     cmbytes.HexBytes(header.ValidatorHash), // TODO(IBC): override
-		NextValidatorsHash: cmbytes.HexBytes(header.ValidatorHash), // TODO(IBC): override
+		ValidatorsHash:     cmbytes.HexBytes(header.ValidatorHash),
+		NextValidatorsHash: cmbytes.HexBytes(header.ValidatorHash),
 	}, nil
 }
 

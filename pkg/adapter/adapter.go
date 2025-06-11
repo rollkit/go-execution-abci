@@ -9,7 +9,6 @@ import (
 	"cosmossdk.io/log"
 	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/cometbft/cometbft/config"
-	"github.com/cometbft/cometbft/crypto"
 	"github.com/cometbft/cometbft/libs/bytes"
 	"github.com/cometbft/cometbft/mempool"
 	corep2p "github.com/cometbft/cometbft/p2p"
@@ -62,9 +61,6 @@ type Adapter struct {
 	RollkitStore rstore.Store
 	Mempool      mempool.Mempool
 	MempoolIDs   *mempoolIDs
-
-	// ProposerKey is only used to be passed down to RPC via environment.
-	ProposerKey crypto.PubKey
 
 	P2PClient  P2PClientInfo
 	TxGossiper *p2p.Gossiper
@@ -307,13 +303,21 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("rollkit header not found in context")
 	}
 
-	// TODO(IBC): first override the validator hashes
+	// override validator hash with comet logic
+	validatorHash, err := cometcompat.ValidatorHasher(header.ProposerAddress, header.Signer.PubKey)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to compute validator hash: %w", err)
+	}
+	header.ValidatorHash = validatorHash
 
-	// TODO(IBC): override last commit hash
+	// override last commit hash with comet logic
+	commitHash, err := cometcompat.CommitHasher(&header.Signature, &header.Header, header.ProposerAddress)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to compute commit hash: %w", err)
+	}
+	header.LastCommitHash = commitHash
 
-	headerHash, err := cometcompat.ProvideHeaderHasher()(
-		&header.Header,
-	)
+	headerHash, err := cometcompat.HeaderHasher(&header.Header)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to compute header hash: %w", err)
 	}

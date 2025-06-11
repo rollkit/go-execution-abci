@@ -55,7 +55,7 @@ func ToABCIBlock(header *rlktypes.SignedHeader, data *rlktypes.Data) (*cmttypes.
 		return nil, errors.New("proposer address is not set")
 	}
 
-	abciCommit := ToABCICommit(header.Height(), header.Hash(), header.ProposerAddress, header.Time(), header.Signature)
+	abciCommit := ToABCICommit(header.Height(), abciHeader.Hash(), header.ProposerAddress, header.Time(), header.Signature)
 
 	// This assumes that we have only one signature
 	if len(abciCommit.Signatures) == 1 { // TODO: verify if still valid

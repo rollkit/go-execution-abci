@@ -22,14 +22,14 @@ func ValidatorHasher(proposerAddress []byte, pubKey crypto.PubKey) (rollkittypes
 	if pubKey.Type() == crypto.Ed25519 {
 		rawKey, err := pubKey.Raw()
 		if err != nil {
-			return calculatedHash, fmt.Errorf("ValidatorHasher: failed to get raw bytes from libp2p public key: %w", err)
+			return calculatedHash, fmt.Errorf("failed to get raw bytes from libp2p public key: %w", err)
 		}
 		if len(rawKey) != tmcryptoed25519.PubKeySize {
-			return calculatedHash, fmt.Errorf("ValidatorHasher: libp2p public key size (%d) does not match CometBFT Ed25519 PubKeySize (%d)", len(rawKey), tmcryptoed25519.PubKeySize)
+			return calculatedHash, fmt.Errorf("libp2p public key size (%d) does not match CometBFT Ed25519 PubKeySize (%d)", len(rawKey), tmcryptoed25519.PubKeySize)
 		}
 		cometBftPubKey = rawKey
 	} else {
-		return calculatedHash, fmt.Errorf("ValidatorHasher: unsupported public key type '%s', expected Ed25519 for CometBFT compatibility", pubKey.Type())
+		return calculatedHash, fmt.Errorf("unsupported public key type '%s', expected Ed25519 for CometBFT compatibility", pubKey.Type())
 	}
 
 	votingPower := int64(1)
@@ -37,7 +37,7 @@ func ValidatorHasher(proposerAddress []byte, pubKey crypto.PubKey) (rollkittypes
 
 	derivedAddress := sequencerValidator.Address.Bytes()
 	if !bytes.Equal(derivedAddress, proposerAddress) {
-		return calculatedHash, fmt.Errorf("ValidatorHasher: CRITICAL MISMATCH - derived validator address (%s) does not match expected proposer address (%s). PubKey used for derivation: %s",
+		return calculatedHash, fmt.Errorf("CRITICAL MISMATCH - derived validator address (%s) does not match expected proposer address (%s). PubKey used for derivation: %s",
 			hex.EncodeToString(derivedAddress),
 			hex.EncodeToString(proposerAddress),
 			hex.EncodeToString(cometBftPubKey.Bytes()))

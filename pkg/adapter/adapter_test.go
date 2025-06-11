@@ -17,9 +17,11 @@ import (
 	cmtypes "github.com/cometbft/cometbft/types"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	ds "github.com/ipfs/go-datastore"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/rollkit/rollkit/block"
 	"github.com/rollkit/rollkit/types"
 )
 
@@ -82,12 +84,31 @@ func TestExecuteFiresEvents(t *testing.T) {
 			adapter.MempoolIDs = newMempoolIDs()
 			adapter.Mempool = &mempool.NopMempool{}
 
+			_, pubKey, err := crypto.GenerateEd25519Key(nil)
+			require.NoError(t, err)
+
+			address, err := pubKey.Raw()
+			require.NoError(t, err)
+
 			var sig types.Signature = make([]byte, 32)
-			require.NoError(t, adapter.RollkitStore.SaveBlockData(ctx, headerFixture(), &types.Data{Txs: make(types.Txs, 0)}, &sig))
+			signedHeader := &types.SignedHeader{
+				Header: types.Header{
+					BaseHeader:      types.BaseHeader{Height: 2, Time: uint64(time.Now().UnixNano())},
+					ProposerAddress: address,
+					AppHash:         []byte("apphash1"),
+				},
+				Signer: types.Signer{
+					Address: address,
+					PubKey:  pubKey,
+				},
+				Signature: sig,
+			}
+			require.NoError(t, adapter.RollkitStore.SaveBlockData(ctx, signedHeader, &types.Data{Txs: make(types.Txs, 0)}, &sig))
 			require.NoError(t, adapter.Store.SaveState(ctx, stateFixture()))
 
 			// when
-			_, _, err := adapter.ExecuteTxs(ctx, spec.txs, 1, timestamp, bytes.Repeat([]byte{1}, 32))
+			ctx = context.WithValue(ctx, block.HeaderContextKey, signedHeader)
+			_, _, err = adapter.ExecuteTxs(ctx, spec.txs, 1, timestamp, bytes.Repeat([]byte{1}, 32))
 			if spec.expErr {
 				require.Error(t, err)
 				blockMx.RLock()
@@ -174,16 +195,6 @@ func captureEvents(ctx context.Context, eventBus *cmtypes.EventBus, query string
 		}
 	}()
 	return &capturedEvents, &mx
-}
-
-func headerFixture() *types.SignedHeader {
-	return &types.SignedHeader{
-		Header: types.Header{
-			BaseHeader:      types.BaseHeader{Height: 2, Time: uint64(time.Now().UnixNano())},
-			ProposerAddress: []byte("proposer1"),
-			AppHash:         []byte("apphash1"),
-		},
-	}
 }
 
 type MockABCIApp struct {

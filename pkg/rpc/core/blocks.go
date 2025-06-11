@@ -73,15 +73,12 @@ func BlockSearch(
 			return nil, err
 		}
 
-		// Create empty commit for ToABCIBlock call
-		emptyCommit := &cmttypes.Commit{
-			Height:     int64(header.Height()),
-			Round:      0,
-			BlockID:    cmttypes.BlockID{},
-			Signatures: []cmttypes.CommitSig{},
+		lastCommit, err := getLastCommit(wrappedCtx, uint64(results[i]))
+		if err != nil {
+			return nil, fmt.Errorf("failed to get last commit for block %d: %w", results[i], err)
 		}
 
-		block, err := cometcompat.ToABCIBlock(header, data, emptyCommit)
+		block, err := cometcompat.ToABCIBlock(header, data, lastCommit)
 		if err != nil {
 			return nil, err
 		}
@@ -127,16 +124,13 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 		return nil, err
 	}
 
-	// Create empty commit for ToABCIBlock call
-	emptyCommit := &cmttypes.Commit{
-		Height:     int64(header.Height()),
-		Round:      0,
-		BlockID:    cmttypes.BlockID{},
-		Signatures: []cmttypes.CommitSig{},
+	lastCommit, err := getLastCommit(ctx.Context(), heightValue)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get last commit for block %d: %w", heightValue, err)
 	}
 
 	// First apply ToABCIBlock to get the final header with all transformations
-	abciBlock, err := cometcompat.ToABCIBlock(header, data, emptyCommit)
+	abciBlock, err := cometcompat.ToABCIBlock(header, data, lastCommit)
 	if err != nil {
 		return nil, err
 	}
@@ -184,15 +178,12 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 		return nil, err
 	}
 
-	// Create empty commit for ToABCIBlock call
-	emptyCommit := &cmttypes.Commit{
-		Height:     int64(header.Height()),
-		Round:      0,
-		BlockID:    cmttypes.BlockID{},
-		Signatures: []cmttypes.CommitSig{},
+	lastCommit, err := getLastCommit(ctx.Context(), header.Height())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get last commit for block %d: %w", header.Height(), err)
 	}
 
-	abciBlock, err := cometcompat.ToABCIBlock(header, data, emptyCommit)
+	abciBlock, err := cometcompat.ToABCIBlock(header, data, lastCommit)
 	if err != nil {
 		return nil, err
 	}
@@ -338,15 +329,12 @@ func HeaderByHash(ctx *rpctypes.Context, hash cmbytes.HexBytes) (*ctypes.ResultH
 		return nil, err
 	}
 
-	// Create empty commit for ToABCIBlockMeta call
-	emptyCommit := &cmttypes.Commit{
-		Height:     int64(header.Height()),
-		Round:      0,
-		BlockID:    cmttypes.BlockID{},
-		Signatures: []cmttypes.CommitSig{},
+	lastCommit, err := getLastCommit(ctx.Context(), header.Height())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get last commit for block %d: %w", header.Height(), err)
 	}
 
-	blockMeta, err := cometcompat.ToABCIBlockMeta(header, data, emptyCommit)
+	blockMeta, err := cometcompat.ToABCIBlockMeta(header, data, lastCommit)
 	if err != nil {
 		return nil, err
 	}
@@ -384,15 +372,12 @@ func BlockchainInfo(ctx *rpctypes.Context, minHeight, maxHeight int64) (*ctypes.
 	blocks := make([]*cmttypes.BlockMeta, 0, maxHeight-minHeight+1)
 	for _, block := range BlockIterator(ctx.Context(), maxHeight, minHeight) {
 		if block.header != nil && block.data != nil {
-			// Create empty commit for ToABCIBlockMeta call
-			emptyCommit := &cmttypes.Commit{
-				Height:     int64(block.header.Height()),
-				Round:      0,
-				BlockID:    cmttypes.BlockID{},
-				Signatures: []cmttypes.CommitSig{},
+			lastCommit, err := getLastCommit(ctx.Context(), block.header.Height())
+			if err != nil {
+				return nil, fmt.Errorf("failed to get last commit for block %d: %w", block.header.Height(), err)
 			}
 
-			cmblockmeta, err := cometcompat.ToABCIBlockMeta(block.header, block.data, emptyCommit)
+			cmblockmeta, err := cometcompat.ToABCIBlockMeta(block.header, block.data, lastCommit)
 			if err != nil {
 				return nil, err
 			}

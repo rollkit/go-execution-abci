@@ -302,20 +302,9 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("rollkit header not found in context")
 	}
 
-	// Create an empty commit for the ToABCIBlock call
-	emptyCommit := &cmttypes.Commit{
-		Height:     int64(blockHeight),
-		Round:      0,
-		BlockID:    cmttypes.BlockID{},
-		Signatures: []cmttypes.CommitSig{},
-	}
-
-	emptyBlock, err := cometcompat.ToABCIBlock(header, &types.Data{}, emptyCommit)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to compute header hash: %w", err)
-	}
-
 	var proposedLastCommit abci.CommitInfo
+	var lastCommit *cmttypes.Commit
+
 	if blockHeight > 1 {
 		header, data, err := a.RollkitStore.GetBlockData(ctx, blockHeight-1)
 		if err != nil {
@@ -335,10 +324,23 @@ func (a *Adapter) ExecuteTxs(
 				},
 			},
 		}
+
+		lastCommit = commitForPrevBlock
 		proposedLastCommit = cometCommitToABCICommitInfo(commitForPrevBlock)
 	} else {
 		// For the first block, ProposedLastCommit is empty
 		proposedLastCommit = abci.CommitInfo{Round: 0, Votes: []abci.VoteInfo{}}
+		lastCommit = &cmttypes.Commit{
+			Height:     int64(blockHeight),
+			Round:      0,
+			BlockID:    cmttypes.BlockID{},
+			Signatures: []cmttypes.CommitSig{},
+		}
+	}
+
+	emptyBlock, err := cometcompat.ToABCIBlock(header, &types.Data{}, lastCommit)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to compute header hash: %w", err)
 	}
 
 	ppResp, err := a.App.ProcessProposal(&abci.RequestProcessProposal{

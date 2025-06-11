@@ -37,8 +37,8 @@ func ToABCIHeader(header *rlktypes.Header) (cmttypes.Header, error) {
 		EvidenceHash:       new(cmttypes.EvidenceData).Hash(),
 		ProposerAddress:    header.ProposerAddress,
 		ChainID:            header.ChainID(),
-		ValidatorsHash:     cmbytes.HexBytes(header.ValidatorHash), // TODO: override
-		NextValidatorsHash: cmbytes.HexBytes(header.ValidatorHash), // TODO: override
+		ValidatorsHash:     cmbytes.HexBytes(header.ValidatorHash), // TODO(IBC): override
+		NextValidatorsHash: cmbytes.HexBytes(header.ValidatorHash), // TODO(IBC): override
 	}, nil
 }
 

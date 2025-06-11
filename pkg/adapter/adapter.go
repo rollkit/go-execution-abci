@@ -307,9 +307,9 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("rollkit header not found in context")
 	}
 
-	// first override the validator hashes
+	// TODO(IBC): first override the validator hashes
 
-	// override last commit hash
+	// TODO(IBC): override last commit hash
 
 	headerHash, err := cometcompat.ProvideHeaderHasher()(
 		&header.Header,

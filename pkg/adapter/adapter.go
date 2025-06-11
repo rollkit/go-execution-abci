@@ -302,7 +302,15 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("rollkit header not found in context")
 	}
 
-	emptyBlock, err := cometcompat.ToABCIBlock(header, &types.Data{})
+	// Create an empty commit for the ToABCIBlock call
+	emptyCommit := &cmttypes.Commit{
+		Height:     int64(blockHeight),
+		Round:      0,
+		BlockID:    cmttypes.BlockID{},
+		Signatures: []cmttypes.CommitSig{},
+	}
+
+	emptyBlock, err := cometcompat.ToABCIBlock(header, &types.Data{}, emptyCommit)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to compute header hash: %w", err)
 	}

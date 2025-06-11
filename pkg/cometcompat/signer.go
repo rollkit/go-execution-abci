@@ -2,7 +2,7 @@ package cometcompat
 
 import (
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
-	cmtypes "github.com/cometbft/cometbft/types"
+	cmttypes "github.com/cometbft/cometbft/types"
 
 	"github.com/rollkit/rollkit/types"
 )
@@ -26,7 +26,7 @@ func PayloadProvider() types.SignaturePayloadProvider {
 			ValidatorIndex:   0,
 		}
 		chainID := header.ChainID()
-		consensusVoteBytes := cmtypes.VoteSignBytes(chainID, &vote)
+		consensusVoteBytes := cmttypes.VoteSignBytes(chainID, &vote)
 
 		return consensusVoteBytes, nil
 	}

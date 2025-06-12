@@ -146,7 +146,7 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 				Hash:          abciBlock.Header.Hash(),
 				PartSetHeader: cmtproto.PartSetHeader{},
 			},
-			Timestamp:        abciBlock.Header.Time,
+			Timestamp:        abciBlock.Time,
 			ValidatorAddress: header.ProposerAddress,
 			ValidatorIndex:   0,
 		}
@@ -244,7 +244,7 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 				Hash:          abciBlock.Header.Hash(),
 				PartSetHeader: cmtproto.PartSetHeader{},
 			},
-			Timestamp:        abciBlock.Header.Time,
+			Timestamp:        abciBlock.Time,
 			ValidatorAddress: header.ProposerAddress,
 			ValidatorIndex:   0,
 		}

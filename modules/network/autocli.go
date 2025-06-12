@@ -2,6 +2,7 @@ package network
 
 import (
 	autocliv1 "cosmossdk.io/api/cosmos/autocli/v1"
+
 	networkv1 "github.com/rollkit/go-execution-abci/modules/network/types"
 )
 
@@ -9,7 +10,7 @@ import (
 func (am AppModule) AutoCLIOptions() *autocliv1.ModuleOptions {
 	return &autocliv1.ModuleOptions{
 		Query: &autocliv1.ServiceCommandDescriptor{
-			Service: networkv1.Query_ServiceDesc.ServiceName,
+			Service: networkv1.Query_serviceDesc.ServiceName,
 			RpcCommandOptions: []*autocliv1.RpcCommandOptions{
 				{
 					RpcMethod: "Params",
@@ -51,7 +52,7 @@ func (am AppModule) AutoCLIOptions() *autocliv1.ModuleOptions {
 			},
 		},
 		Tx: &autocliv1.ServiceCommandDescriptor{
-			Service: networkv1.Msg_ServiceDesc.ServiceName,
+			Service: networkv1.Msg_serviceDesc.ServiceName,
 			RpcCommandOptions: []*autocliv1.RpcCommandOptions{
 				{
 					RpcMethod: "Attest",

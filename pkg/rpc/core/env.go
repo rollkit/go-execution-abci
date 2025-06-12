@@ -8,13 +8,13 @@ import (
 	"github.com/cometbft/cometbft/state/indexer"
 	"github.com/cometbft/cometbft/state/txindex"
 
+	"github.com/rollkit/rollkit/pkg/signer"
+
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
 )
 
-var (
-	// set by Node
-	env *Environment
-)
+// set by Node
+var env *Environment
 
 // SetEnvironment sets up the given Environment.
 // It will race if multiple Node call SetEnvironment.
@@ -26,6 +26,7 @@ func SetEnvironment(e *Environment) {
 // to be setup once during startup.
 type Environment struct {
 	Adapter      *adapter.Adapter
+	Signer       signer.Signer
 	TxIndexer    txindex.TxIndexer
 	BlockIndexer indexer.BlockIndexer
 	Logger       cmtlog.Logger

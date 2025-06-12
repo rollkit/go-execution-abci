@@ -9,6 +9,7 @@ import (
 	"github.com/cometbft/cometbft/crypto/ed25519"
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
+	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	cmtstate "github.com/cometbft/cometbft/state"
 	cmttypes "github.com/cometbft/cometbft/types"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
@@ -133,7 +134,7 @@ func setupTestConsensusParamsEnv(t *testing.T, useMockRollkitStore bool, stateTo
 func TestValidators(t *testing.T) {
 	assert := testifyassert.New(t)
 	require := require.New(t)
-	ctx := newTestRPCContext()
+	ctx := &rpctypes.Context{}
 
 	t.Run("Success_OneValidator_LatestHeight", func(t *testing.T) {
 		mockStore := setupTestValidatorsEnv(t, []cmttypes.GenesisValidator{testGenesisValidator}, testSampleConsensusParams)
@@ -210,7 +211,7 @@ func TestValidators(t *testing.T) {
 func TestDumpConsensusState(t *testing.T) {
 	assert := testifyassert.New(t)
 	require := require.New(t)
-	ctx := newTestRPCContext()
+	ctx := &rpctypes.Context{}
 
 	result, err := DumpConsensusState(ctx)
 
@@ -222,7 +223,7 @@ func TestDumpConsensusState(t *testing.T) {
 func TestConsensusState(t *testing.T) {
 	assert := testifyassert.New(t)
 	require := require.New(t)
-	ctx := newTestRPCContext()
+	ctx := &rpctypes.Context{}
 
 	result, err := ConsensusState(ctx)
 
@@ -234,7 +235,7 @@ func TestConsensusState(t *testing.T) {
 func TestConsensusParams(t *testing.T) {
 	assert := testifyassert.New(t)
 	require := require.New(t)
-	ctx := newTestRPCContext()
+	ctx := &rpctypes.Context{}
 
 	// sampleProtoParams and mockStateWithConsensusParams moved to package level vars (testProtoConsensusParams, testMockStateWithConsensusParams)
 

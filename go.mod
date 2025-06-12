@@ -28,10 +28,10 @@ require (
 	github.com/libp2p/go-libp2p-pubsub v0.14.0
 	github.com/multiformats/go-multiaddr v0.15.0
 	github.com/prometheus/client_golang v1.22.0
-	github.com/rollkit/rollkit v0.14.2-0.20250602221640-d561a3a1706d
-	github.com/rollkit/rollkit/core v0.0.0-20250602221640-d561a3a1706d
-	github.com/rollkit/rollkit/da v0.0.0-20250602221640-d561a3a1706d
-	github.com/rollkit/rollkit/sequencers/single v0.0.0-20250602221640-d561a3a1706d
+	github.com/rollkit/rollkit v0.14.2-0.20250611130839-cacaec225752
+	github.com/rollkit/rollkit/core v0.0.0-20250611091931-22f40ddb636d
+	github.com/rollkit/rollkit/da v0.0.0-20250611091931-22f40ddb636d
+	github.com/rollkit/rollkit/sequencers/single v0.0.0-20250611091931-22f40ddb636d
 	github.com/rs/cors v1.11.1
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
@@ -175,7 +175,7 @@ require (
 	github.com/ipfs/go-cid v0.5.0 // indirect
 	github.com/ipfs/go-ds-badger4 v0.1.8 // indirect
 	github.com/ipfs/go-log v1.0.5 // indirect
-	github.com/ipfs/go-log/v2 v2.5.1 // indirect
+	github.com/ipfs/go-log/v2 v2.6.0 // indirect
 	github.com/ipld/go-ipld-prime v0.21.0 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect

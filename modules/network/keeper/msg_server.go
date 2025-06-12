@@ -40,6 +40,8 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 		return nil, errors.Wrapf(sdkerrors.ErrNotFound, "validator index not found for %s", msg.Validator)
 	}
 
+	// todo (Alex): we need to set a limit to not have validators attest old blocks. Also make sure that this relates with
+	// the retention period for pruning
 	bitmap := k.GetAttestationBitmap(ctx, msg.Height)
 	if bitmap == nil {
 		validators := k.stakingKeeper.GetLastValidators(ctx)
@@ -119,8 +121,10 @@ func (k msgServer) JoinAttesterSet(goCtx context.Context, msg *types.MsgJoinAtte
 	if k.IsInAttesterSet(ctx, msg.Validator) {
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator already in attester set")
 	}
-
-	k.SetAttesterSetMember(ctx, msg.Validator)
+	// TODO (Alex): the valset should be updated at the end of an epoch only
+	if err := k.SetAttesterSetMember(ctx, msg.Validator); err != nil {
+		return nil, errors.Wrap(err, "failed to set attester set member")
+	}
 
 	ctx.EventManager().EmitEvent(
 		sdk.NewEvent(
@@ -140,7 +144,10 @@ func (k msgServer) LeaveAttesterSet(goCtx context.Context, msg *types.MsgLeaveAt
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator not in attester set")
 	}
 
-	k.RemoveAttesterSetMember(ctx, msg.Validator)
+	// TODO (Alex): the valset should be updated at the end of an epoch only
+	if err := k.RemoveAttesterSetMember(ctx, msg.Validator); err != nil {
+		return nil, errors.Wrap(err, "failed to remove attester set member")
+	}
 
 	ctx.EventManager().EmitEvent(
 		sdk.NewEvent(

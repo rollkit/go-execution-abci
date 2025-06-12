@@ -12,6 +12,7 @@ type StakingKeeper interface {
 	GetValidator(ctx sdk.Context, addr sdk.ValAddress) (validator stakingtypes.Validator, found bool)
 	GetLastValidators(ctx sdk.Context) (validators []stakingtypes.Validator)
 	GetLastTotalPower(ctx sdk.Context) math.Int
+	//GetHistoricalInfo(ctx sdk.Context, height int64) (stakingtypes.HistoricalInfo, error)
 }
 
 // AccountKeeper defines the expected account keeper interface

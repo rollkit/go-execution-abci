@@ -126,7 +126,7 @@ func (k Keeper) processEpochEnd(ctx sdk.Context, epoch uint64) error {
 		}
 
 		if checkpointsInEpoch > 0 && softConfirmedCheckpoints == 0 {
-			panic("Network module: No checkpoints achieved quorum in epoch")
+			return fmt.Errorf("no checkpoints achieved quorum in epoch: %d", epoch)
 		}
 	}
 

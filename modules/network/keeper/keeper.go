@@ -39,21 +39,15 @@ type Keeper struct {
 func NewKeeper(
 	cdc codec.BinaryCodec,
 	storeService store.KVStoreService, // Changed from sdk.StoreKey
-	ps paramtypes.Subspace,
 	sk types.StakingKeeper,
 	ak types.AccountKeeper,
 	bk types.BankKeeper,
 	authority string,
 ) Keeper {
-	// set KeyTable if it has not already been set
-	if !ps.HasKeyTable() {
-		ps = ps.WithKeyTable(types.ParamKeyTable())
-	}
 
 	sb := collections.NewSchemaBuilder(storeService)
 	keeper := Keeper{
 		cdc:           cdc,
-		paramstore:    ps,
 		stakingKeeper: sk,
 		accountKeeper: ak,
 		bankKeeper:    bk,

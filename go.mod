@@ -26,7 +26,7 @@ require (
 	github.com/ipfs/go-datastore v0.8.2
 	github.com/libp2p/go-libp2p v0.41.1
 	github.com/libp2p/go-libp2p-pubsub v0.14.0
-	github.com/multiformats/go-multiaddr v0.15.0
+	github.com/multiformats/go-multiaddr v0.16.0
 	github.com/prometheus/client_golang v1.22.0
 	github.com/rollkit/rollkit v0.14.2-0.20250611130839-cacaec225752
 	github.com/rollkit/rollkit/core v0.0.0-20250611091931-22f40ddb636d

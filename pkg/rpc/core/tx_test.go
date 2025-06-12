@@ -7,6 +7,7 @@ import (
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 	cmtquery "github.com/cometbft/cometbft/libs/pubsub/query"
+	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	cmttypes "github.com/cometbft/cometbft/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -21,7 +22,7 @@ import (
 func TestTx(t *testing.T) {
 	assert := assert.New(t)
 	require := require.New(t)
-	ctx := newTestRPCContext() // Assumes newTestRPCContext is available or define it
+	ctx := &rpctypes.Context{}
 
 	mockTxIndexer := new(MockTxIndexer)
 	mockStore := new(MockRollkitStore)
@@ -117,14 +118,13 @@ func TestTx(t *testing.T) {
 
 	// TODO: Add test case for prove = true once the proof logic is implemented
 	// t.Run("Success_WithProof", func(t *testing.T) { ... })
-
 }
 
 // TestTxSearch tests the TxSearch function
 func TestTxSearch(t *testing.T) {
 	assert := assert.New(t)
 	require := require.New(t)
-	ctx := newTestRPCContext()
+	ctx := &rpctypes.Context{}
 
 	mockTxIndexer := new(MockTxIndexer)
 	mockStore := new(MockRollkitStore)

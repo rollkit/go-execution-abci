@@ -45,6 +45,7 @@ import (
 	"github.com/rollkit/rollkit/sequencers/single"
 
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
+	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
 	"github.com/rollkit/go-execution-abci/pkg/rpc"
 	"github.com/rollkit/go-execution-abci/pkg/rpc/core"
 	execsigner "github.com/rollkit/go-execution-abci/pkg/signer"
@@ -436,6 +437,7 @@ func setupNodeAndExecutor(
 		database,
 		metrics,
 		logger,
+		cometcompat.PayloadProvider(),
 	)
 	if err != nil {
 		return nil, nil, cleanupFn, err
@@ -451,6 +453,7 @@ func setupNodeAndExecutor(
 		return nil, nil, cleanupFn, fmt.Errorf("start indexer service: %w", err)
 	}
 	core.SetEnvironment(&core.Environment{
+		Signer:       signer,
 		Adapter:      executor,
 		TxIndexer:    txIndexer,
 		BlockIndexer: blockIndexer,

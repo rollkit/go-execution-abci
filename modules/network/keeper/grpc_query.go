@@ -104,7 +104,7 @@ func (q *queryServer) EpochInfo(c context.Context, req *types.QueryEpochInfoRequ
 		StartHeight:             startHeight,
 		EndHeight:               endHeight,
 		ParticipationBitmap:     epochBitmap,
-		ActiveValidators:        activeValidators,
+		ActiveValidators:        activeValidators, // TODO (Alex): we need the historic validator set instead
 		ParticipatingValidators: participatingValidators,
 	}, nil
 }
@@ -116,7 +116,8 @@ func (q *queryServer) ValidatorIndex(c context.Context, req *types.QueryValidato
 	}
 
 	ctx := sdk.UnwrapSDKContext(c)
-
+	// TODO (Alex): what is the use-case for this? The valset may change every epoch.
+	// A request height and historic data could be useful with EpochInfo bitmap
 	index, found := q.keeper.GetValidatorIndex(ctx, req.Address)
 	if !found {
 		return nil, status.Error(codes.NotFound, "validator index not found")

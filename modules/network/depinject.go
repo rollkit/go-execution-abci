@@ -2,10 +2,10 @@ package network
 
 import (
 	"cosmossdk.io/core/appmodule"
+	"cosmossdk.io/core/store"
 	"cosmossdk.io/depinject"
-
+	"cosmossdk.io/depinject/appconfig"
 	"github.com/cosmos/cosmos-sdk/codec"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 	paramtypes "github.com/cosmos/cosmos-sdk/x/params/types"
@@ -20,13 +20,10 @@ var _ appmodule.AppModule = AppModule{}
 // IsOnePerModuleType implements the depinject.OnePerModuleType interface.
 func (am AppModule) IsOnePerModuleType() {}
 
-// IsAppModule implements the appmodule.AppModule interface.
-func (am AppModule) IsAppModule() {}
-
 func init() {
-	appmodule.Register(
+	appconfig.Register(
 		&modulev1.Module{},
-		appmodule.Provide(ProvideModule),
+		appconfig.Provide(ProvideModule),
 	)
 }
 
@@ -35,7 +32,7 @@ type ModuleInputs struct {
 
 	Config         *modulev1.Module
 	Cdc            codec.Codec
-	Key            *sdk.KVStoreKey
+	StoreService   store.KVStoreService
 	ParamsSubspace paramtypes.Subspace
 	StakingKeeper  types.StakingKeeper
 	AccountKeeper  types.AccountKeeper
@@ -58,7 +55,7 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 
 	k := keeper.NewKeeper(
 		in.Cdc,
-		in.Key,
+		in.StoreService,
 		in.ParamsSubspace,
 		in.StakingKeeper,
 		in.AccountKeeper,
@@ -68,8 +65,6 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 	m := NewAppModule(
 		in.Cdc,
 		k,
-		in.AccountKeeper,
-		in.BankKeeper,
 	)
 
 	return ModuleOutputs{NetworkKeeper: k, Module: m}

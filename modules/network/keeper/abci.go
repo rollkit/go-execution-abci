@@ -3,6 +3,7 @@ package keeper
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 
 	// For error wrapping if needed
 	"cosmossdk.io/math"
@@ -12,7 +13,7 @@ import (
 )
 
 // BeginBlocker handles begin block logic for the network module
-func (k Keeper) BeginBlocker(ctx sdk.Context) {
+func (k Keeper) BeginBlocker(ctx sdk.Context) error {
 	params := k.GetParams(ctx)
 
 	// Only process if sign mode is IBC_ONLY and we have outbound IBC packets
@@ -20,16 +21,19 @@ func (k Keeper) BeginBlocker(ctx sdk.Context) {
 		// TODO: Check for outbound IBC packets
 		// For now, this is a placeholder
 	}
+	return nil
 }
 
 // EndBlocker handles end block logic for the network module
-func (k Keeper) EndBlocker(ctx sdk.Context) {
+func (k Keeper) EndBlocker(ctx sdk.Context) error {
 	height := ctx.BlockHeight()
 	params := k.GetParams(ctx)
 
 	// Handle checkpoint heights
 	if k.IsCheckpointHeight(ctx, height) {
-		k.processCheckpoint(ctx, height)
+		if err := k.processCheckpoint(ctx, height); err != nil {
+			return fmt.Errorf("processing checkpoint at height %d: %w", height, err)
+		}
 	}
 
 	// Handle epoch end
@@ -38,15 +42,18 @@ func (k Keeper) EndBlocker(ctx sdk.Context) {
 	nextEpoch := uint64(nextHeight) / params.EpochLength
 
 	if epoch != nextEpoch {
-		k.processEpochEnd(ctx, epoch)
+		if err := k.processEpochEnd(ctx, epoch); err != nil {
+			return fmt.Errorf("processing epoch end %d: %w", epoch, err)
+		}
 	}
+	return nil
 }
 
 // processCheckpoint handles checkpoint processing
-func (k Keeper) processCheckpoint(ctx sdk.Context, height int64) {
+func (k Keeper) processCheckpoint(ctx sdk.Context, height int64) error {
 	bitmapBytes := k.GetAttestationBitmap(ctx, height)
 	if bitmapBytes == nil {
-		return
+		return nil
 	}
 
 	votedPower := k.CalculateVotedPower(ctx, bitmapBytes)
@@ -67,14 +74,15 @@ func (k Keeper) processCheckpoint(ctx sdk.Context, height int64) {
 	}
 
 	if err := k.StoredAttestationInfo.Set(ctx, height, attestationInfoToStore); err != nil {
-		k.Logger(ctx).Error("failed to store attestation info", "height", height, "error", err)
+		return fmt.Errorf("storing attestation info at height %d: %w", height, err)
 	}
 
 	// Emit hashes
 	k.emitCheckpointHashes(ctx, height, validatorHash[:], commitHash[:], softConfirmed)
+	return nil
 }
 
-func (k Keeper) processEpochEnd(ctx sdk.Context, epoch uint64) {
+func (k Keeper) processEpochEnd(ctx sdk.Context, epoch uint64) error {
 	params := k.GetParams(ctx)
 	epochBitmap := k.GetEpochBitmap(ctx, epoch)
 
@@ -91,12 +99,11 @@ func (k Keeper) processEpochEnd(ctx sdk.Context, epoch uint64) {
 			participated := k.bitmapHelper.PopCount(epochBitmap)
 			minParticipation, err := math.LegacyNewDecFromStr(params.MinParticipation)
 			if err != nil {
-				k.Logger(ctx).Error("failed to parse MinParticipation", "error", err)
-			} else {
-				participationRate := math.LegacyNewDec(int64(participated)).QuoInt64(int64(totalBondedValidators))
-				if participationRate.LT(minParticipation) {
-					k.ejectLowParticipants(ctx, epochBitmap)
-				}
+				return fmt.Errorf("parsing MinParticipation parameter: %w", err)
+			}
+			participationRate := math.LegacyNewDec(int64(participated)).QuoInt64(int64(totalBondedValidators))
+			if participationRate.LT(minParticipation) {
+				k.ejectLowParticipants(ctx, epochBitmap)
 			}
 		}
 	}
@@ -124,12 +131,13 @@ func (k Keeper) processEpochEnd(ctx sdk.Context, epoch uint64) {
 	}
 
 	if err := k.PruneOldBitmaps(ctx, epoch); err != nil {
-		k.Logger(ctx).Error("failed to prune old data at epoch end", "epoch", epoch, "error", err)
+		return fmt.Errorf("pruning old data at epoch %d: %w", epoch, err)
 	}
 
 	if err := k.BuildValidatorIndexMap(ctx); err != nil {
-		k.Logger(ctx).Error("failed to rebuild validator index map at epoch end", "epoch", epoch, "error", err)
+		return fmt.Errorf("rebuilding validator index map at epoch %d: %w", epoch, err)
 	}
+	return nil
 }
 
 // ejectLowParticipants ejects validators with low participation

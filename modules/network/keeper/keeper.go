@@ -1,11 +1,12 @@
 package keeper
 
 import (
+	"fmt"
+
 	"cosmossdk.io/collections"
 	"cosmossdk.io/core/store"
 	"cosmossdk.io/log"
 	"cosmossdk.io/math"
-
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	paramtypes "github.com/cosmos/cosmos-sdk/x/params/types"
@@ -279,24 +280,20 @@ func (k Keeper) PruneOldBitmaps(ctx sdk.Context, currentEpoch uint64) error {
 	pruneHeight := int64(pruneBeforeEpoch * params.EpochLength) // Assuming EpochLength defines blocks per epoch
 
 	// Prune attestation bitmaps (raw bitmaps)
-	attestationRange := collections.NewRange[int64]().EndExclusive(pruneHeight)
+	attestationRange := new(collections.Range[int64]).StartInclusive(0).EndExclusive(pruneHeight)
 	if err := k.AttestationBitmap.Clear(ctx, attestationRange); err != nil {
-		k.Logger(ctx).Error("failed to prune old attestation bitmaps", "pruneHeight", pruneHeight, "error", err)
-		return err
+		return fmt.Errorf("clearing attestation bitmaps before height %d: %w", pruneHeight, err)
 	}
-
 	// Prune stored attestation info (full AttestationBitmap objects)
-	storedAttestationInfoRange := collections.NewRange[int64]().EndExclusive(pruneHeight)
+	storedAttestationInfoRange := new(collections.Range[int64]).StartInclusive(0).EndExclusive(pruneHeight)
 	if err := k.StoredAttestationInfo.Clear(ctx, storedAttestationInfoRange); err != nil {
-		k.Logger(ctx).Error("failed to prune old stored attestation info", "pruneHeight", pruneHeight, "error", err)
-		return err
+		return fmt.Errorf("clearing stored attestation info before height %d: %w", pruneHeight, err)
 	}
 
 	// Prune epoch bitmaps
-	epochRange := collections.NewRange[uint64]().EndExclusive(pruneBeforeEpoch)
+	epochRange := new(collections.Range[uint64]).StartInclusive(0).EndExclusive(pruneBeforeEpoch)
 	if err := k.EpochBitmap.Clear(ctx, epochRange); err != nil {
-		k.Logger(ctx).Error("failed to prune old epoch bitmaps", "pruneBeforeEpoch", pruneBeforeEpoch, "error", err)
-		return err
+		return fmt.Errorf("clearing epoch bitmaps before epoch %d: %w", pruneBeforeEpoch, err)
 	}
 
 	// TODO: Consider pruning signatures associated with pruned heights.

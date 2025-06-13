@@ -56,7 +56,6 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 	k := keeper.NewKeeper(
 		in.Cdc,
 		in.StoreService,
-		in.ParamsSubspace,
 		in.StakingKeeper,
 		in.AccountKeeper,
 		in.BankKeeper,

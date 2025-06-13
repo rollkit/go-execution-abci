@@ -4,7 +4,7 @@ package rollkitsdk.network.module.v1;
 
 import "cosmos/app/v1alpha1/module.proto";
 
-option go_package = "github.com/rollkit/go-execution-abci/modules/network/module";
+option go_package = "github.com/rollkit/go-execution-abci/modules/network/module/v1";
 
 // Module is the config object for the module.
 message Module {

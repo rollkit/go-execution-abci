@@ -43,6 +43,19 @@ type P2PClientInfo interface {
 	Peers() []rollkitp2p.PeerConnection
 }
 
+// BlockFilter decides if a block commit is build and published
+type BlockFilter interface {
+	IsPublishable(ctx context.Context, height int64) bool
+}
+
+var _ BlockFilter = BlockFilterFn(nil)
+
+type BlockFilterFn func(ctx context.Context, height int64) bool
+
+func (b BlockFilterFn) IsPublishable(ctx context.Context, height int64) bool {
+	return b(ctx, height)
+}
+
 // LoadGenesisDoc returns the genesis document from the provided config file.
 func LoadGenesisDoc(cfg *config.Config) (*cmttypes.GenesisDoc, error) {
 	genesisFile := cfg.GenesisFile()
@@ -69,7 +82,9 @@ type Adapter struct {
 	AppGenesis *genutiltypes.AppGenesis
 
 	Logger  log.Logger
-	Metrics *Metrics
+	metrics *Metrics
+
+	blockFilter BlockFilter
 }
 
 // NewABCIExecutor creates a new Adapter instance that implements the go-execution.Executor interface.
@@ -82,18 +97,13 @@ func NewABCIExecutor(
 	logger log.Logger,
 	cfg *config.Config,
 	appGenesis *genutiltypes.AppGenesis,
-	metrics *Metrics,
+	opts ...Option,
 ) *Adapter {
-	if metrics == nil {
-		metrics = NopMetrics()
-	}
 
-	// create rollkit prefix
 	rollkitPrefixStore := kt.Wrap(store, &kt.PrefixTransform{
 		Prefix: ds.NewKey(rollnode.RollkitPrefix),
 	})
 	rollkitStore := rstore.New(rollkitPrefixStore)
-	// Create a new Store with ABCI prefix
 	abciStore := NewStore(store)
 
 	a := &Adapter{
@@ -105,7 +115,12 @@ func NewABCIExecutor(
 		p2pMetrics:   p2pMetrics,
 		AppGenesis:   appGenesis,
 		MempoolIDs:   newMempoolIDs(),
-		Metrics:      metrics,
+		metrics:      NopMetrics(),
+		blockFilter:  BlockFilterFn(func(ctx context.Context, height int64) bool { return true }),
+	}
+
+	for _, opt := range opts {
+		opt(a)
 	}
 
 	return a
@@ -132,7 +147,7 @@ func (a *Adapter) Start(ctx context.Context) error {
 
 func (a *Adapter) newTxValidator(ctx context.Context) p2p.GossipValidator {
 	return func(m *p2p.GossipMessage) bool {
-		a.Metrics.TxValidationTotal.Add(1)
+		a.metrics.TxValidationTotal.Add(1)
 		a.Logger.Debug("transaction received", "bytes", len(m.Data))
 
 		msgBytes := m.Data
@@ -154,23 +169,23 @@ func (a *Adapter) newTxValidator(ctx context.Context) p2p.GossipValidator {
 			SenderP2PID: corep2p.ID(m.From),
 		})
 		checkTxDuration := time.Since(checkTxStart).Seconds()
-		a.Metrics.CheckTxDurationSeconds.Observe(checkTxDuration)
+		a.metrics.CheckTxDurationSeconds.Observe(checkTxDuration)
 
 		switch {
 		case errors.Is(err, mempool.ErrTxInCache):
-			a.Metrics.TxValidationResultTotal.With("result", "rejected_in_cache").Add(1)
+			a.metrics.TxValidationResultTotal.With("result", "rejected_in_cache").Add(1)
 			return true
 		case errors.Is(err, mempool.ErrMempoolIsFull{}):
-			a.Metrics.TxValidationResultTotal.With("result", "rejected_mempool_full").Add(1)
+			a.metrics.TxValidationResultTotal.With("result", "rejected_mempool_full").Add(1)
 			return true
 		case errors.Is(err, mempool.ErrTxTooLarge{}):
-			a.Metrics.TxValidationResultTotal.With("result", "rejected_too_large").Add(1)
+			a.metrics.TxValidationResultTotal.With("result", "rejected_too_large").Add(1)
 			return false
 		case errors.Is(err, mempool.ErrPreCheck{}):
-			a.Metrics.TxValidationResultTotal.With("result", "rejected_precheck").Add(1)
+			a.metrics.TxValidationResultTotal.With("result", "rejected_precheck").Add(1)
 			return false
 		case err != nil:
-			a.Metrics.TxValidationResultTotal.With("result", "rejected_checktx_error").Add(1)
+			a.metrics.TxValidationResultTotal.With("result", "rejected_checktx_error").Add(1)
 			a.Logger.Error("CheckTx failed with unexpected error", "err", err)
 			return false
 		default:
@@ -178,17 +193,17 @@ func (a *Adapter) newTxValidator(ctx context.Context) p2p.GossipValidator {
 
 		select {
 		case <-ctx.Done():
-			a.Metrics.TxValidationResultTotal.With("result", "rejected_context_canceled").Add(1)
+			a.metrics.TxValidationResultTotal.With("result", "rejected_context_canceled").Add(1)
 			return false
 		case checkTxResp := <-checkTxResCh:
 			if checkTxResp.Code == abci.CodeTypeOK {
-				a.Metrics.TxValidationResultTotal.With("result", "accepted").Add(1)
+				a.metrics.TxValidationResultTotal.With("result", "accepted").Add(1)
 				return true
 			}
-			a.Metrics.TxValidationResultTotal.With("result", "rejected_checktx").Add(1)
+			a.metrics.TxValidationResultTotal.With("result", "rejected_checktx").Add(1)
 			return false
 		case <-time.After(5 * time.Second):
-			a.Metrics.TxValidationResultTotal.With("result", "rejected_timeout").Add(1)
+			a.metrics.TxValidationResultTotal.With("result", "rejected_timeout").Add(1)
 			a.Logger.Error("CheckTx response timed out")
 			return false
 		}
@@ -199,7 +214,7 @@ func (a *Adapter) newTxValidator(ctx context.Context) p2p.GossipValidator {
 func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialHeight uint64, chainID string) ([]byte, uint64, error) {
 	initChainStart := time.Now()
 	defer func() {
-		a.Metrics.InitChainDurationSeconds.Observe(time.Since(initChainStart).Seconds())
+		a.metrics.InitChainDurationSeconds.Observe(time.Since(initChainStart).Seconds())
 	}()
 	a.Logger.Info("Initializing chain", "chainID", chainID, "initialHeight", initialHeight, "genesisTime", genesisTime)
 
@@ -287,10 +302,10 @@ func (a *Adapter) ExecuteTxs(
 ) ([]byte, uint64, error) {
 	execStart := time.Now()
 	defer func() {
-		a.Metrics.BlockExecutionDurationSeconds.Observe(time.Since(execStart).Seconds())
+		a.metrics.BlockExecutionDurationSeconds.Observe(time.Since(execStart).Seconds())
 	}()
 	a.Logger.Info("Executing block", "height", blockHeight, "num_txs", len(txs), "timestamp", timestamp)
-	a.Metrics.TxsExecutedPerBlock.Observe(float64(len(txs)))
+	a.metrics.TxsExecutedPerBlock.Observe(float64(len(txs)))
 
 	s, err := a.Store.LoadState(ctx)
 	if err != nil {
@@ -389,7 +404,7 @@ func (a *Adapter) ExecuteTxs(
 
 	lastHeightValsChanged := s.LastHeightValidatorsChanged
 	if len(validatorUpdates) > 0 {
-		a.Metrics.ValidatorUpdatesTotal.Add(float64(len(validatorUpdates)))
+		a.metrics.ValidatorUpdatesTotal.Add(float64(len(validatorUpdates)))
 		err := nValSet.UpdateWithChangeSet(validatorUpdates)
 		if err != nil {
 			return nil, 0, fmt.Errorf("changing validator set: %w", err)
@@ -400,7 +415,7 @@ func (a *Adapter) ExecuteTxs(
 	nValSet.IncrementProposerPriority(1)
 
 	if fbResp.ConsensusParamUpdates != nil {
-		a.Metrics.ConsensusParamUpdatesTotal.Add(1)
+		a.metrics.ConsensusParamUpdatesTotal.Add(1)
 		nextParams := s.ConsensusParams.Update(fbResp.ConsensusParamUpdates)
 		err := nextParams.ValidateBasic()
 		if err != nil {
@@ -458,52 +473,52 @@ func (a *Adapter) ExecuteTxs(
 	if err != nil {
 		return nil, 0, err
 	}
-
-	cmtTxs := make(cmttypes.Txs, len(txs))
-	for i := range txs {
-		cmtTxs[i] = txs[i]
-	}
-
-	commit := &cmttypes.Commit{
-		Height: int64(blockHeight),
-		Round:  0,
-		Signatures: []cmttypes.CommitSig{
-			{
-				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-				ValidatorAddress: s.Validators.Proposer.Address,
-				Timestamp:        time.Now().UTC(),
-				Signature:        []byte{},
-			},
-		},
-	}
-
-	if blockHeight > 1 {
-		header, data, err := a.RollkitStore.GetBlockData(ctx, blockHeight-1)
-		if err != nil {
-			return nil, 0, fmt.Errorf("failed to get previous block data: %w", err)
+	if a.blockFilter.IsPublishable(ctx, int64(blockHeight)) {
+		cmtTxs := make(cmttypes.Txs, len(txs))
+		for i := range txs {
+			cmtTxs[i] = txs[i]
 		}
 
-		commit = &cmttypes.Commit{
-			Height:  int64(header.Height()),
-			Round:   0,
-			BlockID: cmttypes.BlockID{Hash: bytes.HexBytes(header.Hash()), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: bytes.HexBytes(data.Hash())}},
+		commit := &cmttypes.Commit{
+			Height: int64(blockHeight),
+			Round:  0,
 			Signatures: []cmttypes.CommitSig{
 				{
 					BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-					ValidatorAddress: cmttypes.Address(header.ProposerAddress),
-					Timestamp:        header.Time(),
-					Signature:        header.Signature,
+					ValidatorAddress: s.Validators.Proposer.Address,
+					Timestamp:        time.Now().UTC(),
+					Signature:        []byte{},
 				},
 			},
 		}
+
+		if blockHeight > 1 {
+			header, data, err := a.RollkitStore.GetBlockData(ctx, blockHeight-1)
+			if err != nil {
+				return nil, 0, fmt.Errorf("failed to get previous block data: %w", err)
+			}
+
+			commit = &cmttypes.Commit{
+				Height:  int64(header.Height()),
+				Round:   0,
+				BlockID: cmttypes.BlockID{Hash: bytes.HexBytes(header.Hash()), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: bytes.HexBytes(data.Hash())}},
+				Signatures: []cmttypes.CommitSig{
+					{
+						BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+						ValidatorAddress: cmttypes.Address(header.ProposerAddress),
+						Timestamp:        header.Time(),
+						Signature:        header.Signature,
+					},
+				},
+			}
+		}
+
+		block := s.MakeBlock(int64(blockHeight), cmtTxs, commit, nil, s.Validators.Proposer.Address)
+
+		currentBlockID := cmttypes.BlockID{Hash: block.Hash(), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: block.DataHash}}
+
+		fireEvents(a.Logger, a.EventBus, block, currentBlockID, fbResp, validatorUpdates)
 	}
-
-	block := s.MakeBlock(int64(blockHeight), cmtTxs, commit, nil, s.Validators.Proposer.Address)
-
-	currentBlockID := cmttypes.BlockID{Hash: block.Hash(), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: block.DataHash}}
-
-	fireEvents(a.Logger, a.EventBus, block, currentBlockID, fbResp, validatorUpdates)
-
 	a.Logger.Info("block executed successfully", "height", blockHeight, "appHash", fmt.Sprintf("%X", fbResp.AppHash))
 	return fbResp.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
 }
@@ -572,7 +587,7 @@ func fireEvents(
 func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 	getTxsStart := time.Now()
 	defer func() {
-		a.Metrics.GetTxsDurationSeconds.Observe(time.Since(getTxsStart).Seconds())
+		a.metrics.GetTxsDurationSeconds.Observe(time.Since(getTxsStart).Seconds())
 	}()
 	a.Logger.Debug("Getting transactions for proposal")
 
@@ -609,7 +624,7 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 		return nil, err
 	}
 
-	a.Metrics.TxsProposedTotal.Add(float64(len(resp.Txs)))
+	a.metrics.TxsProposedTotal.Add(float64(len(resp.Txs)))
 	return resp.Txs, nil
 }
 

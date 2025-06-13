@@ -22,7 +22,7 @@ const (
 
 // KVStore key prefixes
 var (
-	// Prefixes for collections
+	// todo (Alex): use numbers instaed of verbose keyse?
 	ValidatorIndexPrefix        = collections.NewPrefix("validator_index")
 	ValidatorPowerPrefix        = collections.NewPrefix("validator_power")
 	AttestationBitmapPrefix     = collections.NewPrefix("attestation_bitmap")
@@ -30,6 +30,7 @@ var (
 	AttesterSetPrefix           = collections.NewPrefix("attester_set")
 	SignaturePrefix             = collections.NewPrefix("signature")
 	StoredAttestationInfoPrefix = collections.NewPrefix("stored_attestation_info")
+	ParamsKey                   = collections.NewPrefix("params")
 )
 
 // GetValidatorIndexKey returns the key for validator index mapping

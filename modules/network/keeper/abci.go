@@ -57,7 +57,10 @@ func (k Keeper) processCheckpoint(ctx sdk.Context, height int64) error {
 	}
 
 	votedPower := k.CalculateVotedPower(ctx, bitmapBytes)
-	totalPower := k.GetTotalPower(ctx)
+	totalPower, err := k.GetTotalPower(ctx)
+	if err != nil {
+		return err
+	}
 
 	validatorHash := sha256.Sum256(bitmapBytes)
 
@@ -87,7 +90,10 @@ func (k Keeper) processEpochEnd(ctx sdk.Context, epoch uint64) error {
 	epochBitmap := k.GetEpochBitmap(ctx, epoch)
 
 	if epochBitmap != nil {
-		validators := k.stakingKeeper.GetLastValidators(ctx)
+		validators, err := k.stakingKeeper.GetLastValidators(ctx)
+		if err != nil {
+			return fmt.Errorf("getting last validators: %w", err)
+		}
 		totalBondedValidators := 0
 		for _, v := range validators {
 			if v.IsBonded() {

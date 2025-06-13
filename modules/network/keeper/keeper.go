@@ -9,15 +9,12 @@ import (
 	"cosmossdk.io/math"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	paramtypes "github.com/cosmos/cosmos-sdk/x/params/types"
-
 	"github.com/rollkit/go-execution-abci/modules/network/types"
 )
 
 // Keeper of the network store
 type Keeper struct {
 	cdc           codec.BinaryCodec
-	paramstore    paramtypes.Subspace
 	stakingKeeper types.StakingKeeper
 	accountKeeper types.AccountKeeper
 	bankKeeper    types.BankKeeper
@@ -33,6 +30,7 @@ type Keeper struct {
 	AttesterSet           collections.KeySet[string]
 	Signatures            collections.Map[collections.Pair[int64, string], []byte]
 	StoredAttestationInfo collections.Map[int64, types.AttestationBitmap]
+	Params                collections.Item[types.Params]
 }
 
 // NewKeeper creates a new network Keeper instance
@@ -61,6 +59,7 @@ func NewKeeper(
 		AttesterSet:           collections.NewKeySet(sb, types.AttesterSetPrefix, "attester_set", collections.StringKey),
 		Signatures:            collections.NewMap(sb, types.SignaturePrefix, "signatures", collections.PairKeyCodec(collections.Int64Key, collections.StringKey), collections.BytesValue),
 		StoredAttestationInfo: collections.NewMap(sb, types.StoredAttestationInfoPrefix, "stored_attestation_info", collections.Int64Key, codec.CollValue[types.AttestationBitmap](cdc)), // Initialize new collection
+		Params:                collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
 	}
 
 	// The schema is built implicitly when the first collection is created or can be explicitly built.
@@ -85,14 +84,13 @@ func (k Keeper) Logger(ctx sdk.Context) log.Logger {
 
 // GetParams get all parameters as types.Params
 func (k Keeper) GetParams(ctx sdk.Context) types.Params {
-	var params types.Params
-	k.paramstore.GetParamSet(ctx, &params)
-	return params
+	p, _ := k.Params.Get(ctx)
+	return p
 }
 
 // SetParams set the params
-func (k Keeper) SetParams(ctx sdk.Context, params types.Params) {
-	k.paramstore.SetParamSet(ctx, &params)
+func (k Keeper) SetParams(ctx sdk.Context, params types.Params) error {
+	return k.Params.Set(ctx, params)
 }
 
 // SetValidatorIndex stores the validator index mapping and power
@@ -175,7 +173,10 @@ func (k Keeper) RemoveAttesterSetMember(ctx sdk.Context, addr string) error {
 
 // BuildValidatorIndexMap rebuilds the validator index mapping
 func (k Keeper) BuildValidatorIndexMap(ctx sdk.Context) error {
-	validators := k.stakingKeeper.GetAllValidators(ctx)
+	validators, err := k.stakingKeeper.GetAllValidators(ctx)
+	if err != nil {
+		return err
+	}
 
 	// Clear existing indices and powers
 	// The `nil` range clears all entries in the collection.
@@ -213,7 +214,11 @@ func (k Keeper) GetCurrentEpoch(ctx sdk.Context) uint64 {
 
 // IsCheckpointHeight checks if a height is a checkpoint
 func (k Keeper) IsCheckpointHeight(ctx sdk.Context, height int64) bool {
-	params := k.GetParams(ctx)
+	p, err := k.Params.Get(ctx)
+	if err != nil {
+		return false
+	}
+	params := p
 	return uint64(height)%params.EpochLength == 0
 }
 
@@ -230,8 +235,12 @@ func (k Keeper) CalculateVotedPower(ctx sdk.Context, bitmap []byte) uint64 {
 }
 
 // GetTotalPower returns the total staking power
-func (k Keeper) GetTotalPower(ctx sdk.Context) uint64 {
-	return uint64(k.stakingKeeper.GetLastTotalPower(ctx).Int64())
+func (k Keeper) GetTotalPower(ctx sdk.Context) (uint64, error) {
+	n, err := k.stakingKeeper.GetLastTotalPower(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return n.Uint64(), nil
 }
 
 // CheckQuorum checks if the voted power meets quorum
@@ -255,7 +264,10 @@ func (k Keeper) IsSoftConfirmed(ctx sdk.Context, height int64) bool {
 	}
 
 	votedPower := k.CalculateVotedPower(ctx, bitmap)
-	totalPower := k.GetTotalPower(ctx) // Assuming this gets the relevant total power for the height
+	totalPower, err := k.GetTotalPower(ctx) // Assuming this gets the relevant total power for the height
+	if err != nil {
+		return false
+	}
 
 	return k.CheckQuorum(ctx, votedPower, totalPower)
 }

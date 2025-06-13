@@ -22,11 +22,11 @@ graph TD
     E[Mempool] <--> B
     F[RPC Server] --> B
     B --> G[Store]
-    
+
     subgraph "Rollkit"
     A
     end
-    
+
     subgraph "go-execution-abci"
     B
     D
@@ -34,11 +34,11 @@ graph TD
     F
     G
     end
-    
+
     subgraph "Application"
     C
     end
-    
+
     style B fill:#f9f,stroke:#333,stroke-width:2px
     style A fill:#bbf,stroke:#333,stroke-width:1px
     style C fill:#bfb,stroke:#333,stroke-width:1px
@@ -87,6 +87,8 @@ executor := adapter.NewABCIExecutor(
     logger,            // Logger
     config,            // CometBFT config
     appGenesis,        // Application genesis
+    nil,               // Metrics (optional)
+    // Optional: custom block publisher, metrics,...
 )
 
 // Set up mempool for transaction handling
@@ -110,26 +112,26 @@ sequenceDiagram
     participant Mempool
     participant Adapter
     participant ABCI App
-    
+
     Client->>P2P Network: Submit Tx
     P2P Network->>Mempool: Gossip Tx
     Mempool->>Adapter: CheckTx
     Adapter->>ABCI App: CheckTx
     ABCI App-->>Adapter: Response
-    
+
     Note over Adapter: Block Creation Time
-    
+
     Adapter->>Adapter: GetTxs
     Adapter->>ABCI App: PrepareProposal
     ABCI App-->>Adapter: Txs
-    
+
     Note over Adapter: Block Execution
-    
+
     Adapter->>ABCI App: ProcessProposal
     ABCI App-->>Adapter: Accept/Reject
     Adapter->>ABCI App: FinalizeBlock
     ABCI App-->>Adapter: AppHash
-    
+
     Adapter->>ABCI App: Commit
 ```
 
@@ -172,7 +174,7 @@ classDiagram
         +GetTxs()
         +SetFinal()
     }
-    
+
     class Executor {
         <<interface>>
         +InitChain()
@@ -180,7 +182,7 @@ classDiagram
         +GetTxs()
         +SetFinal()
     }
-    
+
     class ABCI {
         <<interface>>
         +InitChain()
@@ -189,18 +191,18 @@ classDiagram
         +FinalizeBlock()
         +Commit()
     }
-    
+
     class Mempool {
         +CheckTx()
         +ReapMaxBytesMaxGas()
     }
-    
+
     class Store {
         +Get()
         +Set()
         +Height()
     }
-    
+
     Executor <|.. Adapter : implements
     Adapter o-- ABCI : uses
     Adapter o-- Mempool : uses

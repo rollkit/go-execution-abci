@@ -25,7 +25,6 @@ import (
 	"github.com/cosmos/cosmos-sdk/version"
 	genutiltypes "github.com/cosmos/cosmos-sdk/x/genutil/types"
 	"github.com/hashicorp/go-metrics"
-	networkkeeper "github.com/rollkit/go-execution-abci/modules/network/keeper"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -361,9 +360,7 @@ func setupNodeAndExecutor(
 		opts = append(opts, adapter.WithMetrics(m))
 	}
 
-	// todo: this check is not needed. should we hae a flag instead?
-	if _, ok := app.(interface{ GetNetworkKeeper() networkkeeper.Keeper }); ok {
-		// Use the app directly instead of the keeper
+	if srvCtx.Viper.GetBool(FlagNetworkSoftConfirmation) {
 		opts = append(opts, adapter.WithNetworkSoftConfirmationBlockFilter())
 	}
 

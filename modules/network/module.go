@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"cosmossdk.io/core/appmodule"
-	abci "github.com/cometbft/cometbft/abci/types"
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
 	cdctypes "github.com/cosmos/cosmos-sdk/codec/types"
@@ -22,6 +21,7 @@ var (
 	_ module.AppModuleBasic     = AppModuleBasic{}
 	_ appmodule.AppModule       = AppModule{}
 	_ module.HasServices        = AppModule{}
+	_ module.HasGenesis         = AppModule{}
 	_ appmodule.HasBeginBlocker = AppModule{}
 	_ appmodule.HasEndBlocker   = AppModule{}
 )
@@ -39,12 +39,6 @@ func NewAppModule(
 		AppModuleBasic: AppModuleBasic{cdc: cdc},
 		keeper:         keeper,
 	}
-}
-
-type AppModule struct {
-	AppModuleBasic
-
-	keeper keeper.Keeper
 }
 
 // Name returns the network module's name
@@ -71,14 +65,9 @@ func (AppModuleBasic) ValidateGenesis(cdc codec.JSONCodec, config client.TxEncod
 	return genesisState.Validate()
 }
 
-// InitGenesis performs genesis initialization for the staking module.
-func (am AppModule) InitGenesis(ctx sdk.Context, cdc codec.JSONCodec, data json.RawMessage) []abci.ValidatorUpdate {
-	var genesisState types.GenesisState
-	cdc.MustUnmarshalJSON(data, &genesisState)
-	if err := InitGenesis(ctx, am.keeper, genesisState); err != nil {
-		panic(fmt.Errorf("init genesis: %w", err))
-	}
-	return nil
+// DefaultGenesis returns default genesis state as raw bytes.
+func (AppModuleBasic) DefaultGenesis(cdc codec.JSONCodec) json.RawMessage {
+	return cdc.MustMarshalJSON(types.DefaultGenesisState())
 }
 
 // RegisterGRPCGatewayRoutes registers the gRPC Gateway routes for the network module.
@@ -86,6 +75,24 @@ func (AppModuleBasic) RegisterGRPCGatewayRoutes(clientCtx client.Context, mux *g
 	if err := types.RegisterQueryHandlerClient(context.Background(), mux, types.NewQueryClient(clientCtx)); err != nil {
 		panic(err)
 	}
+}
+
+type AppModule struct {
+	AppModuleBasic
+
+	keeper keeper.Keeper
+}
+
+// InitGenesis performs genesis initialization for the staking module.
+func (am AppModule) InitGenesis(ctx sdk.Context, cdc codec.JSONCodec, data json.RawMessage) {
+	var genesisState types.GenesisState
+	cdc.MustUnmarshalJSON(data, &genesisState)
+	if err := InitGenesis(ctx, am.keeper, genesisState); err != nil {
+		panic(fmt.Errorf("init genesis: %w", err))
+	}
+}
+func (am AppModule) ExportGenesis(ctx sdk.Context, cdc codec.JSONCodec) json.RawMessage {
+	return cdc.MustMarshalJSON(ExportGenesis(ctx, am.keeper))
 }
 
 // IsAppModule implements the appmodule.AppModule interface.

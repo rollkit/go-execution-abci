@@ -1,6 +1,7 @@
 package network
 
 import (
+	"fmt"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"github.com/rollkit/go-execution-abci/modules/network/keeper"
@@ -10,7 +11,9 @@ import (
 // InitGenesis initializes the network module's state from a provided genesis state.
 func InitGenesis(ctx sdk.Context, k keeper.Keeper, genState types.GenesisState) error {
 	// Set module params
-	k.SetParams(ctx, genState.Params)
+	if err := k.SetParams(ctx, genState.Params); err != nil {
+		return fmt.Errorf("set params: %s", err)
+	}
 
 	// Set validator indices
 	for _, vi := range genState.ValidatorIndices {

@@ -8,8 +8,6 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
-	paramtypes "github.com/cosmos/cosmos-sdk/x/params/types"
-
 	"github.com/rollkit/go-execution-abci/modules/network/keeper"
 	modulev1 "github.com/rollkit/go-execution-abci/modules/network/module/v1"
 	"github.com/rollkit/go-execution-abci/modules/network/types"
@@ -30,13 +28,12 @@ func init() {
 type ModuleInputs struct {
 	depinject.In
 
-	Config         *modulev1.Module
-	Cdc            codec.Codec
-	StoreService   store.KVStoreService
-	ParamsSubspace paramtypes.Subspace
-	StakingKeeper  types.StakingKeeper
-	AccountKeeper  types.AccountKeeper
-	BankKeeper     types.BankKeeper
+	Config        *modulev1.Module
+	Cdc           codec.Codec
+	StoreService  store.KVStoreService
+	StakingKeeper types.StakingKeeper
+	AccountKeeper types.AccountKeeper
+	BankKeeper    types.BankKeeper
 }
 
 type ModuleOutputs struct {

@@ -48,7 +48,11 @@ func (q *queryServer) AttestationBitmap(c context.Context, req *types.QueryAttes
 
 	// Reconstruct attestation info using keeper methods
 	votedPower := q.keeper.CalculateVotedPower(ctx, bitmapBytes)
-	totalPower := q.keeper.GetTotalPower(ctx)
+	totalPower, err := q.keeper.GetTotalPower(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	// Assuming IsSoftConfirmed is a method on the Keeper
 	// If not, you might need to add it or compute it here using keeper.CheckQuorum
 	softConfirmed := q.keeper.IsSoftConfirmed(ctx, req.Height)
@@ -89,7 +93,10 @@ func (q *queryServer) EpochInfo(c context.Context, req *types.QueryEpochInfoRequ
 		}, nil
 	}
 
-	validators := q.keeper.stakingKeeper.GetLastValidators(ctx)
+	validators, err := q.keeper.stakingKeeper.GetLastValidators(ctx)
+	if err != nil {
+		return nil, err
+	}
 	activeValidators := uint64(0)
 	for _, v := range validators {
 		if v.IsBonded() {
@@ -141,26 +148,22 @@ func (q *queryServer) SoftConfirmationStatus(c context.Context, req *types.Query
 	}
 
 	ctx := sdk.UnwrapSDKContext(c)
-	params := q.keeper.GetParams(ctx)
-
+	isSoftConfirmed := q.keeper.IsSoftConfirmed(ctx, req.Height)
 	bitmap := q.keeper.GetAttestationBitmap(ctx, req.Height)
-	if bitmap == nil {
-		return &types.QuerySoftConfirmationStatusResponse{
-			IsSoftConfirmed: false,
-			VotedPower:      0,
-			TotalPower:      q.keeper.GetTotalPower(ctx),
-			QuorumFraction:  params.QuorumFraction,
-		}, nil
+	totalPower, err := q.keeper.GetTotalPower(ctx)
+	if err != nil {
+		return nil, err
 	}
 
-	votedPower := q.keeper.CalculateVotedPower(ctx, bitmap)
-	totalPower := q.keeper.GetTotalPower(ctx)
-	isSoftConfirmed := q.keeper.CheckQuorum(ctx, votedPower, totalPower)
+	var votedPower uint64
+	if bitmap != nil {
+		votedPower = q.keeper.CalculateVotedPower(ctx, bitmap)
+	}
 
 	return &types.QuerySoftConfirmationStatusResponse{
 		IsSoftConfirmed: isSoftConfirmed,
 		VotedPower:      votedPower,
 		TotalPower:      totalPower,
-		QuorumFraction:  params.QuorumFraction,
+		QuorumFraction:  q.keeper.GetParams(ctx).QuorumFraction,
 	}, nil
 }

@@ -44,7 +44,10 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 	// the retention period for pruning
 	bitmap := k.GetAttestationBitmap(ctx, msg.Height)
 	if bitmap == nil {
-		validators := k.stakingKeeper.GetLastValidators(ctx)
+		validators, err := k.stakingKeeper.GetLastValidators(ctx)
+		if err != nil {
+			return nil, err
+		}
 		numValidators := 0
 		for _, v := range validators {
 			if v.IsBonded() {
@@ -74,7 +77,10 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 	epoch := k.GetCurrentEpoch(ctx)
 	epochBitmap := k.GetEpochBitmap(ctx, epoch)
 	if epochBitmap == nil {
-		validators := k.stakingKeeper.GetLastValidators(ctx)
+		validators, err := k.stakingKeeper.GetLastValidators(ctx)
+		if err != nil {
+			return nil, err
+		}
 		numValidators := 0
 		for _, v := range validators {
 			if v.IsBonded() {
@@ -109,9 +115,9 @@ func (k msgServer) JoinAttesterSet(goCtx context.Context, msg *types.MsgJoinAtte
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidAddress, "invalid validator address: %s", err)
 	}
 
-	validator, found := k.stakingKeeper.GetValidator(ctx, valAddr)
-	if !found {
-		return nil, errors.Wrapf(sdkerrors.ErrNotFound, "validator not found: %s", msg.Validator)
+	validator, err := k.stakingKeeper.GetValidator(ctx, valAddr)
+	if err != nil {
+		return nil, err
 	}
 
 	if !validator.IsBonded() {

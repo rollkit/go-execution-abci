@@ -201,5 +201,32 @@ func (k Keeper) migrateOver(
 		return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to set migration step: %v", err)
 	}
 
+	// the first time, we set the whole validator set to the same validator power. This is to avoid a validator ends up with >= 33% or worse >= 66%
+	// vp during the migration.
+	// TODO: add a test
+	if step == 0 {
+		// Create a map of existing updates for O(1) lookup
+		existingUpdates := make(map[string]bool)
+		for _, powerUpdate := range initialValUpdates {
+			existingUpdates[powerUpdate.PubKey.String()] = true
+		}
+
+		// set the whole validator set to the same power
+		for _, val := range lastValidatorSet {
+			valPubKey, err := val.CmtConsPublicKey()
+			if err != nil {
+				return nil, sdkerrors.ErrInvalidRequest.Wrapf("failed to get validator pubkey: %v", err)
+			}
+
+			if !existingUpdates[valPubKey.String()] {
+				powerUpdate := abci.ValidatorUpdate{
+					PubKey: valPubKey,
+					Power:  1,
+				}
+				initialValUpdates = append(initialValUpdates, powerUpdate)
+			}
+		}
+	}
+
 	return initialValUpdates, nil
 }

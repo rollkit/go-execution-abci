@@ -7,13 +7,14 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cometbft/cometbft/libs/bytes"
 	cmttypes "github.com/cometbft/cometbft/types"
 	ds "github.com/ipfs/go-datastore"
 	dsq "github.com/ipfs/go-datastore/query"
 
 	rlktypes "github.com/rollkit/rollkit/types"
 
-	"github.com/rollkit/go-execution-abci/pkg/common"
+	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
 )
 
 const NodeIDByteLength = 20
@@ -46,18 +47,60 @@ func normalizeHeight(height *int64) uint64 {
 	return heightValue
 }
 
+func getLastCommit(ctx context.Context, blockHeight uint64) (*cmttypes.Commit, error) {
+	if blockHeight > 1 {
+		header, data, err := env.Adapter.RollkitStore.GetBlockData(ctx, blockHeight-1)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get previous block data: %w", err)
+		}
+
+		commitForPrevBlock := &cmttypes.Commit{
+			Height:  int64(header.Height()),
+			Round:   0,
+			BlockID: cmttypes.BlockID{Hash: bytes.HexBytes(header.Hash()), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: bytes.HexBytes(data.Hash())}},
+			Signatures: []cmttypes.CommitSig{
+				{
+					BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+					ValidatorAddress: cmttypes.Address(header.ProposerAddress),
+					Timestamp:        header.Time(),
+					Signature:        header.Signature,
+				},
+			},
+		}
+
+		return commitForPrevBlock, nil
+	}
+
+	return &cmttypes.Commit{
+		Height:     int64(blockHeight),
+		Round:      0,
+		BlockID:    cmttypes.BlockID{},
+		Signatures: []cmttypes.CommitSig{},
+	}, nil
+}
+
 func getBlockMeta(ctx context.Context, n uint64) *cmttypes.BlockMeta {
 	header, data, err := env.Adapter.RollkitStore.GetBlockData(ctx, n)
 	if err != nil {
 		env.Logger.Error("Failed to get block data in getBlockMeta", "height", n, "err", err)
 		return nil
 	}
+
 	if header == nil || data == nil {
 		env.Logger.Error("Nil header or data returned from GetBlockData", "height", n)
 		return nil
 	}
+
+	// Create empty commit for ToABCIBlockMeta call
+	emptyCommit := &cmttypes.Commit{
+		Height:     int64(header.Height()),
+		Round:      0,
+		BlockID:    cmttypes.BlockID{},
+		Signatures: []cmttypes.CommitSig{},
+	}
+
 	// Assuming ToABCIBlockMeta is now in pkg/rpc/provider/provider_utils.go
-	bmeta, err := common.ToABCIBlockMeta(header, data) // Removed rpc. prefix
+	bmeta, err := cometcompat.ToABCIBlockMeta(header, data, emptyCommit) // Removed rpc. prefix
 	if err != nil {
 		env.Logger.Error("Failed to convert block to ABCI block meta", "height", n, "err", err)
 		return nil
@@ -131,7 +174,7 @@ func getHeightFromEntry(field string, value []byte) (uint64, error) {
 type blockFilter struct { // needs this for the Filter interface
 	max   int64
 	min   int64
-	field string //need this field for differentiation between getting headers and getting data
+	field string // need this field for differentiation between getting headers and getting data
 }
 
 func (f *blockFilter) Filter(e dsq.Entry) bool {
@@ -178,7 +221,7 @@ func BlockIterator(ctx context.Context, max int64, min int64) []BlockResponse {
 	defer rHeader.Close() //nolint:errcheck
 	defer rData.Close()   //nolint:errcheck
 
-	//we need to match the data to the header using the height, for that we use a map
+	// we need to match the data to the header using the height, for that we use a map
 	headerMap := make(map[uint64]*rlktypes.SignedHeader)
 	for res := range rHeader.Next() {
 		if res.Error != nil {
@@ -203,14 +246,14 @@ func BlockIterator(ctx context.Context, max int64, min int64) []BlockResponse {
 		dataMap[data.Height()] = data
 	}
 
-	//maps the headers to the data
+	// maps the headers to the data
 	for height, header := range headerMap {
 		if data, ok := dataMap[height]; ok {
 			blocks = append(blocks, BlockResponse{header: header, data: data})
 		}
 	}
 
-	//sort blocks by height descending
+	// sort blocks by height descending
 	sort.Slice(blocks, func(i, j int) bool {
 		return blocks[i].header.Height() > blocks[j].header.Height()
 	})

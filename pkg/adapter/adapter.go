@@ -518,7 +518,10 @@ func (a *Adapter) ExecuteTxs(
 		currentBlockID := cmttypes.BlockID{Hash: block.Hash(), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: block.DataHash}}
 
 		fireEvents(a.Logger, a.EventBus, block, currentBlockID, fbResp, validatorUpdates)
+	} else {
+		a.Logger.Info("block is not publishable", "height", blockHeight)
 	}
+
 	a.Logger.Info("block executed successfully", "height", blockHeight, "appHash", fmt.Sprintf("%X", fbResp.AppHash))
 	return fbResp.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
 }
@@ -531,6 +534,8 @@ func fireEvents(
 	abciResponse *abci.ResponseFinalizeBlock,
 	validatorUpdates []*cmttypes.Validator,
 ) {
+	logger.Info("publishing new block event")
+
 	if err := eventBus.PublishEventNewBlock(cmttypes.EventDataNewBlock{
 		Block:               block,
 		BlockID:             blockID,

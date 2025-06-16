@@ -135,7 +135,6 @@ func (k Keeper) processEpochEnd(ctx sdk.Context, epoch uint64) error {
 			// todo (Alex): show we really fail?
 			//return fmt.Errorf("no checkpoints achieved quorum in epoch: %d", epoch)
 			k.Logger(ctx).Info("No checkpoints achieved quorum in epoch", "epoch", epoch)
-			return nil
 		}
 	}
 

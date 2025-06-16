@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"cosmossdk.io/log"
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
@@ -29,14 +30,16 @@ func WithBlockFilter(publisher BlockFilter) Option {
 func WithNetworkSoftConfirmationBlockFilter() Option {
 	return func(a *Adapter) {
 		a.blockFilter = &NetworkSoftConfirmationBlockFilter{
-			app: a.App,
+			app:    a.App,
+			logger: a.Logger,
 		}
 	}
 }
 
 // NetworkSoftConfirmationBlockFilter is a BlockFilter implementation that uses the network module's SoftConfirmationStatus.
 type NetworkSoftConfirmationBlockFilter struct {
-	app servertypes.ABCI
+	app    servertypes.ABCI
+	logger log.Logger
 }
 
 // IsPublishable implements the BlockFilter interface.
@@ -62,13 +65,15 @@ func (f *NetworkSoftConfirmationBlockFilter) IsPublishable(ctx context.Context, 
 
 	softConfirmRes, err := f.app.Query(ctx, softConfirmReq)
 	if err != nil || softConfirmRes.Code != 0 {
+		f.logger.Error("failed to query soft confirmation status", "height", height, "error", err)
 		return false
 	}
 
 	softConfirmResp := &types.QuerySoftConfirmationStatusResponse{}
 	if err := softConfirmResp.Unmarshal(softConfirmRes.Value); err != nil {
+		f.logger.Error("failed to unmarshal soft confirmation status response", "height", height, "error", err)
 		return false
 	}
-
+	f.logger.Debug("soft confirmation status", "height", height, "is_soft_confirmed", softConfirmResp.IsSoftConfirmed)
 	return softConfirmResp.IsSoftConfirmed
 }

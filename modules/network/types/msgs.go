@@ -37,11 +37,11 @@ func (msg *MsgAttest) Type() string {
 
 // GetSigners returns the expected signers
 func (msg *MsgAttest) GetSigners() []sdk.AccAddress {
-	addr, err := sdk.AccAddressFromBech32(msg.Validator)
+	addr, err := sdk.ValAddressFromBech32(msg.Validator)
 	if err != nil {
 		panic(err)
 	}
-	return []sdk.AccAddress{addr}
+	return []sdk.AccAddress{sdk.AccAddress(addr)}
 }
 
 // GetSignBytes returns the bytes for signing
@@ -52,7 +52,7 @@ func (msg *MsgAttest) GetSignBytes() []byte {
 
 // ValidateBasic performs basic validation
 func (msg *MsgAttest) ValidateBasic() error {
-	_, err := sdk.AccAddressFromBech32(msg.Validator)
+	_, err := sdk.ValAddressFromBech32(msg.Validator)
 	if err != nil {
 		return errors.Wrapf(sdkerrors.ErrInvalidAddress, "invalid validator address (%s)", err)
 	}
@@ -87,11 +87,11 @@ func (msg *MsgJoinAttesterSet) Type() string {
 
 // GetSigners returns the expected signers
 func (msg *MsgJoinAttesterSet) GetSigners() []sdk.AccAddress {
-	addr, err := sdk.AccAddressFromBech32(msg.Validator)
+	addr, err := sdk.ValAddressFromBech32(msg.Validator)
 	if err != nil {
 		panic(err)
 	}
-	return []sdk.AccAddress{addr}
+	return []sdk.AccAddress{sdk.AccAddress(addr)}
 }
 
 // GetSignBytes returns the bytes for signing
@@ -102,7 +102,7 @@ func (msg *MsgJoinAttesterSet) GetSignBytes() []byte {
 
 // ValidateBasic performs basic validation
 func (msg *MsgJoinAttesterSet) ValidateBasic() error {
-	_, err := sdk.AccAddressFromBech32(msg.Validator)
+	_, err := sdk.ValAddressFromBech32(msg.Validator)
 	if err != nil {
 		return errors.Wrapf(sdkerrors.ErrInvalidAddress, "invalid validator address (%s)", err)
 	}
@@ -129,11 +129,11 @@ func (msg *MsgLeaveAttesterSet) Type() string {
 
 // GetSigners returns the expected signers
 func (msg *MsgLeaveAttesterSet) GetSigners() []sdk.AccAddress {
-	addr, err := sdk.AccAddressFromBech32(msg.Validator)
+	addr, err := sdk.ValAddressFromBech32(msg.Validator)
 	if err != nil {
 		panic(err)
 	}
-	return []sdk.AccAddress{addr}
+	return []sdk.AccAddress{sdk.AccAddress(addr)}
 }
 
 // GetSignBytes returns the bytes for signing
@@ -144,7 +144,7 @@ func (msg *MsgLeaveAttesterSet) GetSignBytes() []byte {
 
 // ValidateBasic performs basic validation
 func (msg *MsgLeaveAttesterSet) ValidateBasic() error {
-	_, err := sdk.AccAddressFromBech32(msg.Validator)
+	_, err := sdk.ValAddressFromBech32(msg.Validator)
 	if err != nil {
 		return errors.Wrapf(sdkerrors.ErrInvalidAddress, "invalid validator address (%s)", err)
 	}

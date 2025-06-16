@@ -27,6 +27,8 @@ var _ types.MsgServer = msgServer{}
 func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.MsgAttestResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
+	var index uint16
+
 	if !k.IsCheckpointHeight(ctx, msg.Height) {
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "height %d is not a checkpoint", msg.Height)
 	}
@@ -35,7 +37,8 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 		return nil, errors.Wrapf(sdkerrors.ErrUnauthorized, "validator %s not in attester set", msg.Validator)
 	}
 
-	index, found := k.GetValidatorIndex(ctx, msg.Validator)
+	var found bool
+	index, found = k.GetValidatorIndex(ctx, msg.Validator)
 	if !found {
 		return nil, errors.Wrapf(sdkerrors.ErrNotFound, "validator index not found for %s", msg.Validator)
 	}
@@ -123,10 +126,10 @@ func (k msgServer) JoinAttesterSet(goCtx context.Context, msg *types.MsgJoinAtte
 	if !validator.IsBonded() {
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator must be bonded to join attester set")
 	}
-
 	if k.IsInAttesterSet(ctx, msg.Validator) {
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator already in attester set")
 	}
+
 	// TODO (Alex): the valset should be updated at the end of an epoch only
 	if err := k.SetAttesterSetMember(ctx, msg.Validator); err != nil {
 		return nil, errors.Wrap(err, "failed to set attester set member")
@@ -138,7 +141,7 @@ func (k msgServer) JoinAttesterSet(goCtx context.Context, msg *types.MsgJoinAtte
 			sdk.NewAttribute("validator", msg.Validator),
 		),
 	)
-
+	k.Logger(ctx).Info("+++ joined attester set", "validator", msg.Validator)
 	return &types.MsgJoinAttesterSetResponse{}, nil
 }
 

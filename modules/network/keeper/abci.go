@@ -135,13 +135,13 @@ func (k Keeper) processEpochEnd(ctx sdk.Context, epoch uint64) error {
 			// todo (Alex): show we really fail?
 			//return fmt.Errorf("no checkpoints achieved quorum in epoch: %d", epoch)
 			k.Logger(ctx).Info("No checkpoints achieved quorum in epoch", "epoch", epoch)
-			return nil
 		}
 	}
 
-	if err := k.PruneOldBitmaps(ctx, epoch); err != nil {
-		return fmt.Errorf("pruning old data at epoch %d: %w", epoch, err)
-	}
+	// todo (Alex): find a way to prune only bitmaps that are not used anymore
+	//if err := k.PruneOldBitmaps(ctx, epoch); err != nil {
+	//	return fmt.Errorf("pruning old data at epoch %d: %w", epoch, err)
+	//}
 
 	if err := k.BuildValidatorIndexMap(ctx); err != nil {
 		return fmt.Errorf("rebuilding validator index map at epoch %d: %w", epoch, err)

@@ -2,8 +2,11 @@ package adapter
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"cosmossdk.io/log"
@@ -84,7 +87,8 @@ type Adapter struct {
 	Logger  log.Logger
 	metrics *Metrics
 
-	blockFilter BlockFilter
+	blockFilter   BlockFilter
+	stackedEvents []StackedEvent
 }
 
 // NewABCIExecutor creates a new Adapter instance that implements the go-execution.Executor interface.
@@ -255,7 +259,7 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 		InitialHeight:   int64(initialHeight),
 	})
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("app initialize chain: %w", err)
 	}
 
 	s := &cmtstate.State{}
@@ -268,7 +272,7 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 
 	vals, err := cmttypes.PB2TM.ValidatorUpdates(res.Validators)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("validator updates: %w", err)
 	}
 
 	nValSet := cmttypes.NewValidatorSet(vals)
@@ -362,6 +366,11 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, err
 	}
 
+	for i, tx := range txs {
+		sum256 := sha256.Sum256(tx)
+		a.Logger.Info("+++ processed TX", "hash", strings.ToUpper(hex.EncodeToString(sum256[:])), "result", fbResp.TxResults[i].Code, "log", fbResp.TxResults[i].Log, "height", blockHeight)
+	}
+
 	s.AppHash = fbResp.AppHash
 	s.LastBlockHeight = int64(blockHeight)
 
@@ -443,39 +452,43 @@ func (a *Adapter) ExecuteTxs(
 	if err != nil {
 		return nil, 0, err
 	}
-	if a.blockFilter.IsPublishable(ctx, int64(blockHeight)) {
-		cmtTxs := make(cmttypes.Txs, len(txs))
-		for i := range txs {
-			cmtTxs[i] = txs[i]
-		}
+	cmtTxs := make(cmttypes.Txs, len(txs))
+	for i := range txs {
+		cmtTxs[i] = txs[i]
+	}
 
-		// if blockheight is 0, we create a signed last commit.
-		if blockHeight == 0 {
-			lastCommit.Signatures = []cmttypes.CommitSig{
-				{
-					BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-					ValidatorAddress: s.Validators.Proposer.Address,
-					Timestamp:        time.Now().UTC(),
-					Signature:        []byte{},
-				},
-			}
+	// if blockheight is 0, we create a signed last commit.
+	if blockHeight == 0 {
+		lastCommit.Signatures = []cmttypes.CommitSig{
+			{
+				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+				ValidatorAddress: s.Validators.Proposer.Address,
+				Timestamp:        time.Now().UTC(),
+				Signature:        []byte{},
+			},
 		}
+	}
 
-		block := s.MakeBlock(int64(blockHeight), cmtTxs, lastCommit, nil, s.Validators.Proposer.Address)
+	block := s.MakeBlock(int64(blockHeight), cmtTxs, lastCommit, nil, s.Validators.Proposer.Address)
 
-		currentBlockID := cmttypes.BlockID{
-			Hash:          block.Hash(),
-			PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: block.DataHash},
+	currentBlockID := cmttypes.BlockID{
+		Hash:          block.Hash(),
+		PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: block.DataHash},
+	}
+
+	// save the finalized block response
+	if err := a.Store.SaveBlockResponse(ctx, blockHeight, fbResp); err != nil {
+		return nil, 0, fmt.Errorf("failed to save block response: %w", err)
+	}
+	a.stackBlockCommitEvents(currentBlockID, block, fbResp, validatorUpdates)
+	if a.blockFilter.IsPublishable(ctx, int64(header.Height())) {
+		if err := a.publishQueuedBlockEvents(ctx, int64(header.Height())); err != nil {
+			return nil, 0, err
 		}
-
-		if err := fireEvents(a.EventBus, block, currentBlockID, fbResp, validatorUpdates); err != nil {
-			a.Logger.Error("failed to fire events", "err", err)
-		}
-
-		// save the finalized block response
-		if err := a.Store.SaveBlockResponse(ctx, blockHeight, fbResp); err != nil {
-			return nil, 0, fmt.Errorf("failed to save block response: %w", err)
-		}
+	}
+	// save the finalized block response
+	if err := a.Store.SaveBlockResponse(ctx, blockHeight, fbResp); err != nil {
+		return nil, 0, fmt.Errorf("failed to save block response: %w", err)
 	}
 	a.Logger.Info("block executed successfully", "height", blockHeight, "appHash", fmt.Sprintf("%X", fbResp.AppHash))
 	return fbResp.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
@@ -599,6 +612,28 @@ func cometCommitToABCICommitInfo(commit *cmttypes.Commit) abci.CommitInfo {
 	}
 }
 
+type StackedEvent struct {
+	blockID          cmttypes.BlockID
+	block            *cmttypes.Block
+	abciResponse     *abci.ResponseFinalizeBlock
+	validatorUpdates []*cmttypes.Validator
+}
+
+func (a *Adapter) stackBlockCommitEvents(
+	blockID cmttypes.BlockID,
+	block *cmttypes.Block,
+	abciResponse *abci.ResponseFinalizeBlock,
+	validatorUpdates []*cmttypes.Validator,
+) {
+	// todo (Alex): we need this persisted to recover from restart
+	a.stackedEvents = append(a.stackedEvents, StackedEvent{
+		blockID:          blockID,
+		block:            block,
+		abciResponse:     abciResponse,
+		validatorUpdates: validatorUpdates,
+	})
+}
+
 // GetTxs calls PrepareProposal with the next height from the store and returns the transactions from the ABCI app
 func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 	getTxsStart := time.Now()
@@ -647,5 +682,38 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 // SetFinal handles extra logic once the block has been finalized (posted to DA).
 // For a Cosmos SDK app, this is a no-op we do not need to do anything to mark the block as finalized.
 func (a *Adapter) SetFinal(ctx context.Context, blockHeight uint64) error {
+	return a.publishQueuedBlockEvents(ctx, int64(blockHeight))
+}
+
+func (a *Adapter) publishQueuedBlockEvents(ctx context.Context, persistedHeight int64) error {
+	maxPosReleased := -1
+	for i, v := range a.stackedEvents {
+		h := v.block.Height
+		if h <= persistedHeight && a.blockFilter.IsPublishable(ctx, h) {
+			maxPosReleased = i
+		}
+	}
+	a.Logger.Info("processing stack for soft consensus", "count", len(a.stackedEvents), "soft_consensus", maxPosReleased != -1)
+
+	if maxPosReleased == -1 {
+		return nil
+	}
+	softCommitHeight := a.stackedEvents[maxPosReleased].block.Height
+	for i := 0; i <= maxPosReleased; i++ {
+		// todo (Alex): exit loop when ctx cancelled
+		select {
+		case <-ctx.Done():
+			maxPosReleased = i
+			break
+		default:
+		}
+		v := a.stackedEvents[i]
+		if err := fireEvents(a.EventBus, v.block, v.blockID, v.abciResponse, v.validatorUpdates); err != nil {
+			return fmt.Errorf("fire events: %w", err)
+		}
+		a.Logger.Info("releasing block with soft consensus", "height", v.block.Height, "soft_consensus", softCommitHeight)
+	}
+	a.stackedEvents = a.stackedEvents[maxPosReleased+1:]
+	a.Logger.Info("remaining stack after soft consensus", "count", len(a.stackedEvents), "soft_consensus", softCommitHeight)
 	return nil
 }

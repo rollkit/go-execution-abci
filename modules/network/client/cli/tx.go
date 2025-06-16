@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"strconv"
 
 	"github.com/cosmos/cosmos-sdk/client"
@@ -49,9 +50,9 @@ func CmdAttest() *cobra.Command {
 			}
 
 			vote := []byte(args[1])
-
+			valAddress := sdk.ValAddress(clientCtx.GetFromAddress()).String()
 			msg := types.NewMsgAttest(
-				clientCtx.GetFromAddress().String(),
+				valAddress,
 				height,
 				vote,
 			)
@@ -81,10 +82,8 @@ func CmdJoinAttesterSet() *cobra.Command {
 				return err
 			}
 
-			msg := types.NewMsgJoinAttesterSet(
-				clientCtx.GetFromAddress().String(),
-			)
-
+			valAddress := sdk.ValAddress(clientCtx.GetFromAddress()).String()
+			msg := types.NewMsgJoinAttesterSet(valAddress)
 			if err := msg.ValidateBasic(); err != nil {
 				return err
 			}
@@ -110,9 +109,8 @@ func CmdLeaveAttesterSet() *cobra.Command {
 				return err
 			}
 
-			msg := types.NewMsgLeaveAttesterSet(
-				clientCtx.GetFromAddress().String(),
-			)
+			valAddress := sdk.ValAddress(clientCtx.GetFromAddress()).String()
+			msg := types.NewMsgLeaveAttesterSet(valAddress)
 
 			if err := msg.ValidateBasic(); err != nil {
 				return err

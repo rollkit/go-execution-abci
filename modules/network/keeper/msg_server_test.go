@@ -157,18 +157,21 @@ func (m *MockStakingKeeper) SetValidator(ctx context.Context, validator stakingt
 	return nil
 
 }
-func (m MockStakingKeeper) GetAllValidators(ctx sdk.Context) (validators []stakingtypes.Validator) {
+func (m MockStakingKeeper) GetAllValidators(ctx context.Context) (validators []stakingtypes.Validator, err error) {
 	return slices.SortedFunc(maps.Values(m.activeSet), func(v1 stakingtypes.Validator, v2 stakingtypes.Validator) int {
 		return strings.Compare(v1.OperatorAddress, v2.OperatorAddress)
-	})
+	}), nil
 }
 
-func (m MockStakingKeeper) GetValidator(ctx sdk.Context, addr sdk.ValAddress) (validator stakingtypes.Validator, found bool) {
-	validator, found = m.activeSet[addr.String()]
-	return
+func (m MockStakingKeeper) GetValidator(ctx context.Context, addr sdk.ValAddress) (validator stakingtypes.Validator, err error) {
+	validator, found := m.activeSet[addr.String()]
+	if !found {
+		return validator, sdkerrors.ErrNotFound
+	}
+	return validator, nil
 }
 
-func (m MockStakingKeeper) GetLastValidators(ctx sdk.Context) (validators []stakingtypes.Validator) {
+func (m MockStakingKeeper) GetLastValidators(ctx context.Context) (validators []stakingtypes.Validator, err error) {
 	for _, validator := range m.activeSet {
 		if validator.IsBonded() { // Assuming IsBonded() identifies if a validator is in the last validators
 			validators = append(validators, validator)
@@ -177,6 +180,6 @@ func (m MockStakingKeeper) GetLastValidators(ctx sdk.Context) (validators []stak
 	return
 }
 
-func (m MockStakingKeeper) GetLastTotalPower(ctx sdk.Context) math.Int {
-	return math.NewInt(int64(len(m.activeSet)))
+func (m MockStakingKeeper) GetLastTotalPower(ctx context.Context) (math.Int, error) {
+	return math.NewInt(int64(len(m.activeSet))), nil
 }

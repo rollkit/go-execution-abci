@@ -33,7 +33,7 @@ message MsgAttest {
   option (gogoproto.goproto_getters) = false;
 
   // validator is the address of the validator submitting the attestation
-  string validator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string validator = 1 [(cosmos_proto.scalar) = "cosmos.ValidatorAddressString"];
   
   // height is the checkpoint height being attested
   int64 height = 2;
@@ -52,7 +52,7 @@ message MsgJoinAttesterSet {
   option (gogoproto.goproto_getters) = false;
 
   // validator is the address of the validator joining
-  string validator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string validator = 1 [(cosmos_proto.scalar) = "cosmos.ValidatorAddressString"];
 }
 
 // MsgJoinAttesterSetResponse is the response type for the JoinAttesterSet RPC
@@ -65,7 +65,7 @@ message MsgLeaveAttesterSet {
   option (gogoproto.goproto_getters) = false;
 
   // validator is the address of the validator leaving
-  string validator = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  string validator = 1 [(cosmos_proto.scalar) = "cosmos.ValidatorAddressString"];
 }
 
 // MsgLeaveAttesterSetResponse is the response type for the LeaveAttesterSet RPC

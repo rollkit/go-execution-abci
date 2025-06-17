@@ -3,7 +3,6 @@ package adapter
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"sync"
@@ -12,10 +11,12 @@ import (
 
 	"cosmossdk.io/log"
 	abci "github.com/cometbft/cometbft/abci/types"
+	tmcryptoed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	cmtpubsub "github.com/cometbft/cometbft/libs/pubsub"
 	cmtquery "github.com/cometbft/cometbft/libs/pubsub/query"
 	"github.com/cometbft/cometbft/mempool"
 	cmtypes "github.com/cometbft/cometbft/types"
+	tmtypes "github.com/cometbft/cometbft/types"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	ds "github.com/ipfs/go-datastore"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -85,18 +86,20 @@ func TestExecuteFiresEvents(t *testing.T) {
 			adapter.MempoolIDs = newMempoolIDs()
 			adapter.Mempool = &mempool.NopMempool{}
 
+			var cometBftPubKey tmcryptoed25519.PubKey
 			privKey, pubKey, err := crypto.GenerateEd25519Key(nil)
 			require.NoError(t, err)
 
+			// mimic cometbft validator set settings\
+			// otherwise .Address is 32 bytes long while cometbft expects 20 bytes
 			pubKeyRaw, err := pubKey.Raw()
 			require.NoError(t, err)
-
-			pubKeySha := sha256.Sum256(pubKeyRaw)
-			address := pubKeySha[:]
+			cometBftPubKey = pubKeyRaw
+			val := tmtypes.NewValidator(cometBftPubKey, 1)
 
 			header := types.Header{
 				BaseHeader:      types.BaseHeader{Height: 2, Time: uint64(time.Now().UnixNano())},
-				ProposerAddress: address,
+				ProposerAddress: val.Address,
 				AppHash:         []byte("apphash1"),
 			}
 
@@ -107,12 +110,11 @@ func TestExecuteFiresEvents(t *testing.T) {
 			require.NoError(t, err)
 			sigT := types.Signature(sig)
 
+			signer, err := types.NewSigner(pubKey)
+			require.NoError(t, err)
 			signedHeader := &types.SignedHeader{
-				Header: header,
-				Signer: types.Signer{
-					Address: address,
-					PubKey:  pubKey,
-				},
+				Header:    header,
+				Signer:    signer,
 				Signature: sig,
 			}
 			require.NoError(t, adapter.RollkitStore.SaveBlockData(ctx, signedHeader, &types.Data{Txs: make(types.Txs, 0)}, &sigT))

@@ -11,6 +11,7 @@ import (
 
 	"cosmossdk.io/log"
 	abci "github.com/cometbft/cometbft/abci/types"
+	tmcryptoed25519 "github.com/cometbft/cometbft/crypto/ed25519"
 	cmtpubsub "github.com/cometbft/cometbft/libs/pubsub"
 	cmtquery "github.com/cometbft/cometbft/libs/pubsub/query"
 	"github.com/cometbft/cometbft/mempool"
@@ -22,11 +23,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/rollkit/rollkit/types"
+
+	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
 )
 
 func TestExecuteFiresEvents(t *testing.T) {
-	t.Skip()
-
 	timestamp := time.Now()
 	myTxs := [][]byte{{0x01}, {0x02}}
 	myExecResult := []*abci.ExecTxResult{{Code: 0, Data: []byte{0}}, {Code: 0, Data: []byte{1}}}
@@ -85,26 +86,38 @@ func TestExecuteFiresEvents(t *testing.T) {
 			adapter.MempoolIDs = newMempoolIDs()
 			adapter.Mempool = &mempool.NopMempool{}
 
-			_, pubKey, err := crypto.GenerateEd25519Key(nil)
+			var cometBftPubKey tmcryptoed25519.PubKey
+			privKey, pubKey, err := crypto.GenerateEd25519Key(nil)
 			require.NoError(t, err)
 
-			address, err := pubKey.Raw()
+			// mimic cometbft validator set settings\
+			// otherwise .Address is 32 bytes long while cometbft expects 20 bytes
+			pubKeyRaw, err := pubKey.Raw()
+			require.NoError(t, err)
+			cometBftPubKey = pubKeyRaw
+			val := cmtypes.NewValidator(cometBftPubKey, 1)
+
+			header := types.Header{
+				BaseHeader:      types.BaseHeader{Height: 2, Time: uint64(time.Now().UnixNano())},
+				ProposerAddress: val.Address,
+				AppHash:         []byte("apphash1"),
+			}
+
+			headerBz, err := cometcompat.PayloadProvider()(&header)
 			require.NoError(t, err)
 
-			var sig types.Signature = make([]byte, 32)
+			sig, err := privKey.Sign(headerBz)
+			require.NoError(t, err)
+			sigT := types.Signature(sig)
+
+			signer, err := types.NewSigner(pubKey)
+			require.NoError(t, err)
 			signedHeader := &types.SignedHeader{
-				Header: types.Header{
-					BaseHeader:      types.BaseHeader{Height: 2, Time: uint64(time.Now().UnixNano())},
-					ProposerAddress: address,
-					AppHash:         []byte("apphash1"),
-				},
-				Signer: types.Signer{
-					Address: address,
-					PubKey:  pubKey,
-				},
+				Header:    header,
+				Signer:    signer,
 				Signature: sig,
 			}
-			require.NoError(t, adapter.RollkitStore.SaveBlockData(ctx, signedHeader, &types.Data{Txs: make(types.Txs, 0)}, &sig))
+			require.NoError(t, adapter.RollkitStore.SaveBlockData(ctx, signedHeader, &types.Data{Txs: make(types.Txs, 0)}, &sigT))
 			require.NoError(t, adapter.Store.SaveState(ctx, stateFixture()))
 
 			// when

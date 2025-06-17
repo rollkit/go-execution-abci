@@ -27,17 +27,23 @@ var _ types.MsgServer = msgServer{}
 func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.MsgAttestResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
-	if !k.IsCheckpointHeight(ctx, msg.Height) {
-		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "height %d is not a checkpoint", msg.Height)
-	}
+	var index uint16
 
-	if !k.IsInAttesterSet(ctx, msg.Validator) {
-		return nil, errors.Wrapf(sdkerrors.ErrUnauthorized, "validator %s not in attester set", msg.Validator)
-	}
+	if !xtesting {
 
-	index, found := k.GetValidatorIndex(ctx, msg.Validator)
-	if !found {
-		return nil, errors.Wrapf(sdkerrors.ErrNotFound, "validator index not found for %s", msg.Validator)
+		if !k.IsCheckpointHeight(ctx, msg.Height) {
+			return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "height %d is not a checkpoint", msg.Height)
+		}
+
+		if !k.IsInAttesterSet(ctx, msg.Validator) {
+			return nil, errors.Wrapf(sdkerrors.ErrUnauthorized, "validator %s not in attester set", msg.Validator)
+		}
+
+		var found bool
+		index, found = k.GetValidatorIndex(ctx, msg.Validator)
+		if !found {
+			return nil, errors.Wrapf(sdkerrors.ErrNotFound, "validator index not found for %s", msg.Validator)
+		}
 	}
 
 	// todo (Alex): we need to set a limit to not have validators attest old blocks. Also make sure that this relates with
@@ -106,27 +112,31 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 	return &types.MsgAttestResponse{}, nil
 }
 
+var xtesting = true
+
 // JoinAttesterSet handles MsgJoinAttesterSet
 func (k msgServer) JoinAttesterSet(goCtx context.Context, msg *types.MsgJoinAttesterSet) (*types.MsgJoinAttesterSetResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
-	valAddr, err := sdk.ValAddressFromBech32(msg.Validator)
-	if err != nil {
-		return nil, errors.Wrapf(sdkerrors.ErrInvalidAddress, "invalid validator address: %s", err)
+	if !xtesting { // accept everything
+		valAddr, err := sdk.ValAddressFromBech32(msg.Validator)
+		if err != nil {
+			return nil, errors.Wrapf(sdkerrors.ErrInvalidAddress, "invalid validator address: %s", err)
+		}
+
+		validator, err := k.stakingKeeper.GetValidator(ctx, valAddr)
+		if err != nil {
+			return nil, err
+		}
+
+		if !validator.IsBonded() {
+			return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator must be bonded to join attester set")
+		}
+		if k.IsInAttesterSet(ctx, msg.Validator) {
+			return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator already in attester set")
+		}
 	}
 
-	validator, err := k.stakingKeeper.GetValidator(ctx, valAddr)
-	if err != nil {
-		return nil, err
-	}
-
-	if !validator.IsBonded() {
-		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator must be bonded to join attester set")
-	}
-
-	if k.IsInAttesterSet(ctx, msg.Validator) {
-		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator already in attester set")
-	}
 	// TODO (Alex): the valset should be updated at the end of an epoch only
 	if err := k.SetAttesterSetMember(ctx, msg.Validator); err != nil {
 		return nil, errors.Wrap(err, "failed to set attester set member")
@@ -138,7 +148,7 @@ func (k msgServer) JoinAttesterSet(goCtx context.Context, msg *types.MsgJoinAtte
 			sdk.NewAttribute("validator", msg.Validator),
 		),
 	)
-
+	k.Logger(ctx).Info("+++ joined attester set", "validator", msg.Validator)
 	return &types.MsgJoinAttesterSetResponse{}, nil
 }
 

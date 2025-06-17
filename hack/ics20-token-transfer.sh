@@ -11,8 +11,8 @@ ROLLKIT_RPC="http://localhost:26657"
 GAIA_DENOM="stake"
 ROLLKIT_DENOM="stake"
 
-# Validator account (same as in other scripts)
-VALIDATOR="validator"
+GAIA_KEY_NAME="bob"
+ROLLKIT_KEY_NAME="carl"
 
 # IBC channel information
 CHANNEL_ID=""
@@ -49,12 +49,20 @@ fi
 log_success "gmd installed"
 
 # Get validator addresses
-log_info "Getting validator addresses..."
-VALIDATOR_ADDRESS_GAIA=$($GAIAD_BIN keys show $VALIDATOR -a --keyring-backend test --home "$CURRENT_DIR/testnet")
-VALIDATOR_ADDRESS_ROLLKIT=$($GMD_BIN keys show $VALIDATOR -a --keyring-backend test)
+log_info "Getting user addresses..."
+USER_ADDRESS_GAIA=$($GAIAD_BIN keys show $GAIA_KEY_NAME -a --keyring-backend test --home "$CURRENT_DIR/testnet")
+USER_ADDRESS_ROLLKIT=$($GMD_BIN keys show $ROLLKIT_KEY_NAME -a --keyring-backend test)
 
-log_info "Gaia validator address: $VALIDATOR_ADDRESS_GAIA"
-log_info "Rollkit validator address: $VALIDATOR_ADDRESS_ROLLKIT"
+log_info "Gaia user address: $USER_ADDRESS_GAIA"
+log_info "Rollkit user address: $USER_ADDRESS_ROLLKIT"
+
+# Check initial balances
+log_info "Checking initial balances..."
+log_info "Gaia $GAIA_KEY_NAME balance:"
+$GAIAD_BIN q bank balances $USER_ADDRESS_GAIA --node $GAIA_RPC --home "$CURRENT_DIR/testnet"
+
+log_info "Rollkit $ROLLKIT_KEY_NAME balance:"
+$GMD_BIN q bank balances $USER_ADDRESS_ROLLKIT --node $ROLLKIT_RPC
 
 # Get channel ID
 log_info "Getting IBC channel ID..."
@@ -68,19 +76,11 @@ fi
 
 log_info "Using IBC channel: $CHANNEL_ID"
 
-# Check initial balances
-log_info "Checking initial balances..."
-log_info "Gaia validator balance:"
-$GAIAD_BIN q bank balances $VALIDATOR_ADDRESS_GAIA --node $GAIA_RPC --home "$CURRENT_DIR/testnet"
-
-log_info "Rollkit validator balance:"
-$GMD_BIN q bank balances $VALIDATOR_ADDRESS_ROLLKIT --node $ROLLKIT_RPC
-
 # Transfer Rollkit tokens to Gaia
-ROLLKIT_TRANSFER_AMOUNT="10000000"
+ROLLKIT_TRANSFER_AMOUNT="101"
 log_info "Transferring ${ROLLKIT_TRANSFER_AMOUNT}${ROLLKIT_DENOM} from Rollkit to Gaia..."
-TX_HASH=$($GMD_BIN tx ibc-transfer transfer $TRANSFER_PORT $CHANNEL_ID $VALIDATOR_ADDRESS_GAIA ${ROLLKIT_TRANSFER_AMOUNT}${ROLLKIT_DENOM} \
-    --from $VALIDATOR \
+TX_HASH=$($GMD_BIN tx ibc-transfer transfer $TRANSFER_PORT $CHANNEL_ID $USER_ADDRESS_GAIA ${ROLLKIT_TRANSFER_AMOUNT}${ROLLKIT_DENOM} \
+    --from ${ROLLKIT_KEY_NAME} \
     --chain-id $ROLLKIT_CHAIN_ID \
     --node $ROLLKIT_RPC \
     --keyring-backend test \
@@ -94,17 +94,17 @@ sleep 10
 
 # Check balances after Rollkit to Gaia transfer
 log_info "Checking balances after Rollkit to Gaia transfer..."
-log_info "Gaia validator balance (should show IBC tokens):"
-$GAIAD_BIN q bank balances $VALIDATOR_ADDRESS_GAIA --node $GAIA_RPC --home "$CURRENT_DIR/testnet"
+log_info "Gaia user balance (should show IBC tokens):"
+$GAIAD_BIN q bank balances $USER_ADDRESS_GAIA --node $GAIA_RPC --home "$CURRENT_DIR/testnet"
 
-log_info "Rollkit validator balance:"
-$GMD_BIN q bank balances $VALIDATOR_ADDRESS_ROLLKIT --node $ROLLKIT_RPC
+log_info "Rollkit user balance:"
+$GMD_BIN q bank balances $USER_ADDRESS_ROLLKIT --node $ROLLKIT_RPC
 
 # Transfer tokens from Gaia to Rollkit
-TRANSFER_AMOUNT="10000000"
+TRANSFER_AMOUNT="102"
 log_info "Transferring $TRANSFER_AMOUNT$GAIA_DENOM from Gaia to Rollkit..."
-TX_HASH=$($GAIAD_BIN tx ibc-transfer transfer $TRANSFER_PORT $CHANNEL_ID $VALIDATOR_ADDRESS_ROLLKIT ${TRANSFER_AMOUNT}${GAIA_DENOM} \
-    --from $VALIDATOR \
+TX_HASH=$($GAIAD_BIN tx ibc-transfer transfer $TRANSFER_PORT $CHANNEL_ID $USER_ADDRESS_ROLLKIT ${TRANSFER_AMOUNT}${GAIA_DENOM} \
+    --from ${GAIA_KEY_NAME} \
     --chain-id $GAIA_CHAIN_ID \
     --node $GAIA_RPC \
     --keyring-backend test \
@@ -119,10 +119,16 @@ sleep 10
 
 # Check balances after transfer to Rollkit
 log_info "Checking balances after transfer to Rollkit..."
-log_info "Gaia validator balance:"
-$GAIAD_BIN q bank balances $VALIDATOR_ADDRESS_GAIA --node $GAIA_RPC --home "$CURRENT_DIR/testnet"
+log_info "Gaia user balance:"
+$GAIAD_BIN q bank balances $USER_ADDRESS_GAIA --node $GAIA_RPC --home "$CURRENT_DIR/testnet"
 
-log_info "Rollkit validator balance (should show IBC tokens):"
-$GMD_BIN q bank balances $VALIDATOR_ADDRESS_ROLLKIT --node $ROLLKIT_RPC
+log_info "Rollkit user balance (should show IBC tokens):"
+$GMD_BIN q bank balances $USER_ADDRESS_ROLLKIT --node $ROLLKIT_RPC
+
+
+sleep 16
+
+log_info "Rollkit user balance (should show IBC tokens):"
+$GMD_BIN q bank balances $USER_ADDRESS_ROLLKIT --node $ROLLKIT_RPC
 
 log_success "ICS20 token transfer test completed!"

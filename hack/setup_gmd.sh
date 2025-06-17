@@ -4,14 +4,34 @@ CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Hardcoded mnemonic for validator account (igual que en Wordled)
 VALIDATOR_MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
+ATTESTER_MNEMONIC="tennis sponsor brick almost coyote soup rib wisdom warm bean onion tray devote pretty crime grid rough boil wear december travel inch work note"
+RELAYER_MNEMONIC="reject camp lock magic dragon degree loop ignore quantum verify invest primary object afraid crane unveil parrot jelly rubber risk mirror globe torch category"
+USER_MNEMONIC="sport head real antique sad expect ignore feature claim manual heavy mouse coil rebuild police flag robust picture milk symptom suffer chuckle worry virus"
+
 
 echo "$VALIDATOR_MNEMONIC" | gmd keys add validator \
   --keyring-backend test \
   --recover > /dev/null 2>&1
 
+echo "$ATTESTER_MNEMONIC" | gmd keys add attester \
+  --keyring-backend test \
+  --recover > /dev/null 2>&1
+
+echo "$RELAYER_MNEMONIC" | gmd keys add relayer \
+  --keyring-backend test \
+  --recover > /dev/null 2>&1
+
+echo "$USER_MNEMONIC" | gmd keys add carl \
+  --keyring-backend test \
+  --recover > /dev/null 2>&1
+
 gmd genesis add-genesis-account validator "10000000000000000stake" --keyring-backend test
+gmd genesis add-genesis-account attester "10000000000000000stake" --keyring-backend test
+gmd genesis add-genesis-account relayer "10000000000000000stake" --keyring-backend test
+gmd genesis add-genesis-account carl "10000000000000000stake" --keyring-backend test
 exit 0
 
+# TODO: replace rollkit init with the following?
 
 
 gmd init --chain-id "$CHAIN_ID" "$MONIKER"

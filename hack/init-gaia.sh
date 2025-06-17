@@ -11,6 +11,8 @@ log() {
 
 # Hardcoded mnemonic for validator account (igual que en Wordled)
 VALIDATOR_MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
+BOB_MNEMONIC="rack argue disorder flame appear broom smile effort one rubber buffalo suspect tool devote zebra between inhale trigger brief possible parrot nation expose place"
+RELAYER_MNEMONIC="reject camp lock magic dragon degree loop ignore quantum verify invest primary object afraid crane unveil parrot jelly rubber risk mirror globe torch category"
 
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GAIA_HOME=${1:-"${CURRENT_DIR}/testnet"}
@@ -40,10 +42,20 @@ echo "$VALIDATOR_MNEMONIC" | "$GAIAD_BIN" keys add validator \
   --keyring-backend test \
   --home "$GAIA_HOME" \
   --recover > /dev/null 2>&1
+echo "$BOB_MNEMONIC" | "$GAIAD_BIN" keys add bob \
+  --keyring-backend test \
+  --home "$GAIA_HOME" \
+  --recover > /dev/null 2>&1
+echo "$RELAYER_MNEMONIC" | "$GAIAD_BIN" keys add relayer \
+  --keyring-backend test \
+  --home "$GAIA_HOME" \
+  --recover > /dev/null 2>&1
 
 # 3. Add account to genesis
 log "34" "📝" "Adding account to genesis..."
 "$GAIAD_BIN" genesis add-genesis-account validator 10000000000000000stake --keyring-backend test --home "$GAIA_HOME"
+"$GAIAD_BIN" genesis add-genesis-account bob 10000000000000000stake --keyring-backend test --home "$GAIA_HOME"
+"$GAIAD_BIN" genesis add-genesis-account relayer 10000000000000000stake --keyring-backend test --home "$GAIA_HOME"
 
 # 4. Generate gentx
 log "33" "📜" "Creating validator transaction..."

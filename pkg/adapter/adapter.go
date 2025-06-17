@@ -84,7 +84,8 @@ type Adapter struct {
 	Logger  log.Logger
 	metrics *Metrics
 
-	blockFilter BlockFilter
+	blockFilter   BlockFilter
+	stackedEvents []StackedEvent
 }
 
 // NewABCIExecutor creates a new Adapter instance that implements the go-execution.Executor interface.
@@ -473,54 +474,56 @@ func (a *Adapter) ExecuteTxs(
 	if err != nil {
 		return nil, 0, err
 	}
-	if a.blockFilter.IsPublishable(ctx, int64(blockHeight)) {
-		cmtTxs := make(cmttypes.Txs, len(txs))
-		for i := range txs {
-			cmtTxs[i] = txs[i]
+	cmtTxs := make(cmttypes.Txs, len(txs))
+	for i := range txs {
+		cmtTxs[i] = txs[i]
+	}
+
+	commit := &cmttypes.Commit{
+		Height: int64(blockHeight),
+		Round:  0,
+		Signatures: []cmttypes.CommitSig{
+			{
+				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+				ValidatorAddress: s.Validators.Proposer.Address,
+				Timestamp:        time.Now().UTC(),
+				Signature:        []byte{},
+			},
+		},
+	}
+
+	if blockHeight > 1 {
+		header, data, err := a.RollkitStore.GetBlockData(ctx, blockHeight-1)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to get previous block data: %w", err)
 		}
 
-		commit := &cmttypes.Commit{
-			Height: int64(blockHeight),
-			Round:  0,
+		commit = &cmttypes.Commit{
+			Height:  int64(header.Height()),
+			Round:   0,
+			BlockID: cmttypes.BlockID{Hash: bytes.HexBytes(header.Hash()), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: bytes.HexBytes(data.Hash())}},
 			Signatures: []cmttypes.CommitSig{
 				{
 					BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-					ValidatorAddress: s.Validators.Proposer.Address,
-					Timestamp:        time.Now().UTC(),
-					Signature:        []byte{},
+					ValidatorAddress: cmttypes.Address(header.ProposerAddress),
+					Timestamp:        header.Time(),
+					Signature:        header.Signature,
 				},
 			},
 		}
-
-		if blockHeight > 1 {
-			header, data, err := a.RollkitStore.GetBlockData(ctx, blockHeight-1)
-			if err != nil {
-				return nil, 0, fmt.Errorf("failed to get previous block data: %w", err)
-			}
-
-			commit = &cmttypes.Commit{
-				Height:  int64(header.Height()),
-				Round:   0,
-				BlockID: cmttypes.BlockID{Hash: bytes.HexBytes(header.Hash()), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: bytes.HexBytes(data.Hash())}},
-				Signatures: []cmttypes.CommitSig{
-					{
-						BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-						ValidatorAddress: cmttypes.Address(header.ProposerAddress),
-						Timestamp:        header.Time(),
-						Signature:        header.Signature,
-					},
-				},
-			}
-		}
-
-		block := s.MakeBlock(int64(blockHeight), cmtTxs, commit, nil, s.Validators.Proposer.Address)
-
-		currentBlockID := cmttypes.BlockID{Hash: block.Hash(), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: block.DataHash}}
-
-		fireEvents(a.Logger, a.EventBus, block, currentBlockID, fbResp, validatorUpdates)
-	} else {
-		a.Logger.Info("block is not publishable", "height", blockHeight)
 	}
+
+	block := s.MakeBlock(int64(blockHeight), cmtTxs, commit, nil, s.Validators.Proposer.Address)
+	currentBlockID := cmttypes.BlockID{Hash: block.Hash(), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: block.DataHash}}
+
+	a.stackEndBlockEvents(currentBlockID, block, fbResp, validatorUpdates)
+	if a.blockFilter.IsPublishable(ctx, int64(header.Height())) {
+		if err := a.publishQueuedBlockEvents(ctx, int64(header.Height())); err != nil {
+			panic(err) // todo: nooooo
+		}
+	}
+	// todo (Alex): can we fire an event to notify signers?
+	a.Logger.Info("block is piled for soft consensus", "height", blockHeight)
 
 	a.Logger.Info("block executed successfully", "height", blockHeight, "appHash", fmt.Sprintf("%X", fbResp.AppHash))
 	return fbResp.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
@@ -588,6 +591,28 @@ func fireEvents(
 	}
 }
 
+type StackedEvent struct {
+	blockID          cmttypes.BlockID
+	block            *cmttypes.Block
+	abciResponse     *abci.ResponseFinalizeBlock
+	validatorUpdates []*cmttypes.Validator
+}
+
+func (a *Adapter) stackEndBlockEvents(
+	blockID cmttypes.BlockID,
+	block *cmttypes.Block,
+	abciResponse *abci.ResponseFinalizeBlock,
+	validatorUpdates []*cmttypes.Validator,
+) {
+	// todo (Alex): we need this persisted to recover from restart
+	a.stackedEvents = append(a.stackedEvents, StackedEvent{
+		blockID:          blockID,
+		block:            block,
+		abciResponse:     abciResponse,
+		validatorUpdates: validatorUpdates,
+	})
+}
+
 // GetTxs calls PrepareProposal with the next height from the store and returns the transactions from the ABCI app
 func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 	getTxsStart := time.Now()
@@ -636,6 +661,28 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 // SetFinal handles extra logic once the block has been finalized (posted to DA).
 // For a Cosmos SDK app, this is a no-op we do not need to do anything to mark the block as finalized.
 func (a *Adapter) SetFinal(ctx context.Context, blockHeight uint64) error {
+	return a.publishQueuedBlockEvents(ctx, int64(blockHeight))
+}
+
+func (a *Adapter) publishQueuedBlockEvents(ctx context.Context, persistedHeight int64) error {
+	maxPosReleased := -1
+	for i, v := range a.stackedEvents {
+		h := v.block.Height
+		if h <= persistedHeight && a.blockFilter.IsPublishable(ctx, h) {
+			maxPosReleased = i
+		}
+	}
+	if maxPosReleased == -1 {
+		return nil
+	}
+	softCommitHeight := a.stackedEvents[maxPosReleased].block.Height
+	for i := 0; i <= maxPosReleased; i++ {
+		v := a.stackedEvents[i]
+		fireEvents(a.Logger, a.EventBus, v.block, v.blockID, v.abciResponse, v.validatorUpdates)
+		a.Logger.Info("releasing block with soft consensus", "height", v.block.Height, "soft_consensus", softCommitHeight)
+	}
+	a.stackedEvents = append(a.stackedEvents[:maxPosReleased], a.stackedEvents[maxPosReleased+1:]...)
+	a.Logger.Info("remaining stack after soft consensus", "count", len(a.stackedEvents), "soft_consensus", softCommitHeight)
 	return nil
 }
 

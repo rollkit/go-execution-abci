@@ -14,10 +14,11 @@ WORDLED_GRPC="http://localhost:9090"
 GAIA_DENOM="stake"
 WORDLED_DENOM="stake"
 
-RELAYER_WALLET="validator"  # Name of validator account
+RELAYER_WALLET="relayer"  # Name of relayer account
 
 # Hardcoded mnemonic (must match initialization scripts)
-VALIDATOR_MNEMONIC="abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art"
+RELAYER_MNEMONIC="reject camp lock magic dragon degree loop ignore quantum verify invest primary object afraid crane unveil parrot jelly rubber risk mirror globe torch category"
+
 
 # Logging functions
 log_info() {
@@ -101,7 +102,7 @@ log_success "Configuration file generated"
 
 # Import keys to relayer (Hermes) using mnemonic
 TMP_MNEMONIC=$(mktemp)
-echo "$VALIDATOR_MNEMONIC" > "$TMP_MNEMONIC"
+echo "$RELAYER_MNEMONIC" > "$TMP_MNEMONIC"
 
 log_info "Importing key for $GAIA_CHAIN_ID..."
 "$HERMES_BIN" --config "$CONFIG_FILE" keys add --chain "$GAIA_CHAIN_ID" --mnemonic-file "$TMP_MNEMONIC"

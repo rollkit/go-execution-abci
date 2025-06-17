@@ -16,15 +16,15 @@ import (
 	cmtquery "github.com/cometbft/cometbft/libs/pubsub/query"
 	"github.com/cometbft/cometbft/mempool"
 	cmtypes "github.com/cometbft/cometbft/types"
-	tmtypes "github.com/cometbft/cometbft/types"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 	ds "github.com/ipfs/go-datastore"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
 	"github.com/rollkit/rollkit/types"
+
+	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
 )
 
 func TestExecuteFiresEvents(t *testing.T) {
@@ -95,7 +95,7 @@ func TestExecuteFiresEvents(t *testing.T) {
 			pubKeyRaw, err := pubKey.Raw()
 			require.NoError(t, err)
 			cometBftPubKey = pubKeyRaw
-			val := tmtypes.NewValidator(cometBftPubKey, 1)
+			val := cmtypes.NewValidator(cometBftPubKey, 1)
 
 			header := types.Header{
 				BaseHeader:      types.BaseHeader{Height: 2, Time: uint64(time.Now().UnixNano())},

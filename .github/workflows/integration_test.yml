@@ -255,6 +255,7 @@ jobs:
           celestia-appd genesis gentx validator 100000000utia --fees 1utia --chain-id celestia-local --keyring-backend test
           celestia-appd genesis collect-gentxs
           celestia-appd config set app grpc.enable true
+          sed -i 's/indexer = "null"/indexer = "kv"/' ~/.celestia-app/config/config.toml # enable tx indexing
           celestia-appd start --force-no-bbr --rpc.laddr tcp://0.0.0.0:26654 --rpc.pprof_laddr localhost:6061 --p2p.laddr tcp://0.0.0.0:26653 --grpc.address 0.0.0.0:9091 --log_format=json > celestia.log 2>&1 &
           echo "CELESTIA_PID=$!" >> $GITHUB_ENV
           sleep 5

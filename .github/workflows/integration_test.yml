@@ -345,14 +345,14 @@ jobs:
           CELESTIA_ADDR=$(celestia-appd keys show validator -a --keyring-backend test)
           ./gmd/go/bin/gmd tx ibc-transfer transfer transfer channel-0 $CELESTIA_ADDR 100stake --from carol -y --home ./gmd/.gm
           sleep 10
-          BALANCE=$(celestia-appd query bank balances $CELESTIA_ADDR --output json | jq '.balances[0].amount' -r)
+          BALANCE=$(celestia-appd query bank balances $CELESTIA_ADDR --output json --node http://localhost:26654 | jq '.balances[0].amount' -r)
           echo "Celestia balance after IBC transfer: $BALANCE"
 
       - name: ICS20 Transfer Celestia -> Rollkit
         run: |
           ROLLKIT_ADDR=$(./gmd/go/bin/gmd keys show carol -a --home ./gmd/.gm)
           CELESTIA_ADDR=$(celestia-appd keys show validator -a --keyring-backend test)
-          celestia-appd tx ibc-transfer transfer transfer channel-0 $ROLLKIT_ADDR 100utia --from validator --keyring-backend test -y
+          celestia-appd tx ibc-transfer transfer transfer channel-0 $ROLLKIT_ADDR 100utia --from validator --node http://localhost:26654 --keyring-backend test -y
           sleep 10
           BALANCE=$(./gmd/go/bin/gmd query bank balances $ROLLKIT_ADDR --output json --home ./gmd/.gm | jq '.balances[0].amount' -r)
           echo "Rollkit balance after IBC transfer: $BALANCE"

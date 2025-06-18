@@ -48,7 +48,7 @@ jobs:
       - name: Scaffold Rollkit Chain
         run: |
           # scaffold a new chain
-          ignite scaffold chain gm --no-module --skip-git
+          ignite scaffold chain gm --no-module --skip-git --address-prefix gm
           cd gm
 
           # install rollkit app
@@ -304,7 +304,7 @@ jobs:
           grpc_addr = "http://localhost:9091"
           event_source = { mode = "pull", interval = "1s", max_retries = 4 }
           store_prefix = "ibc"
-          account_prefix = "celestia"
+          account_prefix = "cosmos"
           key_name = "validator"
           gas_price = { price = 3.5, denom = "utia" }
           gas_multiplier = 1.2
@@ -318,7 +318,7 @@ jobs:
           grpc_addr = "http://localhost:9090"
           store_prefix = "ibc"
           event_source = { mode = "pull", interval = "1s", max_retries = 4 }
-          account_prefix = "cosmos"
+          account_prefix = "gm"
           key_name = "carol"
           gas_price = { price = 0.025, denom = "stake" }
           gas_multiplier = 1.2

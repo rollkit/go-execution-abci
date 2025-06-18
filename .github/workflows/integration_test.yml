@@ -276,7 +276,7 @@ jobs:
           sleep 10
           CAROL_ADDRESS=$(./gmd/go/bin/gmd keys show carol -a --home ./gmd/.gm)
           echo "Fund Carol's account ($CAROL_ADDRESS)"
-          ./gmd/go/bin/gmd tx bank send bob $CAROL_ADDRESS 20000stake -y --output json --home ./gmd/.gm
+          ./gmd/go/bin/gmd tx bank send bob $CAROL_ADDRESS 200000stake -y --output json --home ./gmd/.gm
           sleep 5
 
       - name: Configure & Start Hermes Relayer

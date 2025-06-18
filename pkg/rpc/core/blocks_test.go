@@ -24,12 +24,12 @@ import (
 )
 
 func TestBlockSearch_Success(t *testing.T) {
-	t.Skip()
-
+	// Setup mocks
 	mockTxIndexer := new(MockTxIndexer)
 	mockRollkitStore := new(MockRollkitStore)
 	mockApp := new(MockApp)
 	mockBlockIndexer := new(MockBlockIndexer)
+
 	env = &Environment{
 		Adapter: &adapter.Adapter{
 			RollkitStore: mockRollkitStore,
@@ -45,49 +45,105 @@ func TestBlockSearch_Success(t *testing.T) {
 	page := 1
 	perPage := 10
 	orderBy := "asc"
-
 	mockedBlockHeights := []int64{2, 3}
 
 	mockBlockIndexer.On("Search", mock.Anything, mock.AnythingOfType("*query.Query")).Return(mockedBlockHeights, nil)
 
-	header1 := &types.SignedHeader{
+	now := time.Now()
+	chainID := "test-chain"
+
+	// Block 1 (needed for getLastCommit for block 2)
+	header0 := &types.SignedHeader{
 		Header: types.Header{
-			BaseHeader:      types.BaseHeader{Height: 2, Time: uint64(time.Now().UnixNano())},
-			ProposerAddress: []byte("proposer1"),
-			AppHash:         []byte("apphash1"),
+			BaseHeader: types.BaseHeader{
+				Height:  1,
+				Time:    uint64(now.UnixNano()),
+				ChainID: chainID,
+			},
+			ProposerAddress: []byte("proposer0"),
+			AppHash:         []byte("apphash0"),
+			DataHash:        make([]byte, 32),
 		},
+		Signature: types.Signature(make([]byte, 64)),
 	}
-	data1 := &types.Data{
+	data0 := &types.Data{
+		Metadata: &types.Metadata{
+			ChainID: chainID,
+			Height:  1,
+			Time:    uint64(now.UnixNano()),
+		},
 		Txs: make(types.Txs, 0),
 	}
+
 	header2 := &types.SignedHeader{
 		Header: types.Header{
-			BaseHeader:      types.BaseHeader{Height: 3, Time: uint64(time.Now().UnixNano())},
+			BaseHeader: types.BaseHeader{
+				Height:  2,
+				Time:    uint64(now.UnixNano() + int64(time.Second)),
+				ChainID: chainID,
+			},
 			ProposerAddress: []byte("proposer2"),
 			AppHash:         []byte("apphash2"),
+			DataHash:        make([]byte, 32),
 		},
+		Signature: types.Signature(make([]byte, 64)),
 	}
 	data2 := &types.Data{
+		Metadata: &types.Metadata{
+			ChainID: chainID,
+			Height:  2,
+			Time:    uint64(now.UnixNano() + int64(time.Second)),
+		},
 		Txs: make(types.Txs, 0),
 	}
 
-	mockRollkitStore.On("GetBlockData", mock.Anything, uint64(2)).Return(header1, data1, nil)
-	mockRollkitStore.On("GetBlockData", mock.Anything, uint64(3)).Return(header2, data2, nil)
+	header3 := &types.SignedHeader{
+		Header: types.Header{
+			BaseHeader: types.BaseHeader{
+				Height:  3,
+				Time:    uint64(now.UnixNano() + 2*int64(time.Second)),
+				ChainID: chainID,
+			},
+			ProposerAddress: []byte("proposer3"),
+			AppHash:         []byte("apphash3"),
+			DataHash:        make([]byte, 32),
+		},
+		Signature: types.Signature(make([]byte, 64)),
+	}
+	data3 := &types.Data{
+		Metadata: &types.Metadata{
+			ChainID: chainID,
+			Height:  3,
+			Time:    uint64(now.UnixNano() + 2*int64(time.Second)),
+		},
+		Txs: make(types.Txs, 0),
+	}
 
+	// Mock GetBlockData calls (including the ones needed for getLastCommit)
+	mockRollkitStore.On("GetBlockData", mock.Anything, uint64(1)).Return(header0, data0, nil) // For getLastCommit of block 2
+	mockRollkitStore.On("GetBlockData", mock.Anything, uint64(2)).Return(header2, data2, nil) // For block 2 and getLastCommit of block 3
+	mockRollkitStore.On("GetBlockData", mock.Anything, uint64(3)).Return(header3, data3, nil) // For block 3
+
+	// Execute the test
 	result, err := BlockSearch(ctx, query, &page, &perPage, orderBy)
+
+	// Verify results
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Len(t, result.Blocks, 2)
 	assert.Equal(t, 2, result.TotalCount)
 
-	assert.Equal(t, header1.BaseHeader.Height, uint64(result.Blocks[0].Block.Height))
-	assert.Equal(t, []byte(header1.AppHash), []byte(result.Blocks[0].Block.AppHash))
-	assert.Equal(t, []byte(header1.ProposerAddress), []byte(result.Blocks[0].Block.ProposerAddress))
+	// Verify first block (height 2)
+	assert.Equal(t, header2.BaseHeader.Height, uint64(result.Blocks[0].Block.Height))
+	assert.Equal(t, []byte(header2.AppHash), []byte(result.Blocks[0].Block.AppHash))
+	assert.Equal(t, []byte(header2.ProposerAddress), []byte(result.Blocks[0].Block.ProposerAddress))
 
-	assert.Equal(t, header2.BaseHeader.Height, uint64(result.Blocks[1].Block.Height))
-	assert.Equal(t, []byte(header2.AppHash), []byte(result.Blocks[1].Block.AppHash))
-	assert.Equal(t, []byte(header2.ProposerAddress), []byte(result.Blocks[1].Block.ProposerAddress))
+	// Verify second block (height 3)
+	assert.Equal(t, header3.BaseHeader.Height, uint64(result.Blocks[1].Block.Height))
+	assert.Equal(t, []byte(header3.AppHash), []byte(result.Blocks[1].Block.AppHash))
+	assert.Equal(t, []byte(header3.ProposerAddress), []byte(result.Blocks[1].Block.ProposerAddress))
 
+	// Verify all mocks were called as expected
 	mockTxIndexer.AssertExpectations(t)
 	mockBlockIndexer.AssertExpectations(t)
 	mockRollkitStore.AssertExpectations(t)
@@ -97,7 +153,6 @@ func TestBlockSearch_Success(t *testing.T) {
 func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing.T) {
 	require := require.New(t)
 
-	// Setup test environment
 	env = setupTestEnvironment()
 	chainID := "test-chain"
 	now := time.Now()
@@ -115,7 +170,6 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 		Proposer:   cmttypes.NewValidator(cmtPubKey, 1),
 	}
 
-	// Light client state
 	var trustedHeader cmttypes.SignedHeader
 	var isFirstBlock = true
 

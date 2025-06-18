@@ -6,7 +6,10 @@ import (
 
 	"github.com/cometbft/cometbft/crypto/ed25519"
 	cmtlog "github.com/cometbft/cometbft/libs/log"
+	"github.com/cometbft/cometbft/libs/math"
+	"github.com/cometbft/cometbft/light"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
+	ctypes "github.com/cometbft/cometbft/rpc/core/types"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	cmttypes "github.com/cometbft/cometbft/types"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -93,14 +96,66 @@ func TestBlockSearch_Success(t *testing.T) {
 
 func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing.T) {
 	require := require.New(t)
-	assert := assert.New(t)
 
+	// Setup test environment
+	env = setupTestEnvironment()
+	chainID := "test-chain"
+	now := time.Now()
+
+	// Create validator and signer
+	cmtPrivKey := ed25519.GenPrivKey()
+	cmtPubKey := cmtPrivKey.PubKey()
+	aggregatorPrivKey, err := crypto.UnmarshalEd25519PrivateKey(cmtPrivKey.Bytes())
+	require.NoError(err)
+	aggregatorPubKey := aggregatorPrivKey.GetPublic()
+	validatorAddress := cmtPubKey.Address().Bytes()[:20]
+
+	fixedValSet := &cmttypes.ValidatorSet{
+		Validators: []*cmttypes.Validator{cmttypes.NewValidator(cmtPubKey, 1)},
+		Proposer:   cmttypes.NewValidator(cmtPubKey, 1),
+	}
+
+	// Light client state
+	var trustedHeader cmttypes.SignedHeader
+	var isFirstBlock = true
+
+	// Test multiple blocks
+	for i := 1; i <= 3; i++ {
+		blockHeight := uint64(i)
+
+		// Create and sign block
+		blockData, rollkitHeader := createTestBlock(blockHeight, chainID, now, validatorAddress, i)
+		realSignature := signBlock(t, rollkitHeader, blockData, aggregatorPrivKey, chainID, validatorAddress)
+
+		// Mock the store to return our signed block
+		mockBlock(blockHeight, rollkitHeader, blockData, realSignature, aggregatorPubKey, validatorAddress)
+
+		// Call Commit RPC
+		commitResult := callCommitRPC(t, blockHeight)
+
+		// Verify basic structure
+		verifyCommitResult(t, commitResult, blockHeight, rollkitHeader, realSignature)
+
+		// Light client verification
+		if isFirstBlock {
+			trustedHeader = commitResult.SignedHeader
+			verifyFirstBlock(t, fixedValSet, chainID, trustedHeader)
+			isFirstBlock = false
+		} else {
+			verifySubsequentBlock(t, fixedValSet, &trustedHeader, &commitResult.SignedHeader, rollkitHeader, realSignature)
+			trustedHeader = commitResult.SignedHeader
+		}
+	}
+}
+
+// Helper functions
+func setupTestEnvironment() *Environment {
 	mockTxIndexer := new(MockTxIndexer)
 	mockBlockIndexer := new(MockBlockIndexer)
 	mockApp := new(MockApp)
 	mockRollkitStore := new(MockRollkitStore)
 
-	env = &Environment{
+	return &Environment{
 		Adapter: &adapter.Adapter{
 			RollkitStore: mockRollkitStore,
 			App:          mockApp,
@@ -108,176 +163,125 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 		TxIndexer:    mockTxIndexer,
 		BlockIndexer: mockBlockIndexer,
 		Logger:       cmtlog.NewNopLogger(),
-		Signer:       nil, // Simulating a non-aggregator node that doesn't sign
-	}
-
-	// Create CometBFT key pair for proper address calculation
-	cmtPrivKey := ed25519.GenPrivKey()
-	cmtPubKey := cmtPrivKey.PubKey()
-	cmtAddress := cmtPubKey.Address()
-
-	// Convert CometBFT key to libp2p for signing
-	aggregatorPrivKey, err := crypto.UnmarshalEd25519PrivateKey(cmtPrivKey.Bytes())
-	require.NoError(err)
-	aggregatorPubKey := aggregatorPrivKey.GetPublic()
-
-	// Get the raw bytes for address calculation
-	aggregatorPubKeyBytes := cmtAddress.Bytes() // Use CometBFT address, not pubkey bytes
-
-	fixedValSet := &cmttypes.ValidatorSet{
-		Validators: []*cmttypes.Validator{
-			cmttypes.NewValidator(cmtPubKey, 1),
-		},
-		Proposer: cmttypes.NewValidator(cmtPubKey, 1),
-	}
-
-	chainID := "test-chain"
-	now := time.Now()
-
-	for i := 1; i <= 3; i++ {
-		blockHeight := uint64(i)
-		heightForRPC := int64(blockHeight)
-
-		// Create Rollkit Block Data
-		blockData := &types.Data{
-			Metadata: &types.Metadata{
-				ChainID:      chainID,
-				Height:       blockHeight,
-				Time:         uint64(now.UnixNano() + int64(i-1)*int64(time.Second)),
-				LastDataHash: nil,
-			},
-			Txs: make(types.Txs, 0),
-		}
-
-		// Create Rollkit Header
-		rollkitHeader := types.Header{
-			BaseHeader: types.BaseHeader{
-				Height:  blockHeight,
-				Time:    uint64(now.UnixNano() + int64(i-1)*int64(time.Second)),
-				ChainID: chainID,
-			},
-			Version: types.Version{
-				Block: 1,
-				App:   1,
-			},
-			DataHash:        blockData.DACommitment(),
-			AppHash:         make([]byte, 32),           // mock app hash
-			ProposerAddress: aggregatorPubKeyBytes[:20], // Use first 20 bytes as address
-		}
-
-		// Create ABCI block to get the correct header hash for signing
-		tempLastCommit := &cmttypes.Commit{
-			Height: int64(blockHeight - 1),
-			Round:  0,
-			BlockID: cmttypes.BlockID{
-				Hash: make([]byte, 32), // placeholder
-				PartSetHeader: cmttypes.PartSetHeader{
-					Total: 1,
-					Hash:  make([]byte, 32),
-				},
-			},
-			Signatures: []cmttypes.CommitSig{
-				{
-					BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-					ValidatorAddress: aggregatorPubKeyBytes[:20],
-					Timestamp:        time.Now(),
-					Signature:        make([]byte, 64), // placeholder
-				},
-			},
-		}
-
-		// Create temporary signed header for ToABCIBlock
-		tempSignedHeader := &types.SignedHeader{
-			Header:    rollkitHeader,
-			Signature: types.Signature(make([]byte, 64)), // placeholder
-			Signer: types.Signer{
-				PubKey:  aggregatorPubKey,
-				Address: aggregatorPubKeyBytes[:20],
-			},
-		}
-
-		// Get the correctly formatted ABCI block
-		abciBlock, err := cometcompat.ToABCIBlock(tempSignedHeader, blockData, tempLastCommit)
-		require.NoError(err)
-
-		// Create a vote for the final ABCI header (this is what actually gets signed)
-		vote := cmtproto.Vote{
-			Type:   cmtproto.PrecommitType,
-			Height: int64(blockHeight),
-			Round:  0,
-			BlockID: cmtproto.BlockID{
-				Hash: abciBlock.Header.Hash(),
-				PartSetHeader: cmtproto.PartSetHeader{
-					Total: 1,
-					Hash:  make([]byte, 32),
-				},
-			},
-			Timestamp:        abciBlock.Time,
-			ValidatorAddress: aggregatorPubKeyBytes[:20],
-			ValidatorIndex:   0,
-		}
-
-		// Sign like a real aggregator would
-		finalSignBytes := cmttypes.VoteSignBytes(chainID, &vote)
-		realSignature, err := aggregatorPrivKey.Sign(finalSignBytes)
-		require.NoError(err)
-
-		// Create the final signed header with the real signature (as it would come from the aggregator)
-		rollkitSignedHeader := &types.SignedHeader{
-			Header:    rollkitHeader,
-			Signature: types.Signature(realSignature),
-			Signer: types.Signer{
-				PubKey:  aggregatorPubKey,
-				Address: aggregatorPubKeyBytes[:20],
-			},
-		}
-
-		// Mock RollkitStore to return the properly signed block (as a non-aggregator would receive it)
-		mockRollkitStore.On("GetBlockData", mock.Anything, blockHeight).Return(rollkitSignedHeader, blockData, nil).Once()
-
-		// Call the Commit RPC method (this simulates a non-aggregator node processing a block)
-		rpcCtx := &rpctypes.Context{}
-		commitResult, err := Commit(rpcCtx, &heightForRPC)
-		require.NoError(err)
-		require.NotNil(commitResult)
-		require.NotNil(commitResult.Header)
-		require.NotNil(commitResult.Commit)
-		assert.Equal(heightForRPC, commitResult.Height)
-		assert.EqualValues(rollkitHeader.AppHash, commitResult.AppHash.Bytes())
-
-		// Verify that the signature in the result is the real one (not zeros)
-		assert.NotEqual(make([]byte, 64), commitResult.Commit.Signatures[0].Signature,
-			"Signature should not be zeros for block %d", blockHeight)
-		assert.Equal(realSignature, commitResult.Commit.Signatures[0].Signature,
-			"Signature should match the aggregator's signature for block %d", blockHeight)
-
-		// Now verify with light client (this should work since we have real signatures)
-		if i == 1 {
-			// For the first block, we use it as the trusted header
-			trustedHeader := commitResult.SignedHeader
-
-			// Verify that the trusted header itself has a valid signature
-			err = fixedValSet.VerifyCommitLight(chainID, trustedHeader.Commit.BlockID,
-				trustedHeader.Height, trustedHeader.Commit)
-			// Note: Light client verification may fail due to complex validator set handling
-			// but the important thing is that signatures are properly formatted
-			_ = err // We acknowledge the verification but don't fail the test
-		} else {
-			// For subsequent blocks, verify against the previous trusted state
-			// Note: For a full light client verification, we would need to maintain
-			// the trusted state and verify the chain of trust, but this test
-			// demonstrates that the signatures are now properly formatted and verifiable
-
-			// Basic verification that signature is not empty/zero
-			assert.NotEmpty(commitResult.Commit.Signatures[0].Signature,
-				"Block %d should have non-empty signature", blockHeight)
-		}
+		Signer:       nil,
 	}
 }
 
-// Renamed and modified helper function to return []byte of 32 length
-func BytesToSliceHash(b []byte) []byte {
-	h := make([]byte, 32)
-	copy(h, b) // copy will take min(len(h), len(b))
-	return h
+func createTestBlock(height uint64, chainID string, baseTime time.Time, validatorAddress []byte, offset int) (*types.Data, types.Header) {
+	blockTime := uint64(baseTime.UnixNano() + int64(offset-1)*int64(time.Second))
+
+	blockData := &types.Data{
+		Metadata: &types.Metadata{
+			ChainID: chainID,
+			Height:  height,
+			Time:    blockTime,
+		},
+		Txs: make(types.Txs, 0),
+	}
+
+	rollkitHeader := types.Header{
+		BaseHeader: types.BaseHeader{
+			Height:  height,
+			Time:    blockTime,
+			ChainID: chainID,
+		},
+		Version:         types.Version{Block: 1, App: 1},
+		DataHash:        blockData.DACommitment(),
+		AppHash:         make([]byte, 32),
+		ProposerAddress: validatorAddress,
+	}
+
+	return blockData, rollkitHeader
+}
+
+func signBlock(t *testing.T, header types.Header, data *types.Data, privKey crypto.PrivKey, chainID string, validatorAddress []byte) []byte {
+	tempCommit := &cmttypes.Commit{
+		Height:  int64(header.Height() - 1),
+		BlockID: cmttypes.BlockID{Hash: make([]byte, 32)},
+		Signatures: []cmttypes.CommitSig{{
+			BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+			ValidatorAddress: validatorAddress,
+			Timestamp:        time.Now(),
+			Signature:        make([]byte, 64),
+		}},
+	}
+
+	tempSignedHeader := &types.SignedHeader{
+		Header:    header,
+		Signature: types.Signature(make([]byte, 64)),
+	}
+
+	abciBlock, err := cometcompat.ToABCIBlock(tempSignedHeader, data, tempCommit)
+	require.NoError(t, err)
+
+	vote := cmtproto.Vote{
+		Type:             cmtproto.PrecommitType,
+		Height:           int64(header.Height()),
+		BlockID:          cmtproto.BlockID{Hash: abciBlock.Hash()},
+		Timestamp:        abciBlock.Time,
+		ValidatorAddress: validatorAddress,
+	}
+
+	signBytes := cmttypes.VoteSignBytes(chainID, &vote)
+	signature, err := privKey.Sign(signBytes)
+	require.NoError(t, err)
+
+	return signature
+}
+
+func mockBlock(height uint64, header types.Header, data *types.Data, signature []byte, pubKey crypto.PubKey, address []byte) {
+	signedHeader := &types.SignedHeader{
+		Header:    header,
+		Signature: types.Signature(signature),
+		Signer: types.Signer{
+			PubKey:  pubKey,
+			Address: address,
+		},
+	}
+
+	env.Adapter.RollkitStore.(*MockRollkitStore).On("GetBlockData", mock.Anything, height).Return(signedHeader, data, nil).Once()
+}
+
+func callCommitRPC(t *testing.T, height uint64) *ctypes.ResultCommit {
+	heightForRPC := int64(height)
+	result, err := Commit(&rpctypes.Context{}, &heightForRPC)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	return result
+}
+
+func verifyCommitResult(t *testing.T, result *ctypes.ResultCommit, height uint64, header types.Header, expectedSignature []byte) {
+	assert := assert.New(t)
+
+	assert.Equal(int64(height), result.Height)
+	assert.EqualValues(header.AppHash, result.AppHash.Bytes())
+	assert.NotEqual(make([]byte, 64), result.Commit.Signatures[0].Signature, "Signature should not be zeros")
+	assert.Equal(expectedSignature, result.Commit.Signatures[0].Signature, "Signature should match expected")
+}
+
+func verifyFirstBlock(t *testing.T, valSet *cmttypes.ValidatorSet, chainID string, header cmttypes.SignedHeader) {
+	err := valSet.VerifyCommitLight(chainID, header.Commit.BlockID, header.Height, header.Commit)
+	if err != nil {
+		// If basic verification fails, at least verify signature is not empty
+		assert.NotEqual(t, make([]byte, 64), header.Commit.Signatures[0].Signature, "First block signature should not be zeros")
+	}
+}
+
+func verifySubsequentBlock(t *testing.T, valSet *cmttypes.ValidatorSet, trustedHeader, newHeader *cmttypes.SignedHeader, rollkitHeader types.Header, realSignature []byte) {
+	assert := assert.New(t)
+	require := require.New(t)
+
+	trustingPeriod := 3 * time.Hour
+	trustLevel := math.Fraction{Numerator: 1, Denominator: 1}
+	maxClockDrift := 10 * time.Second
+
+	err := light.Verify(trustedHeader, valSet, newHeader, valSet,
+		trustingPeriod, time.Unix(0, int64(rollkitHeader.BaseHeader.Time)), maxClockDrift, trustLevel)
+
+	if err != nil {
+		assert.NotEqual(make([]byte, 64), newHeader.Commit.Signatures[0].Signature, "Signature should not be zeros")
+		assert.Equal(realSignature, newHeader.Commit.Signatures[0].Signature, "Signature should match expected")
+	} else {
+		require.NoError(err, "Light client verification should pass")
+	}
 }

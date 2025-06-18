@@ -256,6 +256,7 @@ jobs:
           celestia-appd genesis collect-gentxs
           celestia-appd config set app grpc.enable true
           sed -i 's/indexer = "null"/indexer = "kv"/' ~/.celestia-app/config/config.toml # enable tx indexing
+          sed -i 's/discard_abci_responses = true/discard_abci_responses = false/' ~/.celestia-app/config/config.toml # disable discard abci responses
           celestia-appd start --force-no-bbr --rpc.laddr tcp://0.0.0.0:26654 --rpc.pprof_laddr localhost:6061 --p2p.laddr tcp://0.0.0.0:26653 --grpc.address 0.0.0.0:9091 --log_format=json > celestia.log 2>&1 &
           echo "CELESTIA_PID=$!" >> $GITHUB_ENV
           sleep 5

@@ -153,10 +153,6 @@ func TestBlockSearch_Success(t *testing.T) {
 func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing.T) {
 	require := require.New(t)
 
-	env = setupTestEnvironment()
-	chainID := "test-chain"
-	now := time.Now()
-
 	// Create validator and signer
 	cmtPrivKey := ed25519.GenPrivKey()
 	cmtPubKey := cmtPrivKey.PubKey()
@@ -164,6 +160,20 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 	require.NoError(err)
 	aggregatorPubKey := aggregatorPrivKey.GetPublic()
 	validatorAddress := cmtPubKey.Address().Bytes()[:20]
+
+	// Create a mock signer that uses the same private key
+	mockSigner := &MockSigner{}
+	mockSigner.On("Sign", mock.Anything).Return(func(message []byte) []byte {
+		sig, _ := aggregatorPrivKey.Sign(message)
+		return sig
+	}, nil)
+	mockSigner.On("GetPublic").Return(aggregatorPubKey, nil)
+	mockSigner.On("GetAddress").Return(validatorAddress, nil)
+
+	env = setupTestEnvironmentWithSigner(mockSigner)
+
+	chainID := "test-chain"
+	now := time.Now()
 
 	fixedValSet := &cmttypes.ValidatorSet{
 		Validators: []*cmttypes.Validator{cmttypes.NewValidator(cmtPubKey, 1)},
@@ -187,8 +197,8 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 		// Call Commit RPC
 		commitResult := callCommitRPC(t, blockHeight)
 
-		// Verify basic structure
-		verifyCommitResult(t, commitResult, blockHeight, rollkitHeader, realSignature)
+		// Verify basic structure (without checking specific signature since Commit RPC re-signs)
+		verifyCommitResultBasic(t, commitResult, blockHeight, rollkitHeader)
 
 		// Light client verification
 		if isFirstBlock {
@@ -199,25 +209,6 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 			verifySubsequentBlock(t, fixedValSet, &trustedHeader, &commitResult.SignedHeader, rollkitHeader, realSignature)
 			trustedHeader = commitResult.SignedHeader
 		}
-	}
-}
-
-// Helper functions
-func setupTestEnvironment() *Environment {
-	mockTxIndexer := new(MockTxIndexer)
-	mockBlockIndexer := new(MockBlockIndexer)
-	mockApp := new(MockApp)
-	mockRollkitStore := new(MockRollkitStore)
-
-	return &Environment{
-		Adapter: &adapter.Adapter{
-			RollkitStore: mockRollkitStore,
-			App:          mockApp,
-		},
-		TxIndexer:    mockTxIndexer,
-		BlockIndexer: mockBlockIndexer,
-		Logger:       cmtlog.NewNopLogger(),
-		Signer:       nil,
 	}
 }
 
@@ -304,13 +295,12 @@ func callCommitRPC(t *testing.T, height uint64) *ctypes.ResultCommit {
 	return result
 }
 
-func verifyCommitResult(t *testing.T, result *ctypes.ResultCommit, height uint64, header types.Header, expectedSignature []byte) {
+func verifyCommitResultBasic(t *testing.T, result *ctypes.ResultCommit, height uint64, header types.Header) {
 	assert := assert.New(t)
 
 	assert.Equal(int64(height), result.Height)
 	assert.EqualValues(header.AppHash, result.AppHash.Bytes())
 	assert.NotEqual(make([]byte, 64), result.Commit.Signatures[0].Signature, "Signature should not be zeros")
-	assert.Equal(expectedSignature, result.Commit.Signatures[0].Signature, "Signature should match expected")
 }
 
 func verifyFirstBlock(t *testing.T, valSet *cmttypes.ValidatorSet, chainID string, header cmttypes.SignedHeader) {
@@ -322,7 +312,6 @@ func verifyFirstBlock(t *testing.T, valSet *cmttypes.ValidatorSet, chainID strin
 }
 
 func verifySubsequentBlock(t *testing.T, valSet *cmttypes.ValidatorSet, trustedHeader, newHeader *cmttypes.SignedHeader, rollkitHeader types.Header, realSignature []byte) {
-	assert := assert.New(t)
 	require := require.New(t)
 
 	trustingPeriod := 3 * time.Hour
@@ -332,10 +321,48 @@ func verifySubsequentBlock(t *testing.T, valSet *cmttypes.ValidatorSet, trustedH
 	err := light.Verify(trustedHeader, valSet, newHeader, valSet,
 		trustingPeriod, time.Unix(0, int64(rollkitHeader.BaseHeader.Time)), maxClockDrift, trustLevel)
 
-	if err != nil {
-		assert.NotEqual(make([]byte, 64), newHeader.Commit.Signatures[0].Signature, "Signature should not be zeros")
-		assert.Equal(realSignature, newHeader.Commit.Signatures[0].Signature, "Signature should match expected")
-	} else {
-		require.NoError(err, "Light client verification should pass")
+	// Force light client verification to pass - test fails if verification fails
+	require.NoError(err, "Light client verification must pass")
+}
+
+// MockSigner implements the signer.Signer interface for testing
+type MockSigner struct {
+	mock.Mock
+}
+
+func (m *MockSigner) Sign(message []byte) ([]byte, error) {
+	args := m.Called(message)
+	if fn, ok := args.Get(0).(func([]byte) []byte); ok {
+		return fn(message), args.Error(1)
+	}
+	return args.Get(0).([]byte), args.Error(1)
+}
+
+func (m *MockSigner) GetPublic() (crypto.PubKey, error) {
+	args := m.Called()
+	return args.Get(0).(crypto.PubKey), args.Error(1)
+}
+
+func (m *MockSigner) GetAddress() ([]byte, error) {
+	args := m.Called()
+	return args.Get(0).([]byte), args.Error(1)
+}
+
+// setupTestEnvironmentWithSigner creates a test environment with a signer
+func setupTestEnvironmentWithSigner(signer *MockSigner) *Environment {
+	mockTxIndexer := new(MockTxIndexer)
+	mockBlockIndexer := new(MockBlockIndexer)
+	mockApp := new(MockApp)
+	mockRollkitStore := new(MockRollkitStore)
+
+	return &Environment{
+		Adapter: &adapter.Adapter{
+			RollkitStore: mockRollkitStore,
+			App:          mockApp,
+		},
+		TxIndexer:    mockTxIndexer,
+		BlockIndexer: mockBlockIndexer,
+		Logger:       cmtlog.NewNopLogger(),
+		Signer:       signer,
 	}
 }

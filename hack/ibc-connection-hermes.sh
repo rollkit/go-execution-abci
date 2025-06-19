@@ -3,7 +3,7 @@ set -e
 
 # Configuration variables
 GAIA_CHAIN_ID="localnet-1"
-WORDLED_CHAIN_ID="gm"
+WORDLED_CHAIN_ID="rollkitnet-1"
 
 GAIA_RPC="http://localhost:26654"
 WORDLED_RPC="http://localhost:26657"

@@ -258,7 +258,7 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 		InitialHeight:   int64(initialHeight),
 	})
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("app initialize chain: %w", err)
 	}
 
 	s := &cmtstate.State{}
@@ -271,7 +271,7 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 
 	vals, err := cmttypes.PB2TM.ValidatorUpdates(res.Validators)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("validator updates: %w", err)
 	}
 
 	nValSet := cmttypes.NewValidatorSet(vals)

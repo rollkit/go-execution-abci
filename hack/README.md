@@ -1,4 +1,3 @@
-<<<<<<< Updated upstream
 ```shell
 ./init-gaia.sh
 ./run_node.sh
@@ -38,4 +37,3 @@ The script automatically:
 - Retrieves the IBC channel ID
 - Checks balances before and after transfers
 - Handles IBC denominations
->>>>>>> Stashed changes

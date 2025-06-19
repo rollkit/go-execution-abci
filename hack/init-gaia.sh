@@ -83,8 +83,8 @@ log "34" "🚀" "Starting Gaia node..."
 GAIA_PID=$!
 
 # Wait for initialization
-log "33" "⏳" "Waiting for Gaia initialization (port 26667)..."
-while ! nc -z localhost 26667; do
+log "33" "⏳" "Waiting for Gaia initialization (port 26654)..."
+while ! nc -z localhost 26654; do
   sleep 1
 done
 log "32" "✅" "Gaia chain running successfully!"

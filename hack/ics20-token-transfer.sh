@@ -34,6 +34,7 @@ log_error() {
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GAIAD_BIN="${GAIAD_BIN:-$CURRENT_DIR/downloads/gaiad}"
 GMD_BIN="gmd"
+ROLLKIT_HOME="${1:-"${CURRENT_DIR}/testnet/gm"}"
 
 # Verify binaries are installed
 if [ ! -f "$GAIAD_BIN" ]; then
@@ -51,7 +52,7 @@ log_success "gmd installed"
 # Get validator addresses
 log_info "Getting user addresses..."
 USER_ADDRESS_GAIA=$($GAIAD_BIN keys show $GAIA_KEY_NAME -a --keyring-backend test --home "$CURRENT_DIR/testnet")
-USER_ADDRESS_ROLLKIT=$($GMD_BIN keys show $ROLLKIT_KEY_NAME -a --keyring-backend test)
+USER_ADDRESS_ROLLKIT=$($GMD_BIN keys show $ROLLKIT_KEY_NAME -a --keyring-backend test --home "$ROLLKIT_HOME")
 
 log_info "Gaia user address: $USER_ADDRESS_GAIA"
 log_info "Rollkit user address: $USER_ADDRESS_ROLLKIT"
@@ -62,7 +63,7 @@ log_info "Gaia $GAIA_KEY_NAME balance:"
 $GAIAD_BIN q bank balances $USER_ADDRESS_GAIA --node $GAIA_RPC --home "$CURRENT_DIR/testnet"
 
 log_info "Rollkit $ROLLKIT_KEY_NAME balance:"
-$GMD_BIN q bank balances $USER_ADDRESS_ROLLKIT --node $ROLLKIT_RPC
+$GMD_BIN q bank balances $USER_ADDRESS_ROLLKIT --node $ROLLKIT_RPC --home "$ROLLKIT_HOME"
 
 # Get channel ID
 log_info "Getting IBC channel ID..."
@@ -84,6 +85,7 @@ TX_HASH=$($GMD_BIN tx ibc-transfer transfer $TRANSFER_PORT $CHANNEL_ID $USER_ADD
     --chain-id $ROLLKIT_CHAIN_ID \
     --node $ROLLKIT_RPC \
     --keyring-backend test \
+    --home "$ROLLKIT_HOME" \
     --gas auto \
     --gas-adjustment 1.4 \
     --gas-prices 1stake \
@@ -91,7 +93,7 @@ TX_HASH=$($GMD_BIN tx ibc-transfer transfer $TRANSFER_PORT $CHANNEL_ID $USER_ADD
 
 log_info "Querying gmd tx...  $TX_HASH"
 for i in {1..10}; do
-  if ! tx_result=$($GMD_BIN q tx --type=hash "$TX_HASH" -o json 2>/dev/null); then
+  if ! tx_result=$($GMD_BIN q tx --type=hash "$TX_HASH" -o json --home "$ROLLKIT_HOME" 2>/dev/null); then
     sleep 1
     continue
   fi
@@ -108,7 +110,7 @@ log_info "Gaia user balance (should show IBC tokens):"
 $GAIAD_BIN q bank balances $USER_ADDRESS_GAIA --node $GAIA_RPC --home "$CURRENT_DIR/testnet"
 
 log_info "Rollkit user balance:"
-$GMD_BIN q bank balances $USER_ADDRESS_ROLLKIT --node $ROLLKIT_RPC
+$GMD_BIN q bank balances $USER_ADDRESS_ROLLKIT --node $ROLLKIT_RPC --home "$ROLLKIT_HOME"
 
 # Transfer tokens from Gaia to Rollkit
 TRANSFER_AMOUNT="102"
@@ -125,7 +127,7 @@ TX_HASH=$($GAIAD_BIN tx ibc-transfer transfer $TRANSFER_PORT $CHANNEL_ID $USER_A
     --yes -o json | jq -r '.txhash')
 
 log_info "Querying gaia tx...  $TX_HASH"
-for i in {1..10}; do
+for i in {1..20}; do
   if ! tx_result=$($GAIAD_BIN q tx --type=hash "$TX_HASH" -o json --node $GAIA_RPC 2>/dev/null); then
     echo "$tx_result"
     sleep 1
@@ -143,6 +145,21 @@ log_info "Gaia user balance:"
 $GAIAD_BIN q bank balances $USER_ADDRESS_GAIA --node $GAIA_RPC --home "$CURRENT_DIR/testnet"
 
 log_info "Rollkit user balance (should show IBC tokens):"
-$GMD_BIN q bank balances $USER_ADDRESS_ROLLKIT --node $ROLLKIT_RPC
+ibc_tokens_visible=false
+
+for i in {1..${20}}; do
+  $GMD_BIN q bank balances $USER_ADDRESS_ROLLKIT --node $ROLLKIT_RPC --home "$ROLLKIT_HOME"
+  if $GMD_BIN q bank balances $USER_ADDRESS_ROLLKIT --node $ROLLKIT_RPC --home "$ROLLKIT_HOME" | grep -q "ibc"; then
+    log_success "IBC tokens are now visible in Rollkit balance"
+    ibc_tokens_visible=true
+    break
+  fi
+  sleep 1
+done
+
+if [ "$ibc_tokens_visible" = false ]; then
+  log_error "IBC tokens did not become visible within time frame"
+  exit 1
+fi
 
 log_success "ICS20 token transfer test completed!"

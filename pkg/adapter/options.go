@@ -65,13 +65,17 @@ func (f *NetworkSoftConfirmationBlockFilter) IsPublishable(ctx context.Context, 
 
 	softConfirmRes, err := f.app.Query(ctx, softConfirmReq)
 	if err != nil || softConfirmRes.Code != 0 {
-		f.logger.Error("failed to query soft confirmation status", "height", height, "error", err)
+		var msg string
+		if softConfirmRes != nil {
+			msg = softConfirmRes.Log
+		}
+		f.logger.Error("query soft confirmation status", "height", height, "error", err, "log", msg)
 		return false
 	}
 
 	softConfirmResp := &types.QuerySoftConfirmationStatusResponse{}
 	if err := softConfirmResp.Unmarshal(softConfirmRes.Value); err != nil {
-		f.logger.Error("failed to unmarshal soft confirmation status response", "height", height, "error", err)
+		f.logger.Error("unmarshal soft confirmation status response", "height", height, "error", err)
 		return false
 	}
 	f.logger.Debug("soft confirmation status", "height", height, "is_soft_confirmed", softConfirmResp.IsSoftConfirmed)

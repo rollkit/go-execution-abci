@@ -360,7 +360,7 @@ jobs:
           BALANCE=$(./gmd/go/bin/gmd query bank balances $ROLLKIT_ADDR --output json --home ./gmd/.gm | jq '.balances')
           echo "Gm balance after IBC transfer: $BALANCE"
           # fail if no denom starts with ibc/
-          if ! echo '$BALANCE' | jq -e '.[] | select(.denom | startswith("ibc/"))' > /dev/null; then
+          if ! echo "$BALANCE" | jq -e '.[] | select(.denom | startswith("ibc/"))' > /dev/null; then
             echo "Error: No IBC denom found in balance after transfer!"
             exit 1
           fi

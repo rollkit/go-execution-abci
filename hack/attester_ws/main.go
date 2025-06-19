@@ -242,8 +242,9 @@ func pullBlocksAndAttest(ctx context.Context, from, chainID, node, home string, 
 				err = submitAttestation(ctx, from, chainID, node, home, height, "0x00")
 				if err != nil {
 					fmt.Printf("Error submitting attestation: %v\n", err)
-					time.Sleep(time.Second / 10)
-					continue
+					//time.Sleep(time.Second / 10)
+					//continue
+					return err
 				}
 
 				lastAttested = height

@@ -2,8 +2,11 @@ package adapter
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"cosmossdk.io/log"
@@ -393,6 +396,11 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, err
 	}
 
+	for i, tx := range txs {
+		sum256 := sha256.Sum256(tx)
+		a.Logger.Info("+++ processed TX", "hash", strings.ToUpper(hex.EncodeToString(sum256[:])), "result", fbResp.TxResults[i].Code, "log", fbResp.TxResults[i].Log, "height", blockHeight)
+	}
+
 	s.AppHash = fbResp.AppHash
 	s.LastBlockHeight = int64(blockHeight)
 
@@ -516,7 +524,7 @@ func (a *Adapter) ExecuteTxs(
 	block := s.MakeBlock(int64(blockHeight), cmtTxs, commit, nil, s.Validators.Proposer.Address)
 	currentBlockID := cmttypes.BlockID{Hash: block.Hash(), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: block.DataHash}}
 
-	a.stackEndBlockEvents(currentBlockID, block, fbResp, validatorUpdates)
+	a.stackBlockCommitEvents(currentBlockID, block, fbResp, validatorUpdates)
 	if a.blockFilter.IsPublishable(ctx, int64(header.Height())) {
 		if err := a.publishQueuedBlockEvents(ctx, int64(header.Height())); err != nil {
 			panic(err) // todo: nooooo
@@ -598,7 +606,7 @@ type StackedEvent struct {
 	validatorUpdates []*cmttypes.Validator
 }
 
-func (a *Adapter) stackEndBlockEvents(
+func (a *Adapter) stackBlockCommitEvents(
 	blockID cmttypes.BlockID,
 	block *cmttypes.Block,
 	abciResponse *abci.ResponseFinalizeBlock,
@@ -672,16 +680,25 @@ func (a *Adapter) publishQueuedBlockEvents(ctx context.Context, persistedHeight 
 			maxPosReleased = i
 		}
 	}
+	a.Logger.Info("processing stack for soft consensus", "count", len(a.stackedEvents), "soft_consensus", maxPosReleased != -1)
+
 	if maxPosReleased == -1 {
 		return nil
 	}
 	softCommitHeight := a.stackedEvents[maxPosReleased].block.Height
 	for i := 0; i <= maxPosReleased; i++ {
+		// todo (Alex): exit loop when ctx cancelled
+		select {
+		case <-ctx.Done():
+			maxPosReleased = i
+			break
+		default:
+		}
 		v := a.stackedEvents[i]
 		fireEvents(a.Logger, a.EventBus, v.block, v.blockID, v.abciResponse, v.validatorUpdates)
 		a.Logger.Info("releasing block with soft consensus", "height", v.block.Height, "soft_consensus", softCommitHeight)
 	}
-	a.stackedEvents = append(a.stackedEvents[:maxPosReleased], a.stackedEvents[maxPosReleased+1:]...)
+	a.stackedEvents = a.stackedEvents[maxPosReleased+1:]
 	a.Logger.Info("remaining stack after soft consensus", "count", len(a.stackedEvents), "soft_consensus", softCommitHeight)
 	return nil
 }

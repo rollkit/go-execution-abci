@@ -138,9 +138,10 @@ func (k Keeper) processEpochEnd(ctx sdk.Context, epoch uint64) error {
 		}
 	}
 
-	if err := k.PruneOldBitmaps(ctx, epoch); err != nil {
-		return fmt.Errorf("pruning old data at epoch %d: %w", epoch, err)
-	}
+	// todo (Alex): find a way to prune only bitmaps that are not used anymore
+	//if err := k.PruneOldBitmaps(ctx, epoch); err != nil {
+	//	return fmt.Errorf("pruning old data at epoch %d: %w", epoch, err)
+	//}
 
 	if err := k.BuildValidatorIndexMap(ctx); err != nil {
 		return fmt.Errorf("rebuilding validator index map at epoch %d: %w", epoch, err)

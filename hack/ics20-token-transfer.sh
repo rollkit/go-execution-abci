@@ -89,8 +89,18 @@ TX_HASH=$($GMD_BIN tx ibc-transfer transfer $TRANSFER_PORT $CHANNEL_ID $USER_ADD
     --gas-prices 1stake \
     --yes -o json | jq -r '.txhash')
 
-log_info "sleeping 10s for the relayer to work"
-sleep 10
+log_info "Querying gmd tx...  $TX_HASH"
+for i in {1..10}; do
+  if ! tx_result=$($GMD_BIN q tx --type=hash "$TX_HASH" -o json 2>/dev/null); then
+    sleep 1
+    continue
+  fi
+done
+if [ "$(echo "$tx_result" | jq -r '.code')" != "0" ]; then
+  log_error "Transaction failed : $tx_result"
+  exit 1
+fi
+
 
 # Check balances after Rollkit to Gaia transfer
 log_info "Checking balances after Rollkit to Gaia transfer..."
@@ -114,19 +124,23 @@ TX_HASH=$($GAIAD_BIN tx ibc-transfer transfer $TRANSFER_PORT $CHANNEL_ID $USER_A
     --gas-prices 1stake \
     --yes -o json | jq -r '.txhash')
 
-log_info "sleeping 10s for the relayer to work"
-sleep 10
+log_info "Querying gaia tx...  $TX_HASH"
+for i in {1..10}; do
+  if ! tx_result=$($GAIAD_BIN q tx --type=hash "$TX_HASH" -o json --node $GAIA_RPC 2>/dev/null); then
+    echo "$tx_result"
+    sleep 1
+    continue
+  fi
+done
+if [ "$(echo "$tx_result" | jq -r '.code')" != "0" ]; then
+  log_error "Transaction failed : $tx_result"
+  exit 1
+fi
 
 # Check balances after transfer to Rollkit
 log_info "Checking balances after transfer to Rollkit..."
 log_info "Gaia user balance:"
 $GAIAD_BIN q bank balances $USER_ADDRESS_GAIA --node $GAIA_RPC --home "$CURRENT_DIR/testnet"
-
-log_info "Rollkit user balance (should show IBC tokens):"
-$GMD_BIN q bank balances $USER_ADDRESS_ROLLKIT --node $ROLLKIT_RPC
-
-
-sleep 16
 
 log_info "Rollkit user balance (should show IBC tokens):"
 $GMD_BIN q bank balances $USER_ADDRESS_ROLLKIT --node $ROLLKIT_RPC

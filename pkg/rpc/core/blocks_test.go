@@ -321,7 +321,6 @@ func verifySubsequentBlock(t *testing.T, valSet *cmttypes.ValidatorSet, trustedH
 	err := light.Verify(trustedHeader, valSet, newHeader, valSet,
 		trustingPeriod, time.Unix(0, int64(rollkitHeader.BaseHeader.Time)), maxClockDrift, trustLevel)
 
-	// Force light client verification to pass - test fails if verification fails
 	require.NoError(err, "Light client verification must pass")
 }
 

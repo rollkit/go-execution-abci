@@ -1,4 +1,4 @@
-name: Rollkit Integration Test
+name: Rollkit Integration & IBC Tests
 
 on:
   push:
@@ -8,12 +8,15 @@ on:
   workflow_dispatch:
 
 jobs:
-  rollkit-test:
+  liveness:
     name: Test with Rollkit Chain
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       DO_NOT_TRACK: true
+    outputs:
+      carol_mnemonic: ${{ steps.save_mnemonic.outputs.carol_mnemonic }}
+      gmd_home: ${{ steps.paths.outputs.GMD_HOME }}
 
     steps:
       - uses: actions/checkout@v4
@@ -45,7 +48,7 @@ jobs:
       - name: Scaffold Rollkit Chain
         run: |
           # scaffold a new chain
-          ignite scaffold chain gm --no-module --skip-git
+          ignite scaffold chain gm --no-module --skip-git --address-prefix gm
           cd gm
 
           # install rollkit app
@@ -81,10 +84,38 @@ jobs:
           # initialize rollkit
           ignite rollkit init
 
+      - name: Create extra accounts
+        id: save_mnemonic
+        run: |
+          MNEMONIC=$(gmd keys add carol --output json | jq -r .mnemonic)
+          echo "$MNEMONIC" > carol.mnemonic
+          echo "CAROL_MNEMONIC=$MNEMONIC" >> $GITHUB_ENV
+          echo "carol_mnemonic=$MNEMONIC" >> $GITHUB_OUTPUT
+
+      - name: Get gm binary and gmd home paths
+        id: paths
+        run: |
+          GM_BINARY_PATH=$(which gmd)
+          echo "GM_BINARY_PATH=$GM_BINARY_PATH"
+          echo "GM_BINARY_PATH=$GM_BINARY_PATH" >> $GITHUB_ENV
+          echo "GM_BINARY_PATH=$GM_BINARY_PATH" >> $GITHUB_OUTPUT
+          GMD_HOME=$(gmd config home)
+          echo "GMD_HOME=$GMD_HOME"
+          echo "GMD_HOME=$GMD_HOME" >> $GITHUB_ENV
+          echo "GMD_HOME=$GMD_HOME" >> $GITHUB_OUTPUT
+
+      - name: Upload gm Binary and gmd Home Directory
+        uses: actions/upload-artifact@v4
+        with:
+          name: gmd
+          include-hidden-files: true
+          if-no-files-found: error
+          path: |
+            ${{ steps.paths.outputs.GM_BINARY_PATH }}
+            ${{ steps.paths.outputs.GMD_HOME }}
+
       - name: Start Chain and Wait for Blocks
         run: |
-          cd gm
-
           # start the chain and send output to a log file
           gmd start --rollkit.node.aggregator --log_format=json > chain.log 2>&1 &
           CHAIN_PID=$!
@@ -123,13 +154,11 @@ jobs:
 
       - name: Test Transaction Submission and Query
         run: |
-          cd gm
-
-          # get bob's address
+          # get Bob's and Carol's addresses
           BOB_ADDRESS=$(gmd keys show bob -a)
-          ALICE_ADDRESS=$(gmd keys show alice -a)
+          CAROL_ADDRESS=$(gmd keys show carol -a)
           echo "Bob's address: $BOB_ADDRESS"
-          echo "Alice's address: $ALICE_ADDRESS"
+          echo "Carol's address: $CAROL_ADDRESS"
 
           # query bob's initial balance
           echo "Querying Bob's initial balance..."
@@ -142,9 +171,9 @@ jobs:
             exit 1
           fi
 
-          # send transaction from bob to alice and get tx hash
-          echo "Sending 100stake from Bob to Alice..."
-          TX_HASH=$(gmd tx bank send $BOB_ADDRESS $ALICE_ADDRESS 100stake -y --output json | jq -r .txhash)
+          # send transaction from bob to carol and get tx hash
+          echo "Sending 100stake from Bob to Carol..."
+          TX_HASH=$(gmd tx bank send $BOB_ADDRESS $CAROL_ADDRESS 100stake -y --output json | jq -r .txhash)
 
           sleep 3
 
@@ -181,4 +210,183 @@ jobs:
           # kill DA process if it exists
           if [[ -n "${DA_PID}" ]]; then
             kill -9 $DA_PID || true
+          fi
+
+  ibc:
+    name: Test IBC Connection Rollkit <-> Celestia
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: liveness
+    env:
+      DO_NOT_TRACK: true
+      CAROL_MNEMONIC: ${{ needs.liveness.outputs.carol_mnemonic }}
+      GMD_HOME: ${{ needs.liveness.outputs.gmd_home }}
+      HERMES_VERSION: "v1.13.1"
+      CEL_VERSION: "v4.0.3-arabica"
+
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Download gm Binary and gmd Home Directory
+        uses: actions/download-artifact@v4
+
+      - name: Download Celestia App Binary
+        run: |
+          wget https://github.com/celestiaorg/celestia-app/releases/download/${CEL_VERSION}/celestia-app_Linux_x86_64.tar.gz
+          tar -xzf celestia-app_Linux_x86_64.tar.gz
+          sudo mv celestia-appd /usr/local/bin/celestia-appd
+
+      - name: Download Hermes Binary
+        run: |
+          wget https://github.com/informalsystems/hermes/releases/download/${HERMES_VERSION}/hermes-${HERMES_VERSION}-x86_64-unknown-linux-gnu.tar.gz
+          tar -xzf hermes-${HERMES_VERSION}-x86_64-unknown-linux-gnu.tar.gz
+          sudo mv hermes /usr/local/bin/hermes
+
+      - name: Start Celestia App Chain
+        run: |
+          celestia-appd init celestia-local --chain-id celestia-local
+          echo "$CAROL_MNEMONIC" | celestia-appd keys add validator \
+            --keyring-backend test \
+            --recover > /dev/null 2>&1
+          celestia-appd genesis add-genesis-account $(celestia-appd keys show validator -a --keyring-backend test) 1000000000utia
+          celestia-appd genesis gentx validator 100000000utia --fees 1utia --chain-id celestia-local --keyring-backend test
+          celestia-appd genesis collect-gentxs
+          celestia-appd config set app grpc.enable true
+          sed -i 's/indexer = "null"/indexer = "kv"/' ~/.celestia-app/config/config.toml # enable tx indexing
+          sed -i 's/discard_abci_responses = true/discard_abci_responses = false/' ~/.celestia-app/config/config.toml # disable discard abci responses
+          celestia-appd start --force-no-bbr --rpc.laddr tcp://0.0.0.0:26654 --rpc.pprof_laddr localhost:6061 --p2p.laddr tcp://0.0.0.0:26653 --grpc.address 0.0.0.0:9091 --log_format=json > celestia.log 2>&1 &
+          echo "CELESTIA_PID=$!" >> $GITHUB_ENV
+          sleep 5
+
+      - name: Start Local DA
+        run: |
+          git clone https://github.com/rollkit/rollkit --depth 1
+          cd rollkit/da/cmd/local-da
+          go run . &
+          echo "DA_PID=$!" >> $GITHUB_ENV
+          sleep 3
+
+      - name: Start Rollkit Chain
+        run: |
+          chmod +x ./gmd/go/bin/gmd # restoring permissions after download
+          ./gmd/go/bin/gmd start --rollkit.node.aggregator --rpc.laddr tcp://0.0.0.0:26657 --grpc.address 0.0.0.0:9090 --log_format=json --home ./gmd/.gm > chain.log 2>&1 &
+          echo "CHAIN_PID=$!" >> $GITHUB_ENV
+          sleep 10
+          CAROL_ADDRESS=$(./gmd/go/bin/gmd keys show carol -a --home ./gmd/.gm)
+          echo "Fund Carol's account ($CAROL_ADDRESS)"
+          ./gmd/go/bin/gmd tx bank send bob $CAROL_ADDRESS 200000stake -y --output json --home ./gmd/.gm
+          sleep 5
+
+      - name: Configure & Start Hermes Relayer
+        run: |
+          mkdir -p ~/.hermes
+          cat > ~/.hermes/config.toml <<EOF
+          [global]
+          log_level = "trace"
+
+          [mode]
+            [mode.clients]
+            enabled = true
+            refresh = true
+            misbehaviour = true
+            [mode.connections]
+            enabled = true
+            [mode.channels]
+            enabled = true
+            [mode.packets]
+            enabled = true
+
+          [[chains]]
+          id = "celestia-local"
+          rpc_addr = "http://localhost:26654"
+          grpc_addr = "http://localhost:9091"
+          event_source = { mode = "pull", interval = "1s", max_retries = 4 }
+          store_prefix = "ibc"
+          account_prefix = "celestia"
+          key_name = "validator"
+          gas_price = { price = 3.5, denom = "utia" }
+          gas_multiplier = 1.2
+          rpc_timeout = "10s"
+          trusting_period = "503h"
+          clock_drift = "10s"
+
+          [[chains]]
+          id = "gm"
+          rpc_addr = "http://localhost:26657"
+          grpc_addr = "http://localhost:9090"
+          store_prefix = "ibc"
+          event_source = { mode = "pull", interval = "1s", max_retries = 4 }
+          account_prefix = "gm"
+          key_name = "carol"
+          gas_price = { price = 0.025, denom = "stake" }
+          gas_multiplier = 1.2
+          rpc_timeout = "10s"
+          trusting_period = "503h"
+          clock_drift = "10s"
+          EOF
+
+          # add keys for both chains
+          tmp=$(mktemp)
+          echo "$CAROL_MNEMONIC" > $tmp
+          hermes keys add --chain gm --mnemonic-file $tmp
+          hermes keys add --chain celestia-local --mnemonic-file $tmp
+          hermes start > hermes.log 2>&1 &
+          echo "HERMES_PID=$!" >> $GITHUB_ENV
+
+      - name: Create IBC Connection and Channel
+        run: |
+          hermes create channel --a-chain gm --a-port transfer --b-chain celestia-local --b-port transfer --order unordered --new-client-connection --yes
+
+      - name: ICS20 Transfer Rollkit -> Celestia
+        run: |
+          ROLLKIT_ADDR=$(./gmd/go/bin/gmd keys show carol -a --home ./gmd/.gm)
+          CELESTIA_ADDR=$(celestia-appd keys show validator -a --keyring-backend test)
+          ./gmd/go/bin/gmd tx ibc-transfer transfer transfer channel-0 $CELESTIA_ADDR 100stake --from carol -y --home ./gmd/.gm
+          sleep 20
+          BALANCE=$(celestia-appd query bank balances $CELESTIA_ADDR --output json --node http://localhost:26654 | jq '.balances')
+          echo "Celestia balance after IBC transfer: $BALANCE"
+          # TODO: check that the balance is correct
+          # ref: https://github.com/rollkit/go-execution-abci/pull/138#discussion_r2156332760
+
+      - name: ICS20 Transfer Celestia -> Rollkit
+        run: |
+          ROLLKIT_ADDR=$(./gmd/go/bin/gmd keys show carol -a --home ./gmd/.gm)
+          CELESTIA_ADDR=$(celestia-appd keys show validator -a --keyring-backend test)
+          celestia-appd tx ibc-transfer transfer transfer channel-0 $ROLLKIT_ADDR 100utia --from validator --node http://localhost:26654 --fees 400utia --keyring-backend test -y
+          sleep 20
+          BALANCE=$(./gmd/go/bin/gmd query bank balances $ROLLKIT_ADDR --output json --home ./gmd/.gm | jq '.balances')
+          echo "Gm balance after IBC transfer: $BALANCE"
+          # fail if no denom starts with ibc/
+          if ! echo '$BALANCE' | jq -e '.[] | select(.denom | startswith("ibc/"))' > /dev/null; then
+            echo "Error: No IBC denom found in balance after transfer!"
+            exit 1
+          fi
+
+      - name: Print logs on failure
+        if: failure()
+        run: |
+          echo '--- chain.log ---'
+          cat chain.log || true
+          echo '--- celestia.log ---'
+          cat celestia.log || true
+          echo '--- hermes.log ---'
+          cat hermes.log || true
+
+      - name: Cleanup Processes
+        if: always()
+        run: |
+          if [[ -n "${CHAIN_PID}" ]]; then
+            kill -9 $CHAIN_PID || true
+          fi
+          if [[ -n "${CELESTIA_PID}" ]]; then
+            kill -9 $CELESTIA_PID || true
+          fi
+          if [[ -n "${DA_PID}" ]]; then
+            kill -9 $DA_PID || true
+          fi
+          if [[ -n "${HERMES_PID}" ]]; then
+            kill -9 $HERMES_PID || true
           fi

@@ -344,34 +344,6 @@ jobs:
         run: |
           hermes create channel --a-chain gm --a-port transfer --b-chain celestia-local --b-port transfer --order unordered --new-client-connection --yes
 
-      - name: ICS20 Transfer Rollkit -> Celestia
-        run: |
-          ROLLKIT_ADDR=$(./gmd/go/bin/gmd keys show carol -a --home ./gmd/.gm)
-          CELESTIA_ADDR=$(celestia-appd keys show validator -a --keyring-backend test)
-
-          echo "Sending 100stake via IBC..."
-          TX_HASH=$(./gmd/go/bin/gmd tx ibc-transfer transfer transfer channel-0 $CELESTIA_ADDR 100stake --from carol -y --home ./gmd/.gm --output json | jq -r .txhash)
-
-          sleep 3
-
-          # query the transaction
-          TX_RESULT=$(./gmd/go/bin/gmd query tx $TX_HASH --output json --home ./gmd/.gm)
-          TX_CODE=$(echo $TX_RESULT | jq -r '.code')
-          if [ "$TX_CODE" != "0" ]; then
-            echo "Error: Transaction failed with code $TX_CODE"
-            echo $TX_RESULT | jq
-            exit 1
-          fi
-
-          sleep 15
-          BALANCE=$(celestia-appd query bank balances $CELESTIA_ADDR --output json --node http://localhost:26654 | jq '.balances')
-          echo "Celestia balance after IBC transfer: $BALANCE"
-          # fail if no denom starts with ibc/
-          if ! echo "$BALANCE" | jq -e '.[] | select(.denom | startswith("ibc/"))' > /dev/null; then
-            echo "Error: No IBC denom found in balance after transfer!"
-            exit 1
-          fi
-
       - name: ICS20 Transfer Celestia -> Rollkit
         run: |
           ROLLKIT_ADDR=$(./gmd/go/bin/gmd keys show carol -a --home ./gmd/.gm)
@@ -380,7 +352,7 @@ jobs:
           echo "Sending 100stake via IBC..."
           TX_HASH=$(celestia-appd tx ibc-transfer transfer transfer channel-0 $ROLLKIT_ADDR 100utia --from validator --node http://localhost:26654 --fees 400utia --keyring-backend test -y--output json | jq -r .txhash)
 
-          sleep 3
+          sleep 2
 
           # query the transaction
           TX_RESULT=$(celestia-appd query tx $TX_HASH --output json)
@@ -391,9 +363,37 @@ jobs:
             exit 1
           fi
 
-          sleep 15
+          sleep 10
           BALANCE=$(./gmd/go/bin/gmd query bank balances $ROLLKIT_ADDR --output json --home ./gmd/.gm | jq '.balances')
           echo "Gm balance after IBC transfer: $BALANCE"
+          # fail if no denom starts with ibc/
+          if ! echo "$BALANCE" | jq -e '.[] | select(.denom | startswith("ibc/"))' > /dev/null; then
+            echo "Error: No IBC denom found in balance after transfer!"
+            exit 1
+          fi
+
+      - name: ICS20 Transfer Rollkit -> Celestia
+        run: |
+          ROLLKIT_ADDR=$(./gmd/go/bin/gmd keys show carol -a --home ./gmd/.gm)
+          CELESTIA_ADDR=$(celestia-appd keys show validator -a --keyring-backend test)
+
+          echo "Sending 100stake via IBC..."
+          TX_HASH=$(./gmd/go/bin/gmd tx ibc-transfer transfer transfer channel-0 $CELESTIA_ADDR 100stake --from carol -y --home ./gmd/.gm --output json | jq -r .txhash)
+
+          sleep 5
+
+          # query the transaction
+          TX_RESULT=$(./gmd/go/bin/gmd query tx $TX_HASH --output json --home ./gmd/.gm)
+          TX_CODE=$(echo $TX_RESULT | jq -r '.code')
+          if [ "$TX_CODE" != "0" ]; then
+            echo "Error: Transaction failed with code $TX_CODE"
+            echo $TX_RESULT | jq
+            exit 1
+          fi
+
+          sleep 10
+          BALANCE=$(celestia-appd query bank balances $CELESTIA_ADDR --output json --node http://localhost:26654 | jq '.balances')
+          echo "Celestia balance after IBC transfer: $BALANCE"
           # fail if no denom starts with ibc/
           if ! echo "$BALANCE" | jq -e '.[] | select(.denom | startswith("ibc/"))' > /dev/null; then
             echo "Error: No IBC denom found in balance after transfer!"

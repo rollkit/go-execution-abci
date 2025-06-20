@@ -161,7 +161,7 @@ func cometBlockToRollkit(block *cometbfttypes.Block) (*rollkittypes.SignedHeader
 				Block: block.Version.Block,
 				App:   block.Version.App,
 			},
-			LastHeaderHash:  block.LastCommitHash.Bytes(),
+			LastHeaderHash:  block.LastBlockID.Hash.Bytes(),
 			LastCommitHash:  block.LastCommitHash.Bytes(),
 			DataHash:        block.DataHash.Bytes(),
 			ConsensusHash:   block.ConsensusHash.Bytes(),

@@ -52,7 +52,6 @@ func MigrateToRollkitCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer rollkitStore.Close()
 
 			rollkitState, err := rollkitStateFromCometBFTState(cometBFTstate)
 			if err != nil {
@@ -113,7 +112,7 @@ func MigrateToRollkitCmd() *cobra.Command {
 			}
 
 			cmd.Println("Migration completed successfully")
-			return nil
+			return rollkitStore.Close()
 		},
 	}
 	return cmd

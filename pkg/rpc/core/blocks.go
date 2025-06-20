@@ -289,11 +289,6 @@ func BlockResults(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlockR
 		return nil, err
 	}
 
-	header, _, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), height)
-	if err != nil {
-		return nil, err
-	}
-
 	resp, err := env.Adapter.Store.GetBlockResponse(ctx.Context(), height)
 	if err != nil {
 		return nil, err
@@ -305,7 +300,7 @@ func BlockResults(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlockR
 		FinalizeBlockEvents:   resp.Events,
 		ValidatorUpdates:      resp.ValidatorUpdates,
 		ConsensusParamUpdates: resp.ConsensusParamUpdates,
-		AppHash:               header.AppHash,
+		AppHash:               resp.AppHash,
 	}, nil
 }
 

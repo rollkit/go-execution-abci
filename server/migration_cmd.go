@@ -21,6 +21,8 @@ import (
 	rollkittypes "github.com/rollkit/rollkit/types"
 )
 
+var flagDaHeight = "da-height"
+
 // MigrateToRollkitCmd returns a command that migrates the data from the CometBFT chain to Rollkit.
 func MigrateToRollkitCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -53,7 +55,11 @@ func MigrateToRollkitCmd() *cobra.Command {
 				return err
 			}
 
-			rollkitState, err := rollkitStateFromCometBFTState(cometBFTstate)
+			daHeight, err := cmd.Flags().GetUint64(flagDaHeight)
+			if err != nil {
+				return fmt.Errorf("error reading %s flag: %w", flagDaHeight, err)
+			}
+			rollkitState, err := rollkitStateFromCometBFTState(cometBFTstate, daHeight)
 			if err != nil {
 				return err
 			}
@@ -115,6 +121,9 @@ func MigrateToRollkitCmd() *cobra.Command {
 			return rollkitStore.Close()
 		},
 	}
+
+	cmd.Flags().Uint64(flagDaHeight, 1, "The DA height to set in the Rollkit state. Defaults to 1.")
+
 	return cmd
 }
 
@@ -212,7 +221,7 @@ func loadRollkitStateStore(rootDir, dbPath string) (rollkitstore.Store, error) {
 	return rollkitstore.New(baseKV), nil
 }
 
-func rollkitStateFromCometBFTState(cometBFTState state.State) (rollkittypes.State, error) {
+func rollkitStateFromCometBFTState(cometBFTState state.State, daHeight uint64) (rollkittypes.State, error) {
 	return rollkittypes.State{
 		Version: rollkittypes.Version{
 			Block: cometBFTState.Version.Consensus.Block,
@@ -223,7 +232,7 @@ func rollkitStateFromCometBFTState(cometBFTState state.State) (rollkittypes.Stat
 		LastBlockHeight: uint64(cometBFTState.LastBlockHeight),
 		LastBlockTime:   cometBFTState.LastBlockTime,
 
-		DAHeight: 1, // TODO: set this to the correct value
+		DAHeight: daHeight,
 
 		LastResultsHash: cometBFTState.LastResultsHash,
 		AppHash:         cometBFTState.AppHash,

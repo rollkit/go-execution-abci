@@ -89,8 +89,9 @@ func (s *Store) GetBlockResponse(ctx context.Context, height uint64) (*abci.Resp
 	if err != nil {
 		return nil, fmt.Errorf("failed to get block response: %w", err)
 	}
+
 	if data == nil {
-		return nil, nil
+		return nil, fmt.Errorf("block response not found for height %d", height)
 	}
 
 	resp := &abci.ResponseFinalizeBlock{}

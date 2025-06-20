@@ -19,32 +19,24 @@ import (
 
 const NodeIDByteLength = 20
 
-func normalizeHeight(height *int64) uint64 {
-	var heightValue uint64
-	if height == nil {
-		var err error
-		// TODO: Decide how to handle context here. Using background for now.
-		heightValue, err = env.Adapter.RollkitStore.Height(context.Background())
+func normalizeHeight(ctx context.Context, height *int64) (uint64, error) {
+	var (
+		heightValue uint64
+		err         error
+	)
+
+	if height == nil || *height < 0 {
+		// Handle negative heights if they have special meaning
+		// (e.g., -1 for latest)
+		heightValue, err = env.Adapter.RollkitStore.Height(ctx)
 		if err != nil {
-			// TODO: Consider logging or returning error
-			env.Logger.Error("Failed to get current height in normalizeHeight", "err", err)
-			return 0
-		}
-	} else if *height < 0 {
-		// Handle negative heights if they have special meaning (e.g., -1 for latest)
-		// Currently, just treat them as 0 or latest, adjust as needed.
-		// For now, let's assume negative height means latest valid height.
-		var err error
-		heightValue, err = env.Adapter.RollkitStore.Height(context.Background())
-		if err != nil {
-			env.Logger.Error("Failed to get current height for negative height in normalizeHeight", "err", err)
-			return 0
+			return 0, fmt.Errorf("failed to get current height: %w", err)
 		}
 	} else {
 		heightValue = uint64(*height)
 	}
 
-	return heightValue
+	return heightValue, nil
 }
 
 func getLastCommit(ctx context.Context, blockHeight uint64) (*cmttypes.Commit, error) {

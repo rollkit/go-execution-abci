@@ -8,7 +8,7 @@ import (
 
 	"cosmossdk.io/log"
 	abci "github.com/cometbft/cometbft/abci/types"
-	"github.com/cometbft/cometbft/config"
+	cmtcfg "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/libs/bytes"
 	"github.com/cometbft/cometbft/mempool"
 	corep2p "github.com/cometbft/cometbft/p2p"
@@ -44,7 +44,7 @@ type P2PClientInfo interface {
 }
 
 // LoadGenesisDoc returns the genesis document from the provided config file.
-func LoadGenesisDoc(cfg *config.Config) (*cmttypes.GenesisDoc, error) {
+func LoadGenesisDoc(cfg *cmtcfg.Config) (*cmttypes.GenesisDoc, error) {
 	genesisFile := cfg.GenesisFile()
 	doc, err := cmttypes.GenesisDocFromFile(genesisFile)
 	if err != nil {
@@ -80,7 +80,7 @@ func NewABCIExecutor(
 	p2pClient *rollkitp2p.Client,
 	p2pMetrics *rollkitp2p.Metrics,
 	logger log.Logger,
-	cfg *config.Config,
+	cfg *cmtcfg.Config,
 	appGenesis *genutiltypes.AppGenesis,
 	metrics *Metrics,
 ) *Adapter {
@@ -93,8 +93,8 @@ func NewABCIExecutor(
 		Prefix: ds.NewKey(rollnode.RollkitPrefix),
 	})
 	rollkitStore := rstore.New(rollkitPrefixStore)
-	// Create a new Store with ABCI prefix
-	abciStore := NewStore(store)
+
+	abciStore := NewExecABCIStore(store)
 
 	a := &Adapter{
 		App:          app,
@@ -302,40 +302,9 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("rollkit header not found in context")
 	}
 
-	var proposedLastCommit abci.CommitInfo
-	var lastCommit *cmttypes.Commit
-
-	if blockHeight > 1 {
-		header, data, err := a.RollkitStore.GetBlockData(ctx, blockHeight-1)
-		if err != nil {
-			return nil, 0, fmt.Errorf("failed to get previous block data: %w", err)
-		}
-
-		commitForPrevBlock := &cmttypes.Commit{
-			Height:  int64(header.Height()),
-			Round:   0,
-			BlockID: cmttypes.BlockID{Hash: bytes.HexBytes(header.Hash()), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: bytes.HexBytes(data.Hash())}},
-			Signatures: []cmttypes.CommitSig{
-				{
-					BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-					ValidatorAddress: cmttypes.Address(header.ProposerAddress),
-					Timestamp:        header.Time(),
-					Signature:        header.Signature,
-				},
-			},
-		}
-
-		lastCommit = commitForPrevBlock
-		proposedLastCommit = cometCommitToABCICommitInfo(commitForPrevBlock)
-	} else {
-		// For the first block, ProposedLastCommit is empty
-		proposedLastCommit = abci.CommitInfo{Round: 0, Votes: []abci.VoteInfo{}}
-		lastCommit = &cmttypes.Commit{
-			Height:     int64(blockHeight),
-			Round:      0,
-			BlockID:    cmttypes.BlockID{},
-			Signatures: []cmttypes.CommitSig{},
-		}
+	lastCommit, err := a.getLastCommit(ctx, blockHeight)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get last commit: %w", err)
 	}
 
 	emptyBlock, err := cometcompat.ToABCIBlock(header, &types.Data{}, lastCommit)
@@ -348,7 +317,7 @@ func (a *Adapter) ExecuteTxs(
 		Height:             int64(blockHeight),
 		Time:               timestamp,
 		Txs:                txs,
-		ProposedLastCommit: proposedLastCommit,
+		ProposedLastCommit: cometCommitToABCICommitInfo(lastCommit),
 		Misbehavior:        []abci.Misbehavior{},
 		ProposerAddress:    s.Validators.Proposer.Address,
 		NextValidatorsHash: s.NextValidators.Hash(),
@@ -464,26 +433,107 @@ func (a *Adapter) ExecuteTxs(
 		cmtTxs[i] = txs[i]
 	}
 
-	commit := &cmttypes.Commit{
-		Height: int64(blockHeight),
-		Round:  0,
-		Signatures: []cmttypes.CommitSig{
+	// if blockheight is 0, we create a signed last commit.
+	if blockHeight == 0 {
+		lastCommit.Signatures = []cmttypes.CommitSig{
 			{
 				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
 				ValidatorAddress: s.Validators.Proposer.Address,
 				Timestamp:        time.Now().UTC(),
 				Signature:        []byte{},
 			},
-		},
+		}
 	}
 
+	block := s.MakeBlock(int64(blockHeight), cmtTxs, lastCommit, nil, s.Validators.Proposer.Address)
+
+	currentBlockID := cmttypes.BlockID{
+		Hash:          block.Hash(),
+		PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: block.DataHash},
+	}
+
+	if err := fireEvents(a.EventBus, block, currentBlockID, fbResp, validatorUpdates); err != nil {
+		a.Logger.Error("failed to fire events", "err", err)
+	}
+
+	// save the finalized block response
+	if err := a.Store.SaveBlockResponse(ctx, blockHeight, fbResp); err != nil {
+		return nil, 0, fmt.Errorf("failed to save block response: %w", err)
+	}
+
+	a.Logger.Info("block executed successfully", "height", blockHeight, "appHash", fmt.Sprintf("%X", fbResp.AppHash))
+	return fbResp.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
+}
+
+func fireEvents(
+	eventBus cmttypes.BlockEventPublisher,
+	block *cmttypes.Block,
+	blockID cmttypes.BlockID,
+	abciResponse *abci.ResponseFinalizeBlock,
+	validatorUpdates []*cmttypes.Validator,
+) error {
+	if err := eventBus.PublishEventNewBlock(cmttypes.EventDataNewBlock{
+		Block:               block,
+		BlockID:             blockID,
+		ResultFinalizeBlock: *abciResponse,
+	}); err != nil {
+		return fmt.Errorf("failed publishing new block: %w", err)
+	}
+
+	if err := eventBus.PublishEventNewBlockHeader(cmttypes.EventDataNewBlockHeader{
+		Header: block.Header,
+	}); err != nil {
+		return fmt.Errorf("failed publishing new block header: %w", err)
+	}
+
+	if err := eventBus.PublishEventNewBlockEvents(cmttypes.EventDataNewBlockEvents{
+		Height: block.Height,
+		Events: abciResponse.Events,
+		NumTxs: int64(len(block.Txs)),
+	}); err != nil {
+		return fmt.Errorf("failed publishing new block events: %w", err)
+	}
+
+	if len(block.Evidence.Evidence) != 0 {
+		for _, ev := range block.Evidence.Evidence {
+			if err := eventBus.PublishEventNewEvidence(cmttypes.EventDataNewEvidence{
+				Evidence: ev,
+				Height:   block.Height,
+			}); err != nil {
+				return fmt.Errorf("failed publishing new evidence: %w", err)
+			}
+		}
+	}
+
+	for i, tx := range block.Txs {
+		if err := eventBus.PublishEventTx(cmttypes.EventDataTx{TxResult: abci.TxResult{
+			Height: block.Height,
+			Index:  uint32(i),
+			Tx:     tx,
+			Result: *(abciResponse.TxResults[i]),
+		}}); err != nil {
+			return fmt.Errorf("failed publishing event TX: %w", err)
+		}
+	}
+
+	if len(validatorUpdates) > 0 {
+		if err := eventBus.PublishEventValidatorSetUpdates(
+			cmttypes.EventDataValidatorSetUpdates{ValidatorUpdates: validatorUpdates}); err != nil {
+			return fmt.Errorf("failed publishing event: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (a *Adapter) getLastCommit(ctx context.Context, blockHeight uint64) (*cmttypes.Commit, error) {
 	if blockHeight > 1 {
 		header, data, err := a.RollkitStore.GetBlockData(ctx, blockHeight-1)
 		if err != nil {
-			return nil, 0, fmt.Errorf("failed to get previous block data: %w", err)
+			return nil, fmt.Errorf("failed to get previous block data: %w", err)
 		}
 
-		commit = &cmttypes.Commit{
+		commitForPrevBlock := &cmttypes.Commit{
 			Height:  int64(header.Height()),
 			Round:   0,
 			BlockID: cmttypes.BlockID{Hash: bytes.HexBytes(header.Hash()), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: bytes.HexBytes(data.Hash())}},
@@ -496,75 +546,40 @@ func (a *Adapter) ExecuteTxs(
 				},
 			},
 		}
+
+		return commitForPrevBlock, nil
 	}
 
-	block := s.MakeBlock(int64(blockHeight), cmtTxs, commit, nil, s.Validators.Proposer.Address)
-
-	currentBlockID := cmttypes.BlockID{Hash: block.Hash(), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: block.DataHash}}
-
-	fireEvents(a.Logger, a.EventBus, block, currentBlockID, fbResp, validatorUpdates)
-
-	a.Logger.Info("block executed successfully", "height", blockHeight, "appHash", fmt.Sprintf("%X", fbResp.AppHash))
-	return fbResp.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
+	return &cmttypes.Commit{
+		Height:     int64(blockHeight),
+		Round:      0,
+		BlockID:    cmttypes.BlockID{},
+		Signatures: []cmttypes.CommitSig{},
+	}, nil
 }
 
-func fireEvents(
-	logger log.Logger,
-	eventBus cmttypes.BlockEventPublisher,
-	block *cmttypes.Block,
-	blockID cmttypes.BlockID,
-	abciResponse *abci.ResponseFinalizeBlock,
-	validatorUpdates []*cmttypes.Validator,
-) {
-	if err := eventBus.PublishEventNewBlock(cmttypes.EventDataNewBlock{
-		Block:               block,
-		BlockID:             blockID,
-		ResultFinalizeBlock: *abciResponse,
-	}); err != nil {
-		logger.Error("failed publishing new block", "err", err)
-	}
-
-	if err := eventBus.PublishEventNewBlockHeader(cmttypes.EventDataNewBlockHeader{
-		Header: block.Header,
-	}); err != nil {
-		logger.Error("failed publishing new block header", "err", err)
-	}
-
-	if err := eventBus.PublishEventNewBlockEvents(cmttypes.EventDataNewBlockEvents{
-		Height: block.Height,
-		Events: abciResponse.Events,
-		NumTxs: int64(len(block.Txs)),
-	}); err != nil {
-		logger.Error("failed publishing new block events", "err", err)
-	}
-
-	if len(block.Evidence.Evidence) != 0 {
-		for _, ev := range block.Evidence.Evidence {
-			if err := eventBus.PublishEventNewEvidence(cmttypes.EventDataNewEvidence{
-				Evidence: ev,
-				Height:   block.Height,
-			}); err != nil {
-				logger.Error("failed publishing new evidence", "err", err)
-			}
+func cometCommitToABCICommitInfo(commit *cmttypes.Commit) abci.CommitInfo {
+	if len(commit.Signatures) == 0 {
+		return abci.CommitInfo{
+			Round: commit.Round,
+			Votes: []abci.VoteInfo{},
 		}
 	}
 
-	for i, tx := range block.Txs {
-		if err := eventBus.PublishEventTx(cmttypes.EventDataTx{TxResult: abci.TxResult{
-			Height: block.Height,
-			Index:  uint32(i),
-			Tx:     tx,
-			Result: *(abciResponse.TxResults[i]),
-		}}); err != nil {
-			logger.Error("failed publishing event TX", "err", err)
+	votes := make([]abci.VoteInfo, len(commit.Signatures))
+	for i, sig := range commit.Signatures {
+		votes[i] = abci.VoteInfo{
+			Validator: abci.Validator{
+				Address: sig.ValidatorAddress,
+				Power:   0,
+			},
+			BlockIdFlag: cmtprototypes.BlockIDFlag(sig.BlockIDFlag),
 		}
 	}
 
-	if len(validatorUpdates) > 0 {
-		if err := eventBus.PublishEventValidatorSetUpdates(
-			cmttypes.EventDataValidatorSetUpdates{ValidatorUpdates: validatorUpdates}); err != nil {
-			logger.Error("failed publishing event", "err", err)
-		}
+	return abci.CommitInfo{
+		Round: commit.Round,
+		Votes: votes,
 	}
 }
 
@@ -617,35 +632,4 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 // For a Cosmos SDK app, this is a no-op we do not need to do anything to mark the block as finalized.
 func (a *Adapter) SetFinal(ctx context.Context, blockHeight uint64) error {
 	return nil
-}
-
-func cometCommitToABCICommitInfo(commit *cmttypes.Commit) abci.CommitInfo {
-	if commit == nil {
-		return abci.CommitInfo{
-			Round: 0,
-			Votes: []abci.VoteInfo{},
-		}
-	}
-
-	if len(commit.Signatures) == 0 {
-		return abci.CommitInfo{
-			Round: commit.Round,
-			Votes: []abci.VoteInfo{},
-		}
-	}
-
-	votes := make([]abci.VoteInfo, len(commit.Signatures))
-	for i, sig := range commit.Signatures {
-		votes[i] = abci.VoteInfo{
-			Validator: abci.Validator{
-				Address: sig.ValidatorAddress,
-				Power:   0,
-			},
-			BlockIdFlag: cmtprototypes.BlockIDFlag(sig.BlockIDFlag),
-		}
-	}
-	return abci.CommitInfo{
-		Round: commit.Round,
-		Votes: votes,
-	}
 }

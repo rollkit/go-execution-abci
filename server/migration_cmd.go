@@ -52,17 +52,23 @@ func MigrateToRollkitCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			defer rollkitStore.Close()
 
 			rollkitState, err := rollkitStateFromCometBFTState(cometBFTstate)
 			if err != nil {
 				return err
 			}
 
-			if err = rollkitStore.UpdateState(context.Background(), rollkitState); err != nil {
+			if err = rollkitStore.UpdateState(
+				context.Background(), rollkitState,
+			); err != nil {
 				return err
 			}
 
+			// migrate all the blocks from the cometBFT block store to the rollkit store
 			for height := lastBlockHeight; height > 0; height-- {
+				cmd.Printf("Migrating block %d...\n", height)
+
 				block := cometBlockStore.LoadBlock(height)
 				header, data, signature := cometBlockToRollkit(block)
 
@@ -71,7 +77,7 @@ func MigrateToRollkitCmd() *cobra.Command {
 				}
 
 				// Only save extended commit info if vote extensions are enabled
-				if cometBFTstate.ConsensusParams.ABCI.VoteExtensionsEnabled(block.Height) {
+				if enabled := cometBFTstate.ConsensusParams.ABCI.VoteExtensionsEnabled(block.Height); enabled {
 					extendedCommit := cometBlockStore.LoadBlockExtendedCommit(lastBlockHeight)
 
 					extendedCommitInfo := abci.ExtendedCommitInfo{
@@ -98,6 +104,7 @@ func MigrateToRollkitCmd() *cobra.Command {
 						})
 					}
 
+					_ = extendedCommitInfo
 					// rollkitStore.SaveExtendedCommit(context.Background(), header.Height(), &extendedCommitInfo)
 					panic("Saving extended commit info is not implemented yet")
 				}
@@ -106,7 +113,7 @@ func MigrateToRollkitCmd() *cobra.Command {
 			}
 
 			cmd.Println("Migration completed successfully")
-			return rollkitStore.Close()
+			return nil
 		},
 	}
 	return cmd
@@ -163,6 +170,7 @@ func cometBlockToRollkit(block *cometbfttypes.Block) (*rollkittypes.SignedHeader
 	for _, tx := range block.Txs {
 		data.Txs = append(data.Txs, rollkittypes.Tx(tx))
 	}
+
 	return header, data, signature
 }
 

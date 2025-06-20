@@ -352,7 +352,7 @@ jobs:
           echo "Sending 100stake via IBC..."
           TX_HASH=$(celestia-appd tx ibc-transfer transfer transfer channel-0 $ROLLKIT_ADDR 100utia --from validator --node http://localhost:26654 --fees 400utia --keyring-backend test -y --output json | jq -r .txhash)
 
-          sleep 6
+          sleep 10
 
           # query the transaction
           TX_RESULT=$(celestia-appd query tx $TX_HASH --output json)
@@ -380,7 +380,7 @@ jobs:
           echo "Sending 100stake via IBC..."
           TX_HASH=$(./gmd/go/bin/gmd tx ibc-transfer transfer transfer channel-0 $CELESTIA_ADDR 100stake --from carol -y --home ./gmd/.gm --output json | jq -r .txhash)
 
-          sleep 2
+          sleep 10
 
           # query the transaction
           TX_RESULT=$(./gmd/go/bin/gmd query tx $TX_HASH --output json --home ./gmd/.gm)

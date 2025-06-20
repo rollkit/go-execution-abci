@@ -294,7 +294,7 @@ func BlockResults(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlockR
 		return nil, err
 	}
 
-	resp, err := env.Adapter.Store.LoadBlockResponse(ctx.Context(), height)
+	resp, err := env.Adapter.Store.GetBlockResponse(ctx.Context(), height)
 	if err != nil {
 		return nil, err
 	}

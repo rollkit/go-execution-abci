@@ -82,8 +82,8 @@ func (s *Store) SaveBlockResponse(ctx context.Context, height uint64, resp *abci
 	return s.prefixedStore.Put(ctx, ds.NewKey(key), data)
 }
 
-// LoadBlockResponse loads the block response from disk for a specific height
-func (s *Store) LoadBlockResponse(ctx context.Context, height uint64) (*abci.ResponseFinalizeBlock, error) {
+// GetBlockResponse loads the block response from disk for a specific height
+func (s *Store) GetBlockResponse(ctx context.Context, height uint64) (*abci.ResponseFinalizeBlock, error) {
 	key := fmt.Sprintf("%s/%d", blockResponseKey, height)
 	data, err := s.prefixedStore.Get(ctx, ds.NewKey(key))
 	if err != nil {

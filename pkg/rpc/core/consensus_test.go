@@ -287,12 +287,18 @@ func TestConsensusParams(t *testing.T) {
 		mockRollkitStore.AssertExpectations(t)
 	})
 
-	t.Run("Success_HeightNormalizationReturnsZeroOnError", func(t *testing.T) {
+	t.Run("Error_NilHeightAndStoreError", func(t *testing.T) {
 		mockRollkitStore, _ := setupTestConsensusParamsEnv(t, true, &testMockStateWithConsensusParams)
 		mockRollkitStore.On("Height", testifymock.Anything).Return(uint64(0), errors.New("failed to get height")).Once()
 
-		// err := abciStore.SaveState(context.Background(), &testMockStateWithConsensusParams) // Moved to helper
-		// require.NoError(err) // Moved to helper
+		_, err := ConsensusParams(ctx, nil)
+		require.Error(err)
+		mockRollkitStore.AssertExpectations(t)
+	})
+
+	t.Run("Success_NilHeight", func(t *testing.T) {
+		mockRollkitStore, _ := setupTestConsensusParamsEnv(t, true, &testMockStateWithConsensusParams)
+		mockRollkitStore.On("Height", testifymock.Anything).Return(uint64(0), nil).Once()
 
 		result, err := ConsensusParams(ctx, nil)
 		require.NoError(err)

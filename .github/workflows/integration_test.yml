@@ -348,8 +348,11 @@ jobs:
           sleep 20
           BALANCE=$(celestia-appd query bank balances $CELESTIA_ADDR --output json --node http://localhost:26654 | jq '.balances')
           echo "Celestia balance after IBC transfer: $BALANCE"
-          # TODO: check that the balance is correct
-          # ref: https://github.com/rollkit/go-execution-abci/pull/138#discussion_r2156332760
+          # fail if no denom starts with ibc/
+          if ! echo "$BALANCE" | jq -e '.[] | select(.denom | startswith("ibc/"))' > /dev/null; then
+            echo "Error: No IBC denom found in balance after transfer!"
+            exit 1
+          fi
 
       - name: ICS20 Transfer Celestia -> Rollkit
         run: |

@@ -16,7 +16,11 @@ import (
 //
 // More: https://docs.cometbft.com/v0.37/rpc/#/Info/validators
 func Validators(ctx *rpctypes.Context, heightPtr *int64, pagePtr, perPagePtr *int) (*coretypes.ResultValidators, error) {
-	height := normalizeHeight(heightPtr)
+	height, err := normalizeHeight(ctx.Context(), heightPtr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to normalize height: %w", err)
+	}
+
 	genesisValidators := env.Adapter.AppGenesis.Consensus.Validators
 
 	if len(genesisValidators) != 1 {
@@ -62,13 +66,19 @@ func ConsensusState(ctx *rpctypes.Context) (*coretypes.ResultConsensusState, err
 // If no height is provided, it will fetch the latest consensus params.
 // More: https://docs.cometbft.com/v0.37/rpc/#/Info/consensus_params
 func ConsensusParams(ctx *rpctypes.Context, heightPtr *int64) (*coretypes.ResultConsensusParams, error) {
+	height, err := normalizeHeight(ctx.Context(), heightPtr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to normalize height: %w", err)
+	}
+
 	state, err := env.Adapter.Store.LoadState(ctx.Context())
 	if err != nil {
 		return nil, err
 	}
+
 	params := state.ConsensusParams
 	return &coretypes.ResultConsensusParams{
-		BlockHeight: int64(normalizeHeight(heightPtr)), //nolint:gosec
+		BlockHeight: int64(height), //nolint:gosec
 		ConsensusParams: cmttypes.ConsensusParams{
 			Block: cmttypes.BlockParams{
 				MaxBytes: params.Block.MaxBytes,

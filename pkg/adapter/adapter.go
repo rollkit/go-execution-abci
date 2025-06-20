@@ -302,40 +302,9 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("rollkit header not found in context")
 	}
 
-	var proposedLastCommit abci.CommitInfo
-	var lastCommit *cmttypes.Commit
-
-	if blockHeight > 1 {
-		header, data, err := a.RollkitStore.GetBlockData(ctx, blockHeight-1)
-		if err != nil {
-			return nil, 0, fmt.Errorf("failed to get previous block data: %w", err)
-		}
-
-		commitForPrevBlock := &cmttypes.Commit{
-			Height:  int64(header.Height()),
-			Round:   0,
-			BlockID: cmttypes.BlockID{Hash: bytes.HexBytes(header.Hash()), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: bytes.HexBytes(data.Hash())}},
-			Signatures: []cmttypes.CommitSig{
-				{
-					BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-					ValidatorAddress: cmttypes.Address(header.ProposerAddress),
-					Timestamp:        header.Time(),
-					Signature:        header.Signature,
-				},
-			},
-		}
-
-		lastCommit = commitForPrevBlock
-		proposedLastCommit = cometCommitToABCICommitInfo(commitForPrevBlock)
-	} else {
-		// For the first block, ProposedLastCommit is empty
-		proposedLastCommit = abci.CommitInfo{Round: 0, Votes: []abci.VoteInfo{}}
-		lastCommit = &cmttypes.Commit{
-			Height:     int64(blockHeight),
-			Round:      0,
-			BlockID:    cmttypes.BlockID{},
-			Signatures: []cmttypes.CommitSig{},
-		}
+	lastCommit, err := a.getLastCommit(ctx, blockHeight)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get last commit: %w", err)
 	}
 
 	emptyBlock, err := cometcompat.ToABCIBlock(header, &types.Data{}, lastCommit)
@@ -348,7 +317,7 @@ func (a *Adapter) ExecuteTxs(
 		Height:             int64(blockHeight),
 		Time:               timestamp,
 		Txs:                txs,
-		ProposedLastCommit: proposedLastCommit,
+		ProposedLastCommit: cometCommitToABCICommitInfo(lastCommit),
 		Misbehavior:        []abci.Misbehavior{},
 		ProposerAddress:    s.Validators.Proposer.Address,
 		NextValidatorsHash: s.NextValidators.Hash(),
@@ -619,14 +588,39 @@ func (a *Adapter) SetFinal(ctx context.Context, blockHeight uint64) error {
 	return nil
 }
 
-func cometCommitToABCICommitInfo(commit *cmttypes.Commit) abci.CommitInfo {
-	if commit == nil {
-		return abci.CommitInfo{
-			Round: 0,
-			Votes: []abci.VoteInfo{},
+func (a *Adapter) getLastCommit(ctx context.Context, blockHeight uint64) (*cmttypes.Commit, error) {
+	if blockHeight > 1 {
+		header, data, err := a.RollkitStore.GetBlockData(ctx, blockHeight-1)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get previous block data: %w", err)
 		}
+
+		commitForPrevBlock := &cmttypes.Commit{
+			Height:  int64(header.Height()),
+			Round:   0,
+			BlockID: cmttypes.BlockID{Hash: bytes.HexBytes(header.Hash()), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: bytes.HexBytes(data.Hash())}},
+			Signatures: []cmttypes.CommitSig{
+				{
+					BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+					ValidatorAddress: cmttypes.Address(header.ProposerAddress),
+					Timestamp:        header.Time(),
+					Signature:        header.Signature,
+				},
+			},
+		}
+
+		return commitForPrevBlock, nil
 	}
 
+	return &cmttypes.Commit{
+		Height:     int64(blockHeight),
+		Round:      0,
+		BlockID:    cmttypes.BlockID{},
+		Signatures: []cmttypes.CommitSig{},
+	}, nil
+}
+
+func cometCommitToABCICommitInfo(commit *cmttypes.Commit) abci.CommitInfo {
 	if len(commit.Signatures) == 0 {
 		return abci.CommitInfo{
 			Round: commit.Round,
@@ -644,6 +638,7 @@ func cometCommitToABCICommitInfo(commit *cmttypes.Commit) abci.CommitInfo {
 			BlockIdFlag: cmtprototypes.BlockIDFlag(sig.BlockIDFlag),
 		}
 	}
+
 	return abci.CommitInfo{
 		Round: commit.Round,
 		Votes: votes,

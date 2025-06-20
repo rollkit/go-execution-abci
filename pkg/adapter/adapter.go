@@ -447,9 +447,14 @@ func (a *Adapter) ExecuteTxs(
 
 	block := s.MakeBlock(int64(blockHeight), cmtTxs, lastCommit, nil, s.Validators.Proposer.Address)
 
-	currentBlockID := cmttypes.BlockID{Hash: block.Hash(), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: block.DataHash}}
+	currentBlockID := cmttypes.BlockID{
+		Hash:          block.Hash(),
+		PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: block.DataHash},
+	}
 
-	fireEvents(a.Logger, a.EventBus, block, currentBlockID, fbResp, validatorUpdates)
+	if err := fireEvents(a.EventBus, block, currentBlockID, fbResp, validatorUpdates); err != nil {
+		a.Logger.Error("failed to fire events", "err", err)
+	}
 
 	// save the finalized block response
 	if err := a.Store.SaveBlockResponse(ctx, blockHeight, fbResp); err != nil {
@@ -461,25 +466,24 @@ func (a *Adapter) ExecuteTxs(
 }
 
 func fireEvents(
-	logger log.Logger,
 	eventBus cmttypes.BlockEventPublisher,
 	block *cmttypes.Block,
 	blockID cmttypes.BlockID,
 	abciResponse *abci.ResponseFinalizeBlock,
 	validatorUpdates []*cmttypes.Validator,
-) {
+) error {
 	if err := eventBus.PublishEventNewBlock(cmttypes.EventDataNewBlock{
 		Block:               block,
 		BlockID:             blockID,
 		ResultFinalizeBlock: *abciResponse,
 	}); err != nil {
-		logger.Error("failed publishing new block", "err", err)
+		return fmt.Errorf("failed publishing new block: %w", err)
 	}
 
 	if err := eventBus.PublishEventNewBlockHeader(cmttypes.EventDataNewBlockHeader{
 		Header: block.Header,
 	}); err != nil {
-		logger.Error("failed publishing new block header", "err", err)
+		return fmt.Errorf("failed publishing new block header: %w", err)
 	}
 
 	if err := eventBus.PublishEventNewBlockEvents(cmttypes.EventDataNewBlockEvents{
@@ -487,7 +491,7 @@ func fireEvents(
 		Events: abciResponse.Events,
 		NumTxs: int64(len(block.Txs)),
 	}); err != nil {
-		logger.Error("failed publishing new block events", "err", err)
+		return fmt.Errorf("failed publishing new block events: %w", err)
 	}
 
 	if len(block.Evidence.Evidence) != 0 {
@@ -496,7 +500,7 @@ func fireEvents(
 				Evidence: ev,
 				Height:   block.Height,
 			}); err != nil {
-				logger.Error("failed publishing new evidence", "err", err)
+				return fmt.Errorf("failed publishing new evidence: %w", err)
 			}
 		}
 	}
@@ -508,66 +512,17 @@ func fireEvents(
 			Tx:     tx,
 			Result: *(abciResponse.TxResults[i]),
 		}}); err != nil {
-			logger.Error("failed publishing event TX", "err", err)
+			return fmt.Errorf("failed publishing event TX: %w", err)
 		}
 	}
 
 	if len(validatorUpdates) > 0 {
 		if err := eventBus.PublishEventValidatorSetUpdates(
 			cmttypes.EventDataValidatorSetUpdates{ValidatorUpdates: validatorUpdates}); err != nil {
-			logger.Error("failed publishing event", "err", err)
+			return fmt.Errorf("failed publishing event: %w", err)
 		}
 	}
-}
 
-// GetTxs calls PrepareProposal with the next height from the store and returns the transactions from the ABCI app
-func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
-	getTxsStart := time.Now()
-	defer func() {
-		a.Metrics.GetTxsDurationSeconds.Observe(time.Since(getTxsStart).Seconds())
-	}()
-	a.Logger.Debug("Getting transactions for proposal")
-
-	s, err := a.Store.LoadState(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load state for GetTxs: %w", err)
-	}
-
-	if a.Mempool == nil {
-		err := fmt.Errorf("mempool not initialized")
-		return nil, err
-	}
-
-	reapedTxs := a.Mempool.ReapMaxBytesMaxGas(int64(s.ConsensusParams.Block.MaxBytes), -1)
-	txsBytes := make([][]byte, len(reapedTxs))
-	for i, tx := range reapedTxs {
-		txsBytes[i] = tx
-	}
-
-	currentHeight, err := a.RollkitStore.Height(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := a.App.PrepareProposal(&abci.RequestPrepareProposal{
-		Txs:                txsBytes,
-		MaxTxBytes:         int64(s.ConsensusParams.Block.MaxBytes),
-		Height:             int64(currentHeight + 1),
-		Time:               time.Now(),
-		NextValidatorsHash: s.NextValidators.Hash(),
-		ProposerAddress:    s.Validators.Proposer.Address,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	a.Metrics.TxsProposedTotal.Add(float64(len(resp.Txs)))
-	return resp.Txs, nil
-}
-
-// SetFinal handles extra logic once the block has been finalized (posted to DA).
-// For a Cosmos SDK app, this is a no-op we do not need to do anything to mark the block as finalized.
-func (a *Adapter) SetFinal(ctx context.Context, blockHeight uint64) error {
 	return nil
 }
 
@@ -626,4 +581,55 @@ func cometCommitToABCICommitInfo(commit *cmttypes.Commit) abci.CommitInfo {
 		Round: commit.Round,
 		Votes: votes,
 	}
+}
+
+// GetTxs calls PrepareProposal with the next height from the store and returns the transactions from the ABCI app
+func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
+	getTxsStart := time.Now()
+	defer func() {
+		a.Metrics.GetTxsDurationSeconds.Observe(time.Since(getTxsStart).Seconds())
+	}()
+	a.Logger.Debug("Getting transactions for proposal")
+
+	s, err := a.Store.LoadState(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load state for GetTxs: %w", err)
+	}
+
+	if a.Mempool == nil {
+		err := fmt.Errorf("mempool not initialized")
+		return nil, err
+	}
+
+	reapedTxs := a.Mempool.ReapMaxBytesMaxGas(int64(s.ConsensusParams.Block.MaxBytes), -1)
+	txsBytes := make([][]byte, len(reapedTxs))
+	for i, tx := range reapedTxs {
+		txsBytes[i] = tx
+	}
+
+	currentHeight, err := a.RollkitStore.Height(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := a.App.PrepareProposal(&abci.RequestPrepareProposal{
+		Txs:                txsBytes,
+		MaxTxBytes:         int64(s.ConsensusParams.Block.MaxBytes),
+		Height:             int64(currentHeight + 1),
+		Time:               time.Now(),
+		NextValidatorsHash: s.NextValidators.Hash(),
+		ProposerAddress:    s.Validators.Proposer.Address,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	a.Metrics.TxsProposedTotal.Add(float64(len(resp.Txs)))
+	return resp.Txs, nil
+}
+
+// SetFinal handles extra logic once the block has been finalized (posted to DA).
+// For a Cosmos SDK app, this is a no-op we do not need to do anything to mark the block as finalized.
+func (a *Adapter) SetFinal(ctx context.Context, blockHeight uint64) error {
+	return nil
 }

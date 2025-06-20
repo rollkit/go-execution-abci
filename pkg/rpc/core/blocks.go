@@ -305,7 +305,7 @@ func BlockResults(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlockR
 		FinalizeBlockEvents:   resp.Events,
 		ValidatorUpdates:      resp.ValidatorUpdates,
 		ConsensusParamUpdates: resp.ConsensusParamUpdates,
-		AppHash:               header.Header.AppHash,
+		AppHash:               header.AppHash,
 	}, nil
 }
 

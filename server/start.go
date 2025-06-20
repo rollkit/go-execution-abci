@@ -2,13 +2,8 @@ package server
 
 import (
 	"context"
-	"fmt"
-	"io"
-	"net"
-	"os"
-	"time"
-
 	"cosmossdk.io/log"
+	"fmt"
 	cmtcfg "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/mempool"
 	cmtp2p "github.com/cometbft/cometbft/p2p"
@@ -33,6 +28,10 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"io"
+	"net"
+	"os"
+	"time"
 
 	"github.com/rollkit/rollkit/da/jsonrpc"
 	"github.com/rollkit/rollkit/node"
@@ -355,9 +354,14 @@ func setupNodeAndExecutor(
 		return nil, nil, cleanupFn, err
 	}
 
-	adapterMetrics := adapter.NopMetrics()
+	var opts []adapter.Option
 	if rollkitcfg.Instrumentation.IsPrometheusEnabled() {
-		adapterMetrics = adapter.PrometheusMetrics(config.DefaultInstrumentationConfig().Namespace, "chain_id", cmtGenDoc.ChainID)
+		m := adapter.PrometheusMetrics(config.DefaultInstrumentationConfig().Namespace, "chain_id", cmtGenDoc.ChainID)
+		opts = append(opts, adapter.WithMetrics(m))
+	}
+
+	if srvCtx.Viper.GetBool(FlagNetworkSoftConfirmation) {
+		opts = append(opts, adapter.WithNetworkSoftConfirmationBlockFilter())
 	}
 
 	executor = adapter.NewABCIExecutor(
@@ -368,7 +372,7 @@ func setupNodeAndExecutor(
 		logger,
 		cfg,
 		appGenesis,
-		adapterMetrics,
+		opts...,
 	)
 
 	cmtApp := server.NewCometABCIWrapper(app)

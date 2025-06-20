@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -70,11 +71,17 @@ func MigrateToRollkitCmd() *cobra.Command {
 				return err
 			}
 
-			// migrate all the blocks from the cometBFT block store to the rollkit store
+			// migrate all the blocks from the CometBFT block store to the rollkit store
+			// the migration is done in reverse order, starting from the last block
 			for height := lastBlockHeight; height > 0; height-- {
 				cmd.Printf("Migrating block %d...\n", height)
 
 				block := cometBlockStore.LoadBlock(height)
+				if block == nil {
+					cmd.Printf("Block %d not found in CometBFT block store, skipping...\n", height)
+					continue
+				}
+
 				header, data, signature := cometBlockToRollkit(block)
 
 				if err = rollkitStore.SaveBlockData(context.Background(), header, data, &signature); err != nil {
@@ -118,7 +125,7 @@ func MigrateToRollkitCmd() *cobra.Command {
 			}
 
 			cmd.Println("Migration completed successfully")
-			return rollkitStore.Close()
+			return errors.Join(rollkitStore.Close(), cometBlockStore.Close(), cometStateStore.Close())
 		},
 	}
 

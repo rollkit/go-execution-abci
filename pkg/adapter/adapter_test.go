@@ -81,7 +81,7 @@ func TestExecuteFiresEvents(t *testing.T) {
 			myMockApp := mockApp(myExecResult, spec.mockMutator)
 
 			originStore := ds.NewMapDatastore()
-			adapter := NewABCIExecutor(myMockApp, originStore, nil, nil, log.NewTestLogger(t), nil, nil, NopMetrics())
+			adapter := NewABCIExecutor(myMockApp, originStore, nil, nil, log.NewTestLogger(t), nil, nil)
 			adapter.EventBus = eventBus
 			adapter.MempoolIDs = newMempoolIDs()
 			adapter.Mempool = &mempool.NopMempool{}

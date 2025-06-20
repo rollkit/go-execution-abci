@@ -195,15 +195,26 @@ func TestValidators(t *testing.T) {
 		mockStore.AssertExpectations(t)
 	})
 
-	t.Run("Success_HeightNormalizationReturnsZeroOnError", func(t *testing.T) {
+	t.Run("Success_NilHeight", func(t *testing.T) {
 		mockStore := setupTestValidatorsEnv(t, []cmttypes.GenesisValidator{testGenesisValidator}, testSampleConsensusParams)
-		mockStore.On("Height", testifymock.Anything).Return(uint64(0), errors.New("failed to get height")).Once()
+		mockStore.On("Height", testifymock.Anything).Return(uint64(0), nil).Once()
 
 		result, err := Validators(ctx, nil, nil, nil)
 		require.NoError(err)
 		require.NotNil(result)
 		assert.Equal(int64(0), result.BlockHeight) // Asserting BlockHeight is 0 as per test name
 		assert.Len(result.Validators, 1)           // Still expect validator details
+		mockStore.AssertExpectations(t)
+	})
+
+	t.Run("Error_NilHeightAndStoreError", func(t *testing.T) {
+		mockStore := setupTestValidatorsEnv(t, []cmttypes.GenesisValidator{testGenesisValidator}, testSampleConsensusParams)
+		mockStore.On("Height", testifymock.Anything).Return(uint64(0), errors.New("failed to get height")).Once()
+
+		result, err := Validators(ctx, nil, nil, nil)
+		require.Error(err)
+		assert.Nil(result)
+		assert.Contains(err.Error(), "failed to get height")
 		mockStore.AssertExpectations(t)
 	})
 }

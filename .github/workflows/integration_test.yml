@@ -350,7 +350,7 @@ jobs:
           CELESTIA_ADDR=$(celestia-appd keys show validator -a --keyring-backend test)
 
           echo "Sending 100stake via IBC..."
-          TX_HASH=$(celestia-appd tx ibc-transfer transfer transfer channel-0 $ROLLKIT_ADDR 100utia --from validator --node http://localhost:26654 --fees 400utia --keyring-backend test -y--output json | jq -r .txhash)
+          TX_HASH=$(celestia-appd tx ibc-transfer transfer transfer channel-0 $ROLLKIT_ADDR 100utia --from validator --node http://localhost:26654 --fees 400utia --keyring-backend test -y --output json | jq -r .txhash)
 
           sleep 2
 

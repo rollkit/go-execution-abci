@@ -281,8 +281,8 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 	}, nil
 }
 
-// BlockResults is not fully implemented as in FullClient because
-// env.Adapter.RollkitStore (pkg/store.Store) does not provide GetBlockResponses method.
+// BlockResults gets block results at a given height.
+// If no height is provided, it will fetch the results for the latest block.
 func BlockResults(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlockResults, error) {
 	height, err := normalizeHeight(ctx.Context(), heightPtr)
 	if err != nil {
@@ -294,7 +294,7 @@ func BlockResults(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlockR
 		return nil, err
 	}
 
-	resp, err := env.Adapter.Store.GetBlockResponses(ctx.Context(), height)
+	resp, err := env.Adapter.Store.LoadBlockResponse(ctx.Context(), height)
 	if err != nil {
 		return nil, err
 	}

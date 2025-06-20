@@ -113,7 +113,7 @@ func setupTestConsensusParamsEnv(t *testing.T, useMockRollkitStore bool, stateTo
 	}
 
 	dsStore := ds.NewMapDatastore()
-	abciStore := adapter.NewStore(dsStore)
+	abciStore := adapter.NewExecABCIStore(dsStore)
 
 	if stateToSave != nil {
 		err := abciStore.SaveState(context.Background(), stateToSave)

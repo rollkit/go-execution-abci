@@ -14,7 +14,7 @@ import (
 
 func TestStateIO(t *testing.T) {
 	db := ds.NewMapDatastore()
-	abciStore := NewStore(db)
+	abciStore := NewExecABCIStore(db)
 	myState := stateFixture()
 	require.NoError(t, abciStore.SaveState(t.Context(), myState))
 	gotState, gotErr := abciStore.LoadState(t.Context())

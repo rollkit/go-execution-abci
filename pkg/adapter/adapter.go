@@ -8,7 +8,7 @@ import (
 
 	"cosmossdk.io/log"
 	abci "github.com/cometbft/cometbft/abci/types"
-	"github.com/cometbft/cometbft/config"
+	cmtcfg "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/libs/bytes"
 	"github.com/cometbft/cometbft/mempool"
 	corep2p "github.com/cometbft/cometbft/p2p"
@@ -44,7 +44,7 @@ type P2PClientInfo interface {
 }
 
 // LoadGenesisDoc returns the genesis document from the provided config file.
-func LoadGenesisDoc(cfg *config.Config) (*cmttypes.GenesisDoc, error) {
+func LoadGenesisDoc(cfg *cmtcfg.Config) (*cmttypes.GenesisDoc, error) {
 	genesisFile := cfg.GenesisFile()
 	doc, err := cmttypes.GenesisDocFromFile(genesisFile)
 	if err != nil {
@@ -80,7 +80,7 @@ func NewABCIExecutor(
 	p2pClient *rollkitp2p.Client,
 	p2pMetrics *rollkitp2p.Metrics,
 	logger log.Logger,
-	cfg *config.Config,
+	cfg *cmtcfg.Config,
 	appGenesis *genutiltypes.AppGenesis,
 	metrics *Metrics,
 ) *Adapter {
@@ -93,8 +93,8 @@ func NewABCIExecutor(
 		Prefix: ds.NewKey(rollnode.RollkitPrefix),
 	})
 	rollkitStore := rstore.New(rollkitPrefixStore)
-	// Create a new Store with ABCI prefix
-	abciStore := NewStore(store)
+
+	abciStore := NewExecABCIStore(store)
 
 	a := &Adapter{
 		App:          app,
@@ -433,45 +433,28 @@ func (a *Adapter) ExecuteTxs(
 		cmtTxs[i] = txs[i]
 	}
 
-	commit := &cmttypes.Commit{
-		Height: int64(blockHeight),
-		Round:  0,
-		Signatures: []cmttypes.CommitSig{
+	// if blockheight is 0, we create a signed last commit.
+	if blockHeight == 0 {
+		lastCommit.Signatures = []cmttypes.CommitSig{
 			{
 				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
 				ValidatorAddress: s.Validators.Proposer.Address,
 				Timestamp:        time.Now().UTC(),
 				Signature:        []byte{},
 			},
-		},
-	}
-
-	if blockHeight > 1 {
-		header, data, err := a.RollkitStore.GetBlockData(ctx, blockHeight-1)
-		if err != nil {
-			return nil, 0, fmt.Errorf("failed to get previous block data: %w", err)
-		}
-
-		commit = &cmttypes.Commit{
-			Height:  int64(header.Height()),
-			Round:   0,
-			BlockID: cmttypes.BlockID{Hash: bytes.HexBytes(header.Hash()), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: bytes.HexBytes(data.Hash())}},
-			Signatures: []cmttypes.CommitSig{
-				{
-					BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-					ValidatorAddress: cmttypes.Address(header.ProposerAddress),
-					Timestamp:        header.Time(),
-					Signature:        header.Signature,
-				},
-			},
 		}
 	}
 
-	block := s.MakeBlock(int64(blockHeight), cmtTxs, commit, nil, s.Validators.Proposer.Address)
+	block := s.MakeBlock(int64(blockHeight), cmtTxs, lastCommit, nil, s.Validators.Proposer.Address)
 
 	currentBlockID := cmttypes.BlockID{Hash: block.Hash(), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: block.DataHash}}
 
 	fireEvents(a.Logger, a.EventBus, block, currentBlockID, fbResp, validatorUpdates)
+
+	// save the finalized block response
+	if err := a.Store.SaveBlockResponse(ctx, blockHeight, fbResp); err != nil {
+		return nil, 0, fmt.Errorf("failed to save block response: %w", err)
+	}
 
 	a.Logger.Info("block executed successfully", "height", blockHeight, "appHash", fmt.Sprintf("%X", fbResp.AppHash))
 	return fbResp.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil

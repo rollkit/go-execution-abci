@@ -3,6 +3,7 @@ package adapter
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtstateproto "github.com/cometbft/cometbft/proto/tendermint/state"
@@ -26,7 +27,7 @@ type Store struct {
 	prefixedStore ds.Batching
 }
 
-// NewABCIStore creates a new Store with the ABCI prefix.
+// NewExecABCIStore creates a new Store with the ABCI prefix.
 // The data is stored under rollkit database and not in the app's database.
 func NewExecABCIStore(store ds.Batching) *Store {
 	return &Store{
@@ -36,12 +37,14 @@ func NewExecABCIStore(store ds.Batching) *Store {
 	}
 }
 
-// LoadState loads the state from disk
+// LoadState loads the state from disk.
+// When the state does not exist, it returns an empty state.
 func (s *Store) LoadState(ctx context.Context) (*cmtstate.State, error) {
 	data, err := s.prefixedStore.Get(ctx, ds.NewKey(stateKey))
 	if err != nil {
 		return nil, fmt.Errorf("failed to get state metadata: %w", err)
 	}
+
 	if data == nil {
 		return &cmtstate.State{}, nil
 	}
@@ -78,14 +81,15 @@ func (s *Store) SaveBlockResponse(ctx context.Context, height uint64, resp *abci
 		return fmt.Errorf("failed to marshal block response: %w", err)
 	}
 
-	key := fmt.Sprintf("%s/%d", blockResponseKey, height)
-	return s.prefixedStore.Put(ctx, ds.NewKey(key), data)
+	key := ds.NewKey(blockResponseKey).ChildString(strconv.FormatUint(height, 10))
+	return s.prefixedStore.Put(ctx, key, data)
 }
 
 // GetBlockResponse loads the block response from disk for a specific height
+// If the block response does not exist, it returns an error.
 func (s *Store) GetBlockResponse(ctx context.Context, height uint64) (*abci.ResponseFinalizeBlock, error) {
-	key := fmt.Sprintf("%s/%d", blockResponseKey, height)
-	data, err := s.prefixedStore.Get(ctx, ds.NewKey(key))
+	key := ds.NewKey(blockResponseKey).ChildString(strconv.FormatUint(height, 10))
+	data, err := s.prefixedStore.Get(ctx, key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get block response: %w", err)
 	}

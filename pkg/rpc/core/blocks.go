@@ -98,7 +98,10 @@ func BlockSearch(
 // If no height is provided, it will fetch the latest block.
 // More: https://docs.cometbft.com/v0.37/rpc/#/Info/block
 func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error) {
-	var heightValue uint64
+	var (
+		heightValue uint64
+		err         error
+	)
 
 	switch {
 	case heightPtr != nil && *heightPtr == -1:
@@ -116,7 +119,10 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 
 		heightValue = binary.LittleEndian.Uint64(rawVal)
 	default:
-		heightValue = normalizeHeight(heightPtr)
+		heightValue, err = normalizeHeight(ctx.Context(), heightPtr)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	header, data, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), heightValue)
@@ -204,9 +210,12 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 // If no height is provided, it will fetch the commit for the latest block.
 // More: https://docs.cometbft.com/main/rpc/#/Info/commit
 func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, error) {
-	wrappedCtx := ctx.Context()
-	heightValue := normalizeHeight(heightPtr)
-	header, rollkitData, err := env.Adapter.RollkitStore.GetBlockData(wrappedCtx, heightValue)
+	height, err := normalizeHeight(ctx.Context(), heightPtr)
+	if err != nil {
+		return nil, err
+	}
+
+	header, rollkitData, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), height)
 	if err != nil {
 		return nil, err
 	}
@@ -272,44 +281,38 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 	}, nil
 }
 
-// BlockResults is not fully implemented as in FullClient because
-// env.Adapter.RollkitStore (pkg/store.Store) does not provide GetBlockResponses method.
+// BlockResults gets block results at a given height.
+// If no height is provided, it will fetch the results for the latest block.
 func BlockResults(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlockResults, error) {
-	// var h uint64
-	// var err error
-	// if heightPtr == nil {
-	// 	h, err = env.Adapter.RollkitStore.Height(ctx.Context())
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// } else {
-	// 	h = uint64(*heightPtr)
-	// }
-	// header, _, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), h)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// resp, err := env.Adapter.Store.GetBlockResponses(ctx.Context(), h)
-	// if err != nil {
-	// 	return nil, err
-	// }
+	height, err := normalizeHeight(ctx.Context(), heightPtr)
+	if err != nil {
+		return nil, err
+	}
 
-	// return &ctypes.ResultBlockResults{
-	// 	Height:                int64(h), //nolint:gosec
-	// 	TxsResults:            resp.TxResults,
-	// 	FinalizeBlockEvents:   resp.Events,
-	// 	ValidatorUpdates:      resp.ValidatorUpdates,
-	// 	ConsensusParamUpdates: resp.ConsensusParamUpdates,
-	// 	AppHash:               header.Header.AppHash,
-	// }, nil
-	return nil, errors.New("BlockResults not implemented")
+	resp, err := env.Adapter.Store.GetBlockResponse(ctx.Context(), height)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ctypes.ResultBlockResults{
+		Height:                int64(height),
+		TxsResults:            resp.TxResults,
+		FinalizeBlockEvents:   resp.Events,
+		ValidatorUpdates:      resp.ValidatorUpdates,
+		ConsensusParamUpdates: resp.ConsensusParamUpdates,
+		AppHash:               resp.AppHash,
+	}, nil
 }
 
 // Header gets block header at a given height.
 // If no height is provided, it will fetch the latest header.
 // More: https://docs.cometbft.com/v0.37/rpc/#/Info/header
 func Header(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultHeader, error) {
-	height := normalizeHeight(heightPtr)
+	height, err := normalizeHeight(ctx.Context(), heightPtr)
+	if err != nil {
+		return nil, err
+	}
+
 	blockMeta := getBlockMeta(ctx.Context(), height)
 	if blockMeta == nil {
 		return nil, fmt.Errorf("block at height %d not found", height)

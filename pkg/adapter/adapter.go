@@ -457,7 +457,6 @@ func (a *Adapter) ExecuteTxs(
 		cmtTxs[i] = txs[i]
 	}
 
-	// if blockheight is 0, we create a signed last commit.
 	if blockHeight == 0 {
 		lastCommit.Signatures = []cmttypes.CommitSig{
 			{
@@ -485,10 +484,6 @@ func (a *Adapter) ExecuteTxs(
 		if err := a.publishQueuedBlockEvents(ctx, int64(header.Height())); err != nil {
 			return nil, 0, err
 		}
-	}
-	// save the finalized block response
-	if err := a.Store.SaveBlockResponse(ctx, blockHeight, fbResp); err != nil {
-		return nil, 0, fmt.Errorf("failed to save block response: %w", err)
 	}
 	a.Logger.Info("block executed successfully", "height", blockHeight, "appHash", fmt.Sprintf("%X", fbResp.AppHash))
 	return fbResp.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
@@ -708,6 +703,13 @@ func (a *Adapter) publishQueuedBlockEvents(ctx context.Context, persistedHeight 
 		default:
 		}
 		v := a.stackedEvents[i]
+
+		blockHeight := uint64(v.block.Height)
+		rsp, err := a.Store.GetBlockResponse(ctx, blockHeight)
+		if err != nil {
+			return fmt.Errorf("get block response: %w", err)
+		}
+
 		if err := fireEvents(a.EventBus, v.block, v.blockID, v.abciResponse, v.validatorUpdates); err != nil {
 			return fmt.Errorf("fire events: %w", err)
 		}

@@ -704,12 +704,6 @@ func (a *Adapter) publishQueuedBlockEvents(ctx context.Context, persistedHeight 
 		}
 		v := a.stackedEvents[i]
 
-		blockHeight := uint64(v.block.Height)
-		rsp, err := a.Store.GetBlockResponse(ctx, blockHeight)
-		if err != nil {
-			return fmt.Errorf("get block response: %w", err)
-		}
-
 		if err := fireEvents(a.EventBus, v.block, v.blockID, v.abciResponse, v.validatorUpdates); err != nil {
 			return fmt.Errorf("fire events: %w", err)
 		}

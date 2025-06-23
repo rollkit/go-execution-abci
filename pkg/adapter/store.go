@@ -3,6 +3,7 @@ package adapter
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtstateproto "github.com/cometbft/cometbft/proto/tendermint/state"
@@ -80,14 +81,14 @@ func (s *Store) SaveBlockResponse(ctx context.Context, height uint64, resp *abci
 		return fmt.Errorf("failed to marshal block response: %w", err)
 	}
 
-	key := ds.NewKey(blockResponseKey).ChildString(fmt.Sprintf("%d", height))
+	key := ds.NewKey(blockResponseKey).ChildString(strconv.FormatUint(height, 10))
 	return s.prefixedStore.Put(ctx, key, data)
 }
 
 // GetBlockResponse loads the block response from disk for a specific height
 // If the block response does not exist, it returns an error.
 func (s *Store) GetBlockResponse(ctx context.Context, height uint64) (*abci.ResponseFinalizeBlock, error) {
-	key := ds.NewKey(blockResponseKey).ChildString(fmt.Sprintf("%d", height))
+	key := ds.NewKey(blockResponseKey).ChildString(strconv.FormatUint(height, 10))
 	data, err := s.prefixedStore.Get(ctx, key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get block response: %w", err)

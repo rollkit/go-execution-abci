@@ -22,7 +22,10 @@ import (
 	rollkittypes "github.com/rollkit/rollkit/types"
 )
 
-var flagDaHeight = "da-height"
+var (
+	flagDaHeight   = "da-height"
+	maxMissedBlock = 50
+)
 
 // MigrateToRollkitCmd returns a command that migrates the data from the CometBFT chain to Rollkit.
 func MigrateToRollkitCmd() *cobra.Command {
@@ -73,11 +76,18 @@ func MigrateToRollkitCmd() *cobra.Command {
 
 			// migrate all the blocks from the CometBFT block store to the rollkit store
 			// the migration is done in reverse order, starting from the last block
+			missedBlocks := make(map[int64]bool)
 			for height := lastBlockHeight; height > 0; height-- {
 				cmd.Printf("Migrating block %d...\n", height)
 
+				if len(missedBlocks) >= maxMissedBlock {
+					cmd.Println("Too many missed blocks, the node was probably pruned... Stopping now, everything should be fine.")
+					break
+				}
+
 				block := cometBlockStore.LoadBlock(height)
 				if block == nil {
+					missedBlocks[height] = true
 					cmd.Printf("Block %d not found in CometBFT block store, skipping...\n", height)
 					continue
 				}

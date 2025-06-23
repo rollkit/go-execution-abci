@@ -694,12 +694,13 @@ func (a *Adapter) publishQueuedBlockEvents(ctx context.Context, persistedHeight 
 		return nil
 	}
 	softCommitHeight := a.stackedEvents[maxPosReleased].block.Height
+outerLoop:
 	for i := 0; i <= maxPosReleased; i++ {
 		// todo (Alex): exit loop when ctx cancelled
 		select {
 		case <-ctx.Done():
 			maxPosReleased = i
-			break
+			break outerLoop
 		default:
 		}
 		v := a.stackedEvents[i]

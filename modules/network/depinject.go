@@ -8,6 +8,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
+
 	"github.com/rollkit/go-execution-abci/modules/network/keeper"
 	modulev1 "github.com/rollkit/go-execution-abci/modules/network/module/v1"
 	"github.com/rollkit/go-execution-abci/modules/network/types"

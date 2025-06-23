@@ -3,6 +3,7 @@ package keeper
 import (
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 
 	// For error wrapping if needed
@@ -18,8 +19,7 @@ func (k Keeper) BeginBlocker(ctx sdk.Context) error {
 
 	// Only process if sign mode is IBC_ONLY and we have outbound IBC packets
 	if params.SignMode == types.SignMode_SIGN_MODE_IBC_ONLY {
-		// TODO: Check for outbound IBC packets
-		// For now, this is a placeholder
+		return errors.New("IBC only sign mode not yet implemented")
 	}
 	return nil
 }
@@ -173,21 +173,4 @@ func (k Keeper) emitCheckpointHashes(ctx sdk.Context, height int64, validatorHas
 			sdk.NewAttribute("soft_confirmed", softConfirmedSt),
 		),
 	)
-}
-
-func (k Keeper) emitZeroHashes(ctx sdk.Context, height int64) {
-	zeroHash := make([]byte, 32)
-	ctx.EventManager().EmitEvent(
-		sdk.NewEvent(
-			"checkpoint",
-			sdk.NewAttribute("height", math.NewInt(height).String()),
-			sdk.NewAttribute("validator_hash", base64.StdEncoding.EncodeToString(zeroHash)),
-			sdk.NewAttribute("commit_hash", base64.StdEncoding.EncodeToString(zeroHash)),
-			sdk.NewAttribute("soft_confirmed", "false"),
-		),
-	)
-}
-
-func (k Keeper) AfterValidatorSetUpdates(ctx sdk.Context) {
-	k.BuildValidatorIndexMap(ctx)
 }

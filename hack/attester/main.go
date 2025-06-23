@@ -15,7 +15,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gorilla/websocket"
 	"github.com/spf13/cobra"
 )
 
@@ -46,8 +45,8 @@ func main() {
 	rootCmd.Flags().String(flagHome, "", "Directory for config and data")
 	rootCmd.Flags().Bool(flagVerbose, false, "Enable verbose output")
 
-	rootCmd.MarkFlagRequired(flagChainID)
-	rootCmd.MarkFlagRequired(flagHome)
+	_ = rootCmd.MarkFlagRequired(flagChainID)
+	_ = rootCmd.MarkFlagRequired(flagHome)
 
 	// Execute
 	if err := rootCmd.Execute(); err != nil {
@@ -169,7 +168,7 @@ func getEpochLength(apiAddr string) (uint64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("error getting params: %w", err)
 	}
-	defer paramsResp.Body.Close()
+	defer paramsResp.Body.Close() //nolint:errcheck // test code
 
 	var paramsResult struct {
 		Params struct {
@@ -233,11 +232,11 @@ func pullBlocksAndAttest(ctx context.Context, from, chainID, node, home string, 
 
 			if err := json.NewDecoder(resp.Body).Decode(&blockResponse); err != nil {
 				fmt.Printf("Error parsing response: %v\n", err)
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				time.Sleep(time.Second / 10)
 				continue
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			// Extract block height
 			height, err := strconv.ParseInt(blockResponse.Result.Block.Header.Height, 10, 64)
@@ -268,112 +267,6 @@ func pullBlocksAndAttest(ctx context.Context, from, chainID, node, home string, 
 			// Wait before next poll
 			time.Sleep(time.Second / 10)
 		}
-	}
-}
-
-func watchBlocksAndAttest(ctx context.Context, from, chainID, node, home string, epochLength uint64, verbose bool) error {
-	// Convert TCP node address to WebSocket address
-	parsed, err := url.Parse(node)
-	if err != nil {
-		return fmt.Errorf("parse node URL: %w", err)
-	}
-	wsURL := fmt.Sprintf("ws://%s/websocket", parsed.Host)
-	fmt.Printf("Connecting to WebSocket at %s\n", wsURL)
-
-	// Connect to WebSocket
-	c, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	if err != nil {
-		return fmt.Errorf("error connecting to websocket: %w", err)
-	}
-	defer c.Close()
-
-	// Subscribe to new block events
-	subscribeMsg := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"method":  "subscribe",
-		"id":      1,
-		"params": map[string]interface{}{
-			"query": "tm.event='NewBlock'",
-		},
-	}
-
-	if err := c.WriteJSON(subscribeMsg); err != nil {
-		return fmt.Errorf("error subscribing to events: %w", err)
-	}
-
-	// Process incoming messages
-	var lastAttested int64 = 0
-	done := make(chan struct{})
-
-	go func() {
-		defer close(done)
-		for {
-			_, message, err := c.ReadMessage()
-			if err != nil {
-				fmt.Printf("Error reading message: %v\n", err)
-				return
-			}
-
-			// Parse the message
-			var response struct {
-				Result struct {
-					Data struct {
-						Value struct {
-							Block struct {
-								Header struct {
-									Height string `json:"height"`
-								} `json:"header"`
-							} `json:"block"`
-						} `json:"value"`
-					} `json:"data"`
-				} `json:"result"`
-			}
-
-			if err := json.Unmarshal(message, &response); err != nil {
-				fmt.Printf("Error parsing message: %v\n", err)
-				continue
-			}
-
-			// Extract block height
-			heightStr := response.Result.Data.Value.Block.Header.Height
-			height, err := strconv.ParseInt(heightStr, 10, 64)
-			if err != nil {
-				fmt.Printf("Error parsing height: %v\n", err)
-				continue
-			}
-
-			fmt.Printf("New block: %d\n", height)
-
-			// Check if this is the end of an epoch and we haven't attested to it yet
-			if height > 1 && height%int64(epochLength) == 0 && height > lastAttested {
-				fmt.Printf("End of epoch at height %d, submitting attestation\n", height)
-
-				// Submit attestation with "0x00" as the hash
-				err = submitAttestation(ctx, from, chainID, node, home, height, "0x00", verbose)
-				if err != nil {
-					fmt.Printf("Error submitting attestation: %v\n", err)
-					continue
-				}
-
-				lastAttested = height
-			}
-		}
-	}()
-
-	// Wait for context cancellation
-	select {
-	case <-ctx.Done():
-		fmt.Println("Context cancelled, closing connection...")
-		// Close WebSocket connection
-		err := c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-		if err != nil {
-			fmt.Printf("Error closing websocket: %v\n", err)
-		}
-		// Wait for the goroutine to finish
-		<-done
-		return nil
-	case <-done:
-		return fmt.Errorf("websocket connection closed unexpectedly")
 	}
 }
 

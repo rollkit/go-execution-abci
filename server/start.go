@@ -2,8 +2,13 @@ package server
 
 import (
 	"context"
-	"cosmossdk.io/log"
 	"fmt"
+	"io"
+	"net"
+	"os"
+	"time"
+
+	"cosmossdk.io/log"
 	cmtcfg "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/mempool"
 	cmtp2p "github.com/cometbft/cometbft/p2p"
@@ -28,10 +33,6 @@ import (
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"io"
-	"net"
-	"os"
-	"time"
 
 	"github.com/rollkit/rollkit/da/jsonrpc"
 	"github.com/rollkit/rollkit/node"

@@ -2,10 +2,11 @@ package adapter
 
 import (
 	"context"
-	"cosmossdk.io/log"
 
+	"cosmossdk.io/log"
 	abci "github.com/cometbft/cometbft/abci/types"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
+
 	"github.com/rollkit/go-execution-abci/modules/network/types"
 )
 

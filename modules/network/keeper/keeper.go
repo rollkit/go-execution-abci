@@ -9,6 +9,7 @@ import (
 	"cosmossdk.io/math"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+
 	"github.com/rollkit/go-execution-abci/modules/network/types"
 )
 
@@ -20,7 +21,6 @@ type Keeper struct {
 	bankKeeper    types.BankKeeper
 	authority     string
 	bitmapHelper  *BitmapHelper
-	schema        collections.Schema
 
 	// Collections for state management
 	ValidatorIndex        collections.Map[string, uint16]

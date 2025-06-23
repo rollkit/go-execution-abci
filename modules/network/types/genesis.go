@@ -7,9 +7,9 @@ import (
 // DefaultGenesisState returns the default genesis state
 func DefaultGenesisState() *GenesisState {
 	return &GenesisState{
-		Params:              DefaultParams(),
-		ValidatorIndices:    []ValidatorIndex{},
-		AttestationBitmaps:  []AttestationBitmap{},
+		Params:             DefaultParams(),
+		ValidatorIndices:   []ValidatorIndex{},
+		AttestationBitmaps: []AttestationBitmap{},
 	}
 }
 
@@ -22,7 +22,7 @@ func (gs GenesisState) Validate() error {
 	// Check for duplicate validator indices
 	indexMap := make(map[string]bool)
 	usedIndices := make(map[uint32]bool)
-	
+
 	for _, vi := range gs.ValidatorIndices {
 		if indexMap[vi.Address] {
 			return fmt.Errorf("duplicate validator address: %s", vi.Address)

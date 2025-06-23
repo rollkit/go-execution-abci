@@ -2,6 +2,7 @@ package keeper
 
 import (
 	"context"
+	"fmt"
 
 	"cosmossdk.io/errors"
 	"cosmossdk.io/math"
@@ -180,7 +181,9 @@ func (k msgServer) UpdateParams(goCtx context.Context, msg *types.MsgUpdateParam
 		return nil, err
 	}
 
-	k.SetParams(ctx, msg.Params)
+	if err := k.SetParams(ctx, msg.Params); err != nil {
+		return nil, fmt.Errorf("set params: %w", err)
+	}
 
 	ctx.EventManager().EmitEvent(
 		sdk.NewEvent(

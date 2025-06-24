@@ -69,7 +69,7 @@ jobs:
             fi
             
             # count blocks in log
-            BLOCKS_FOUND=$(grep -c "block executed successfully" cosmos-chain.log || true)
+            BLOCKS_FOUND=$(grep -c "finalized block" cosmos-chain.log || true)
             echo "Found $BLOCKS_FOUND blocks so far (attempt $ATTEMPT/$MAX_ATTEMPTS)"
           done
 

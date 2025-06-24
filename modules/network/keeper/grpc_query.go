@@ -2,6 +2,7 @@ package keeper
 
 import (
 	"context"
+	"fmt"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"google.golang.org/grpc/codes"
@@ -41,13 +42,16 @@ func (q *queryServer) AttestationBitmap(c context.Context, req *types.QueryAttes
 
 	ctx := sdk.UnwrapSDKContext(c)
 
-	bitmapBytes := q.keeper.GetAttestationBitmap(ctx, req.Height)
+	bitmapBytes, _ := q.keeper.GetAttestationBitmap(ctx, req.Height)
 	if bitmapBytes == nil {
 		return nil, status.Error(codes.NotFound, "attestation bitmap not found for height")
 	}
 
 	// Reconstruct attestation info using keeper methods
-	votedPower := q.keeper.CalculateVotedPower(ctx, bitmapBytes)
+	votedPower, err := q.keeper.CalculateVotedPower(ctx, bitmapBytes)
+	if err != nil {
+		return nil, err
+	}
 	totalPower, err := q.keeper.GetTotalPower(ctx)
 	if err != nil {
 		return nil, err
@@ -55,7 +59,10 @@ func (q *queryServer) AttestationBitmap(c context.Context, req *types.QueryAttes
 
 	// Assuming IsSoftConfirmed is a method on the Keeper
 	// If not, you might need to add it or compute it here using keeper.CheckQuorum
-	softConfirmed := q.keeper.IsSoftConfirmed(ctx, req.Height)
+	softConfirmed, err := q.keeper.IsSoftConfirmed(ctx, req.Height)
+	if err != nil {
+		return nil, err
+	}
 
 	return &types.QueryAttestationBitmapResponse{
 		Bitmap: &types.AttestationBitmap{
@@ -130,7 +137,10 @@ func (q *queryServer) ValidatorIndex(c context.Context, req *types.QueryValidato
 		return nil, status.Error(codes.NotFound, "validator index not found")
 	}
 
-	power := q.keeper.GetValidatorPower(ctx, index)
+	power, err := q.keeper.GetValidatorPower(ctx, index)
+	if err != nil {
+		return nil, fmt.Errorf("get validator power: %w", err)
+	}
 
 	return &types.QueryValidatorIndexResponse{
 		Index: &types.ValidatorIndex{
@@ -148,8 +158,14 @@ func (q *queryServer) SoftConfirmationStatus(c context.Context, req *types.Query
 	}
 
 	ctx := sdk.UnwrapSDKContext(c)
-	isSoftConfirmed := q.keeper.IsSoftConfirmed(ctx, req.Height)
-	bitmap := q.keeper.GetAttestationBitmap(ctx, req.Height)
+	isSoftConfirmed, err := q.keeper.IsSoftConfirmed(ctx, req.Height)
+	if err != nil {
+		return nil, err
+	}
+	bitmap, err := q.keeper.GetAttestationBitmap(ctx, req.Height)
+	if err != nil {
+		return nil, err
+	}
 	totalPower, err := q.keeper.GetTotalPower(ctx)
 	if err != nil {
 		return nil, err
@@ -157,7 +173,9 @@ func (q *queryServer) SoftConfirmationStatus(c context.Context, req *types.Query
 
 	var votedPower uint64
 	if bitmap != nil {
-		votedPower = q.keeper.CalculateVotedPower(ctx, bitmap)
+		if votedPower, err = q.keeper.CalculateVotedPower(ctx, bitmap); err != nil {
+			return nil, err
+		}
 	}
 
 	return &types.QuerySoftConfirmationStatusResponse{

@@ -51,12 +51,15 @@ func (k Keeper) EndBlocker(ctx sdk.Context) error {
 
 // processCheckpoint handles checkpoint processing
 func (k Keeper) processCheckpoint(ctx sdk.Context, height int64) error {
-	bitmapBytes := k.GetAttestationBitmap(ctx, height)
+	bitmapBytes, _ := k.GetAttestationBitmap(ctx, height)
 	if bitmapBytes == nil {
 		return nil
 	}
 
-	votedPower := k.CalculateVotedPower(ctx, bitmapBytes)
+	votedPower, err := k.CalculateVotedPower(ctx, bitmapBytes)
+	if err != nil {
+		return err
+	}
 	totalPower, err := k.GetTotalPower(ctx)
 	if err != nil {
 		return err
@@ -66,7 +69,10 @@ func (k Keeper) processCheckpoint(ctx sdk.Context, height int64) error {
 
 	commitHash := sha256.Sum256([]byte("placeholder"))
 
-	softConfirmed := k.CheckQuorum(ctx, votedPower, totalPower)
+	softConfirmed, err := k.CheckQuorum(ctx, votedPower, totalPower)
+	if err != nil {
+		return err
+	}
 
 	attestationInfoToStore := types.AttestationBitmap{
 		Height:        height,
@@ -125,14 +131,14 @@ func (k Keeper) processEpochEnd(ctx sdk.Context, epoch uint64) error {
 			}
 			if k.IsCheckpointHeight(ctx, h) {
 				checkpointsInEpoch++
-				if k.IsSoftConfirmed(ctx, h) {
+				if q, err := k.IsSoftConfirmed(ctx, h); q && err == nil {
 					softConfirmedCheckpoints++
 				}
 			}
 		}
 
 		if checkpointsInEpoch > 0 && softConfirmedCheckpoints == 0 {
-			// todo (Alex): show we really fail?
+			// todo (Alex): should we really fail?
 			//return fmt.Errorf("no checkpoints achieved quorum in epoch: %d", epoch)
 			k.Logger(ctx).Info("No checkpoints achieved quorum in epoch", "epoch", epoch)
 		}

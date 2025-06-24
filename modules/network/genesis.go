@@ -55,7 +55,10 @@ func ExportGenesis(ctx sdk.Context, k keeper.Keeper) *types.GenesisState {
 	var validatorIndices []types.ValidatorIndex
 	// Iterate through all validator indices
 	if err := k.ValidatorIndex.Walk(ctx, nil, func(addr string, index uint16) (bool, error) {
-		power := k.GetValidatorPower(ctx, index)
+		power, err := k.GetValidatorPower(ctx, index)
+		if err != nil {
+			return false, fmt.Errorf("get validator power: %w", err)
+		}
 		validatorIndices = append(validatorIndices, types.ValidatorIndex{
 			Address: addr,
 			Index:   uint32(index),

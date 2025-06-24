@@ -112,13 +112,9 @@ func (k Keeper) GetValidatorIndex(ctx sdk.Context, addr string) (uint16, bool) {
 }
 
 // GetValidatorPower retrieves the validator power by index
-func (k Keeper) GetValidatorPower(ctx sdk.Context, index uint16) uint64 {
+func (k Keeper) GetValidatorPower(ctx sdk.Context, index uint16) (uint64, error) {
 	power, err := k.ValidatorPower.Get(ctx, index)
-	if err != nil {
-		// Consider logging the error or returning an error if 0 is a valid power value.
-		return 0
-	}
-	return power
+	return power, err
 }
 
 // SetAttestationBitmap stores the attestation bitmap for a height
@@ -127,13 +123,9 @@ func (k Keeper) SetAttestationBitmap(ctx sdk.Context, height int64, bitmap []byt
 }
 
 // GetAttestationBitmap retrieves the attestation bitmap for a height
-func (k Keeper) GetAttestationBitmap(ctx sdk.Context, height int64) []byte {
+func (k Keeper) GetAttestationBitmap(ctx sdk.Context, height int64) ([]byte, error) {
 	bitmap, err := k.AttestationBitmap.Get(ctx, height)
-	if err != nil {
-		// Consider logging err or returning (nil, error)
-		return nil
-	}
-	return bitmap
+	return bitmap, err
 }
 
 // SetEpochBitmap stores the epoch participation bitmap
@@ -152,13 +144,9 @@ func (k Keeper) GetEpochBitmap(ctx sdk.Context, epoch uint64) []byte {
 }
 
 // IsInAttesterSet checks if a validator is in the attester set
-func (k Keeper) IsInAttesterSet(ctx sdk.Context, addr string) bool {
+func (k Keeper) IsInAttesterSet(ctx sdk.Context, addr string) (bool, error) {
 	has, err := k.AttesterSet.Has(ctx, addr)
-	if err != nil {
-		k.Logger(ctx).Error("failed to check attester set", "address", addr, "error", err)
-		return false
-	}
-	return has
+	return has, err
 }
 
 // SetAttesterSetMember adds a validator to the attester set
@@ -223,15 +211,19 @@ func (k Keeper) IsCheckpointHeight(ctx sdk.Context, height int64) bool {
 }
 
 // CalculateVotedPower calculates the total voted power from a bitmap
-func (k Keeper) CalculateVotedPower(ctx sdk.Context, bitmap []byte) uint64 {
+func (k Keeper) CalculateVotedPower(ctx sdk.Context, bitmap []byte) (uint64, error) {
 	var votedPower uint64
 	for i := 0; i < len(bitmap)*8; i++ {
 		if k.bitmapHelper.IsSet(bitmap, i) {
-			power := k.GetValidatorPower(ctx, uint16(i))
+			power, err := k.GetValidatorPower(ctx, uint16(i))
+			if err != nil {
+				return 0, fmt.Errorf("get validator power: %w", err)
+			}
+
 			votedPower += power
 		}
 	}
-	return votedPower
+	return votedPower, nil
 }
 
 // GetTotalPower returns the total staking power
@@ -244,29 +236,34 @@ func (k Keeper) GetTotalPower(ctx sdk.Context) (uint64, error) {
 }
 
 // CheckQuorum checks if the voted power meets quorum
-func (k Keeper) CheckQuorum(ctx sdk.Context, votedPower, totalPower uint64) bool {
+func (k Keeper) CheckQuorum(ctx sdk.Context, votedPower, totalPower uint64) (bool, error) {
 	params := k.GetParams(ctx)
 	quorumFrac, err := math.LegacyNewDecFromStr(params.QuorumFraction)
 	if err != nil {
-		return false
+		return false, fmt.Errorf("invalid quorum fraction: %w", err)
 	}
 
 	requiredPower := math.LegacyNewDec(int64(totalPower)).Mul(quorumFrac).TruncateInt().Uint64()
-	return votedPower >= requiredPower
+	return votedPower >= requiredPower, nil
 }
 
 // IsSoftConfirmed checks if a block at a given height is soft-confirmed
 // based on the attestation bitmap and quorum rules.
-func (k Keeper) IsSoftConfirmed(ctx sdk.Context, height int64) bool {
-	bitmap := k.GetAttestationBitmap(ctx, height)
-	if bitmap == nil {
-		return false // No bitmap, so cannot be soft-confirmed
+func (k Keeper) IsSoftConfirmed(ctx sdk.Context, height int64) (bool, error) {
+	bitmap, err := k.GetAttestationBitmap(ctx, height)
+	if err != nil {
+		return false, err
 	}
-
-	votedPower := k.CalculateVotedPower(ctx, bitmap)
+	if bitmap == nil {
+		return false, nil // No bitmap, so cannot be soft-confirmed
+	}
+	votedPower, err := k.CalculateVotedPower(ctx, bitmap)
+	if err != nil {
+		return false, err
+	}
 	totalPower, err := k.GetTotalPower(ctx) // Assuming this gets the relevant total power for the height
 	if err != nil {
-		return false
+		return false, err
 	}
 
 	return k.CheckQuorum(ctx, votedPower, totalPower)

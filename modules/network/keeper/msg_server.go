@@ -28,25 +28,25 @@ var _ types.MsgServer = msgServer{}
 func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.MsgAttestResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
-	var index uint16
-
 	if !k.IsCheckpointHeight(ctx, msg.Height) {
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "height %d is not a checkpoint", msg.Height)
 	}
-
-	if !k.IsInAttesterSet(ctx, msg.Validator) {
+	has, err := k.IsInAttesterSet(ctx, msg.Validator)
+	if err != nil {
+		return nil, errors.Wrapf(err, "in attester set")
+	}
+	if !has {
 		return nil, errors.Wrapf(sdkerrors.ErrUnauthorized, "validator %s not in attester set", msg.Validator)
 	}
 
-	var found bool
-	index, found = k.GetValidatorIndex(ctx, msg.Validator)
+	index, found := k.GetValidatorIndex(ctx, msg.Validator)
 	if !found {
 		return nil, errors.Wrapf(sdkerrors.ErrNotFound, "validator index not found for %s", msg.Validator)
 	}
 
 	// todo (Alex): we need to set a limit to not have validators attest old blocks. Also make sure that this relates with
 	// the retention period for pruning
-	bitmap := k.GetAttestationBitmap(ctx, msg.Height)
+	bitmap, _ := k.GetAttestationBitmap(ctx, msg.Height)
 	if bitmap == nil {
 		validators, err := k.stakingKeeper.GetLastValidators(ctx)
 		if err != nil {
@@ -127,7 +127,11 @@ func (k msgServer) JoinAttesterSet(goCtx context.Context, msg *types.MsgJoinAtte
 	if !validator.IsBonded() {
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator must be bonded to join attester set")
 	}
-	if k.IsInAttesterSet(ctx, msg.Validator) {
+	has, err := k.IsInAttesterSet(ctx, msg.Validator)
+	if err != nil {
+		return nil, errors.Wrapf(err, "in attester set")
+	}
+	if has {
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator already in attester set")
 	}
 
@@ -150,7 +154,11 @@ func (k msgServer) JoinAttesterSet(goCtx context.Context, msg *types.MsgJoinAtte
 func (k msgServer) LeaveAttesterSet(goCtx context.Context, msg *types.MsgLeaveAttesterSet) (*types.MsgLeaveAttesterSetResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
-	if !k.IsInAttesterSet(ctx, msg.Validator) {
+	has, err := k.IsInAttesterSet(ctx, msg.Validator)
+	if err != nil {
+		return nil, errors.Wrapf(err, "in attester set")
+	}
+	if !has {
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator not in attester set")
 	}
 

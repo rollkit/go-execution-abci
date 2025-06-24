@@ -138,14 +138,14 @@ jobs:
           cd gm
 
           # record current block height
-          CURRENT_HEIGHT=$(gmd query block --output json | jq -r '.block.header.height')
+          CURRENT_HEIGHT=$(gmd query block --output json | tail -n +2 | jq -r '.header.height')
           echo "PRE_MIGRATION_HEIGHT=$CURRENT_HEIGHT" >> $GITHUB_ENV
           echo "Pre-migration block height: $CURRENT_HEIGHT"
 
           # query a few old blocks to verify they exist
           for height in 5 7 9; do
-            BLOCK_RESULT=$(gmd query block $height --output json)
-            BLOCK_HEIGHT=$(echo $BLOCK_RESULT | jq -r '.block.header.height')
+            BLOCK_RESULT=$(gmd query block --type=height $height --output json)
+            BLOCK_HEIGHT=$(echo $BLOCK_RESULT | jq -r '.header.height')
             echo "Block $height exists with height: $BLOCK_HEIGHT"
             if [ "$BLOCK_HEIGHT" != "$height" ]; then
               echo "Error: Block height mismatch"

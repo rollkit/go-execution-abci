@@ -30,7 +30,7 @@ var (
 // MigrateToRollkitCmd returns a command that migrates the data from the CometBFT chain to Rollkit.
 func MigrateToRollkitCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "rollkit-migration",
+		Use:   "rollkit-migrate",
 		Short: "Migrate the data from the CometBFT chain to Rollkit",
 		Long:  "Migrate the data from the CometBFT chain to Rollkit. This command should be used to migrate nodes or the sequencer.",
 		Args:  cobra.ExactArgs(0),

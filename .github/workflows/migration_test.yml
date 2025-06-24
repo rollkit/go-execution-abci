@@ -85,8 +85,10 @@ jobs:
         run: |
           cd gm
 
-          ALICE_ADDRESS=$(gmd keys show alice -a)
-          echo "Alice's address: $ALICE_ADDRESS"
+          # create additional account
+          gmd keys add carol --output json > carol.json
+          CAROL_ADDRESS=$(gmd keys show carol -a)
+          echo "Carol's address: $CAROL_ADDRESS"
 
           # get bob's address and initial balance
           BOB_ADDRESS=$(gmd keys show bob -a)
@@ -97,11 +99,11 @@ jobs:
 
           # send multiple transactions
           echo "Sending transactions on Cosmos SDK chain..."
-          TX_HASH_1=$(gmd tx bank send $BOB_ADDRESS $ALICE_ADDRESS 1000stake -y --output json | jq -r .txhash)
+          TX_HASH_1=$(gmd tx bank send $BOB_ADDRESS $CAROL_ADDRESS 1000stake -y --output json | jq -r .txhash)
           sleep 3
-          TX_HASH_2=$(gmd tx bank send $BOB_ADDRESS $ALICE_ADDRESS 2000stake -y --output json | jq -r .txhash)
+          TX_HASH_2=$(gmd tx bank send $BOB_ADDRESS $CAROL_ADDRESS 2000stake -y --output json | jq -r .txhash)
           sleep 3
-          TX_HASH_3=$(gmd tx bank send $BOB_ADDRESS $ALICE_ADDRESS 3000stake -y --output json | jq -r .txhash)
+          TX_HASH_3=$(gmd tx bank send $BOB_ADDRESS $CAROL_ADDRESS 3000stake -y --output json | jq -r .txhash)
           sleep 5
 
           # store transaction hashes for later verification
@@ -121,11 +123,11 @@ jobs:
           done
 
           # check final balances
-          ALICE_BALANCE=$(gmd query bank balances $ALICE_ADDRESS --output json | jq '.balances[0].amount' -r)
-          echo "Alice's final balance: $ALICE_BALANCE stake"
+          CAROL_BALANCE=$(gmd query bank balances $CAROL_ADDRESS --output json | jq '.balances[0].amount' -r)
+          echo "Carol's final balance: $CAROL_BALANCE stake"
 
-          if [ "$ALICE_BALANCE" != "6000" ]; then
-            echo "Error: Alice's balance should be 6000, got $ALICE_BALANCE"
+          if [ "$CAROL_BALANCE" != "6000" ]; then
+            echo "Error: Carol's balance should be 6000, got $CAROL_BALANCE"
             exit 1
           fi
 
@@ -260,19 +262,19 @@ jobs:
 
           # get addresses
           BOB_ADDRESS=$(gmd keys show bob -a)
-          ALICE_ADDRESS=$(gmd keys show alice -a)
+          CAROL_ADDRESS=$(gmd keys show carol -a)
 
           # get pre-transaction balances
           BOB_BALANCE_BEFORE=$(gmd query bank balances $BOB_ADDRESS --output json | jq '.balances[0].amount' -r)
-          ALICE_BALANCE_BEFORE=$(gmd query bank balances $ALICE_ADDRESS --output json | jq '.balances[0].amount' -r)
+          CAROL_BALANCE_BEFORE=$(gmd query bank balances $CAROL_ADDRESS --output json | jq '.balances[0].amount' -r)
 
           echo "Bob's balance before: $BOB_BALANCE_BEFORE stake"
-          echo "Alice's balance before: $ALICE_BALANCE_BEFORE stake"
+          echo "Carol's balance before: $CAROL_BALANCE_BEFORE stake"
 
           # send transactions on rollkit chain
-          TX_HASH_4=$(gmd tx bank send $BOB_ADDRESS $ALICE_ADDRESS 4000stake -y --output json | jq -r .txhash)
+          TX_HASH_4=$(gmd tx bank send $BOB_ADDRESS $CAROL_ADDRESS 4000stake -y --output json | jq -r .txhash)
           sleep 3
-          TX_HASH_5=$(gmd tx bank send $ALICE_ADDRESS $BOB_ADDRESS 1000stake -y --output json | jq -r .txhash)
+          TX_HASH_5=$(gmd tx bank send $CAROL_ADDRESS $BOB_ADDRESS 1000stake -y --output json | jq -r .txhash)
           sleep 5
 
           # verify new transactions
@@ -288,22 +290,22 @@ jobs:
 
           # check final balances
           BOB_BALANCE_AFTER=$(gmd query bank balances $BOB_ADDRESS --output json | jq '.balances[0].amount' -r)
-          ALICE_BALANCE_AFTER=$(gmd query bank balances $ALICE_ADDRESS --output json | jq '.balances[0].amount' -r)
+          CAROL_BALANCE_AFTER=$(gmd query bank balances $CAROL_ADDRESS --output json | jq '.balances[0].amount' -r)
 
           echo "Bob's balance after: $BOB_BALANCE_AFTER stake"
-          echo "Alice's balance after: $ALICE_BALANCE_AFTER stake"
+          echo "Carol's balance after: $CAROL_BALANCE_AFTER stake"
 
           # verify balance changes
           EXPECTED_BOB_BALANCE=$((BOB_BALANCE_BEFORE - 4000 + 1000))
-          EXPECTED_ALICE_BALANCE=$((ALICE_BALANCE_BEFORE + 4000 - 1000))
+          EXPECTED_CAROL_BALANCE=$((CAROL_BALANCE_BEFORE + 4000 - 1000))
 
           if [ "$BOB_BALANCE_AFTER" != "$EXPECTED_BOB_BALANCE" ]; then
             echo "Error: Bob's balance mismatch. Expected: $EXPECTED_BOB_BALANCE, Got: $BOB_BALANCE_AFTER"
             exit 1
           fi
 
-          if [ "$ALICE_BALANCE_AFTER" != "$EXPECTED_ALICE_BALANCE" ]; then
-            echo "Error: Alice's balance mismatch. Expected: $EXPECTED_ALICE_BALANCE, Got: $ALICE_BALANCE_AFTER"
+          if [ "$CAROL_BALANCE_AFTER" != "$EXPECTED_CAROL_BALANCE" ]; then
+            echo "Error: Carol's balance mismatch. Expected: $EXPECTED_CAROL_BALANCE, Got: $CAROL_BALANCE_AFTER"
             exit 1
           fi
 

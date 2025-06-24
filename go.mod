@@ -29,10 +29,10 @@ require (
 	github.com/libp2p/go-libp2p-pubsub v0.14.0
 	github.com/multiformats/go-multiaddr v0.16.0
 	github.com/prometheus/client_golang v1.22.0
-	github.com/rollkit/rollkit v0.14.2-0.20250623150507-4ee6b80307b6
-	github.com/rollkit/rollkit/core v0.0.0-20250623150507-4ee6b80307b6
-	github.com/rollkit/rollkit/da v0.0.0-20250623150507-4ee6b80307b6
-	github.com/rollkit/rollkit/sequencers/single v0.0.0-20250623150507-4ee6b80307b6
+	github.com/rollkit/rollkit v0.14.2-0.20250624162917-8bb1ba71af39
+	github.com/rollkit/rollkit/core v0.0.0-20250624162917-8bb1ba71af39
+	github.com/rollkit/rollkit/da v0.0.0-20250624162917-8bb1ba71af39
+	github.com/rollkit/rollkit/sequencers/single v0.0.0-20250624162917-8bb1ba71af39
 	github.com/rs/cors v1.11.1
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0

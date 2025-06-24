@@ -2,6 +2,7 @@ package types
 
 import (
 	"fmt"
+	"math"
 )
 
 // DefaultGenesisState returns the default genesis state
@@ -19,6 +20,9 @@ func (gs GenesisState) Validate() error {
 		return fmt.Errorf("invalid params: %w", err)
 	}
 
+	if len(gs.ValidatorIndices) > math.MaxUint16 {
+		return fmt.Errorf("too many validator indices")
+	}
 	// Check for duplicate validator indices
 	indexMap := make(map[string]bool)
 	usedIndices := make(map[uint32]bool)

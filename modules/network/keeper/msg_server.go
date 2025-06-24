@@ -1,8 +1,13 @@
 package keeper
 
 import (
+	"bytes"
 	"context"
+	"cosmossdk.io/collections"
 	"fmt"
+	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
+	cmttypes "github.com/cometbft/cometbft/types"
+	"github.com/cosmos/gogoproto/proto"
 
 	"cosmossdk.io/errors"
 	"cosmossdk.io/math"
@@ -28,29 +33,96 @@ var _ types.MsgServer = msgServer{}
 func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.MsgAttestResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
-	if !k.IsCheckpointHeight(ctx, msg.Height) {
-		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "height %d is not a checkpoint", msg.Height)
+	if err := k.validateAttestation(ctx, msg); err != nil {
+		return nil, err
 	}
-	has, err := k.IsInAttesterSet(ctx, msg.Validator)
-	if err != nil {
-		return nil, errors.Wrapf(err, "in attester set")
-	}
-	if !has {
-		return nil, errors.Wrapf(sdkerrors.ErrUnauthorized, "validator %s not in attester set", msg.Validator)
+	votedEpoch := k.GetEpochForHeight(ctx, msg.Height)
+	if k.GetCurrentEpoch(ctx) != votedEpoch+1 { // can vote only for last epoch
+		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator %s not voted for epoch %d", msg.Validator, votedEpoch)
 	}
 
-	index, found := k.GetValidatorIndex(ctx, msg.Validator)
+	valIndexPos, found := k.GetValidatorIndex(ctx, msg.Validator)
 	if !found {
 		return nil, errors.Wrapf(sdkerrors.ErrNotFound, "validator index not found for %s", msg.Validator)
 	}
 
-	// todo (Alex): we need to set a limit to not have validators attest old blocks. Also make sure that this relates with
-	// the retention period for pruning
-	bitmap, _ := k.GetAttestationBitmap(ctx, msg.Height)
+	if err := k.updateAttestationBitmap(ctx, msg, valIndexPos); err != nil {
+		return nil, errors.Wrap(err, "update attestation bitmap")
+	}
+
+	vote, err := k.verifyVote(ctx, msg)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := k.SetSignature(ctx, msg.Height, msg.Validator, vote.Signature); err != nil {
+		return nil, errors.Wrap(err, "store signature")
+	}
+
+	if err := k.updateEpochBitmap(ctx, votedEpoch, valIndexPos); err != nil {
+		return nil, err
+	}
+
+	// Emit event
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.TypeMsgAttest,
+			sdk.NewAttribute("validator", msg.Validator),
+			sdk.NewAttribute("height", math.NewInt(msg.Height).String()),
+		),
+	)
+	return &types.MsgAttestResponse{}, nil
+}
+
+func (k msgServer) updateEpochBitmap(ctx sdk.Context, votedEpoch uint64, index uint16) error {
+	epochBitmap := k.GetEpochBitmap(ctx, votedEpoch)
+	if epochBitmap == nil {
+		validators, err := k.stakingKeeper.GetLastValidators(ctx)
+		if err != nil {
+			return err
+		}
+		numValidators := 0
+		for _, v := range validators {
+			if v.IsBonded() {
+				numValidators++
+			}
+		}
+		epochBitmap = k.bitmapHelper.NewBitmap(numValidators)
+	}
+	k.bitmapHelper.SetBit(epochBitmap, int(index))
+	if err := k.SetEpochBitmap(ctx, votedEpoch, epochBitmap); err != nil {
+		return errors.Wrap(err, "set epoch bitmap")
+	}
+	return nil
+}
+
+// validateAttestation validates the attestation request
+func (k msgServer) validateAttestation(ctx sdk.Context, msg *types.MsgAttest) error {
+	if !k.IsCheckpointHeight(ctx, msg.Height) {
+		return errors.Wrapf(sdkerrors.ErrInvalidRequest, "height %d is not a checkpoint", msg.Height)
+	}
+
+	has, err := k.IsInAttesterSet(ctx, msg.Validator)
+	if err != nil {
+		return errors.Wrapf(err, "in attester set")
+	}
+	if !has {
+		return errors.Wrapf(sdkerrors.ErrUnauthorized, "validator %s not in attester set", msg.Validator)
+	}
+	return nil
+}
+
+// updateAttestationBitmap handles bitmap operations for attestation
+func (k msgServer) updateAttestationBitmap(ctx sdk.Context, msg *types.MsgAttest, index uint16) error {
+	bitmap, err := k.GetAttestationBitmap(ctx, msg.Height)
+	if err != nil && !errors.IsOf(err, collections.ErrNotFound) {
+		return err
+	}
+
 	if bitmap == nil {
 		validators, err := k.stakingKeeper.GetLastValidators(ctx)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		numValidators := 0
 		for _, v := range validators {
@@ -62,52 +134,52 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 	}
 
 	if k.bitmapHelper.IsSet(bitmap, int(index)) {
-		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator %s already attested for height %d", msg.Validator, msg.Height)
+		return errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator %s already attested for height %d", msg.Validator, msg.Height)
 	}
 
-	// TODO: Verify the vote signature here once we implement vote parsing
-
-	// Set the bit
 	k.bitmapHelper.SetBit(bitmap, int(index))
+
 	if err := k.SetAttestationBitmap(ctx, msg.Height, bitmap); err != nil {
-		return nil, errors.Wrap(err, "failed to set attestation bitmap")
+		return errors.Wrap(err, "set attestation bitmap")
+	}
+	return nil
+}
+
+// verifyVote verifies the vote signature and block hash
+func (k msgServer) verifyVote(ctx sdk.Context, msg *types.MsgAttest) (*cmtproto.Vote, error) {
+	var vote cmtproto.Vote
+	if err := proto.Unmarshal(msg.Vote, &vote); err != nil {
+		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "unmarshal vote: %s", err)
 	}
 
-	// Store signature using the new collection method
-	if err := k.SetSignature(ctx, msg.Height, msg.Validator, msg.Vote); err != nil {
-		return nil, errors.Wrap(err, "failed to store signature")
+	header, _, err := k.blockSource.GetBlockData(ctx, uint64(msg.Height))
+	if err != nil {
+		return nil, errors.Wrapf(err, "block data for height %d", msg.Height)
+	}
+	if header == nil {
+		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "block header not found for height %d", msg.Height)
 	}
 
-	epoch := k.GetCurrentEpoch(ctx)
-	epochBitmap := k.GetEpochBitmap(ctx, epoch)
-	if epochBitmap == nil {
-		validators, err := k.stakingKeeper.GetLastValidators(ctx)
-		if err != nil {
-			return nil, err
-		}
-		numValidators := 0
-		for _, v := range validators {
-			if v.IsBonded() {
-				numValidators++
-			}
-		}
-		epochBitmap = k.bitmapHelper.NewBitmap(numValidators)
-	}
-	k.bitmapHelper.SetBit(epochBitmap, int(index))
-	if err := k.SetEpochBitmap(ctx, epoch, epochBitmap); err != nil {
-		return nil, errors.Wrap(err, "failed to set epoch bitmap")
+	if !bytes.Equal(vote.BlockID.Hash, header.Header.AppHash) {
+		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "vote block ID hash does not match app hash for height %d", msg.Height)
 	}
 
-	// Emit event
-	ctx.EventManager().EmitEvent(
-		sdk.NewEvent(
-			types.TypeMsgAttest,
-			sdk.NewAttribute("validator", msg.Validator),
-			sdk.NewAttribute("height", math.NewInt(msg.Height).String()),
-		),
-	)
+	validator, err := k.stakingKeeper.GetValidator(ctx, vote.ValidatorAddress)
+	if err != nil {
+		return nil, errors.Wrapf(err, "get validator")
+	}
 
-	return &types.MsgAttestResponse{}, nil
+	pubKey, err := validator.ConsPubKey()
+	if err != nil {
+		return nil, errors.Wrapf(err, "pubkey")
+	}
+
+	voteSignBytes := cmttypes.VoteSignBytes(header.Header.ChainID(), &vote)
+	if !pubKey.VerifySignature(voteSignBytes, vote.Signature) {
+		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "invalid vote signature")
+	}
+
+	return &vote, nil
 }
 
 // JoinAttesterSet handles MsgJoinAttesterSet
@@ -137,7 +209,7 @@ func (k msgServer) JoinAttesterSet(goCtx context.Context, msg *types.MsgJoinAtte
 
 	// TODO (Alex): the valset should be updated at the end of an epoch only
 	if err := k.SetAttesterSetMember(ctx, msg.Validator); err != nil {
-		return nil, errors.Wrap(err, "failed to set attester set member")
+		return nil, errors.Wrap(err, "set attester set member")
 	}
 
 	ctx.EventManager().EmitEvent(
@@ -164,7 +236,7 @@ func (k msgServer) LeaveAttesterSet(goCtx context.Context, msg *types.MsgLeaveAt
 
 	// TODO (Alex): the valset should be updated at the end of an epoch only
 	if err := k.RemoveAttesterSetMember(ctx, msg.Validator); err != nil {
-		return nil, errors.Wrap(err, "failed to remove attester set member")
+		return nil, errors.Wrap(err, "remove attester set member")
 	}
 
 	ctx.EventManager().EmitEvent(

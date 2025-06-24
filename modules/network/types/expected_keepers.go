@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	tyrollkittypes "github.com/rollkit/rollkit/types"
 
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -24,4 +25,9 @@ type AccountKeeper interface {
 // BankKeeper defines the expected bank keeper interface
 type BankKeeper interface {
 	SpendableCoins(ctx context.Context, addr sdk.AccAddress) sdk.Coins
+}
+
+// BlockSource is the block store
+type BlockSource interface {
+	GetBlockData(ctx context.Context, height uint64) (*tyrollkittypes.SignedHeader, *tyrollkittypes.Data, error)
 }

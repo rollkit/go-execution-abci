@@ -1,12 +1,11 @@
 package keeper
 
 import (
-	"fmt"
-
 	"cosmossdk.io/collections"
 	"cosmossdk.io/core/store"
 	"cosmossdk.io/log"
 	"cosmossdk.io/math"
+	"fmt"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
@@ -21,11 +20,15 @@ type Keeper struct {
 	bankKeeper    types.BankKeeper
 	authority     string
 	bitmapHelper  *BitmapHelper
+	blockSource   types.BlockSource
 
 	// Collections for state management
-	ValidatorIndex        collections.Map[string, uint16]
-	ValidatorPower        collections.Map[uint16, uint64]
-	AttestationBitmap     collections.Map[int64, []byte]
+	ValidatorIndex collections.Map[string, uint16]
+	ValidatorPower collections.Map[uint16, uint64]
+
+	//AttestationBitmap tracks attestations for a block
+	AttestationBitmap collections.Map[int64, []byte]
+	// EpochBitmap track tracks participation over a range of epochs
 	EpochBitmap           collections.Map[uint64, []byte]
 	AttesterSet           collections.KeySet[string]
 	Signatures            collections.Map[collections.Pair[int64, string], []byte]
@@ -40,6 +43,7 @@ func NewKeeper(
 	sk types.StakingKeeper,
 	ak types.AccountKeeper,
 	bk types.BankKeeper,
+	blockSource types.BlockSource,
 	authority string,
 ) Keeper {
 
@@ -51,6 +55,7 @@ func NewKeeper(
 		bankKeeper:    bk,
 		authority:     authority,
 		bitmapHelper:  NewBitmapHelper(),
+		blockSource:   blockSource,
 
 		ValidatorIndex:        collections.NewMap(sb, types.ValidatorIndexPrefix, "validator_index", collections.StringKey, collections.Uint16Value),
 		ValidatorPower:        collections.NewMap(sb, types.ValidatorPowerPrefix, "validator_power", collections.Uint16Key, collections.Uint64Value),
@@ -195,9 +200,12 @@ func (k Keeper) BuildValidatorIndexMap(ctx sdk.Context) error {
 
 // GetCurrentEpoch returns the current epoch number
 func (k Keeper) GetCurrentEpoch(ctx sdk.Context) uint64 {
+	return k.GetEpochForHeight(ctx, ctx.BlockHeight())
+}
+
+func (k Keeper) GetEpochForHeight(ctx sdk.Context, height int64) uint64 {
 	params := k.GetParams(ctx)
-	height := uint64(ctx.BlockHeight())
-	return height / params.EpochLength
+	return uint64(height) / params.EpochLength
 }
 
 // IsCheckpointHeight checks if a height is a checkpoint

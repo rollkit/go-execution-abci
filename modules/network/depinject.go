@@ -35,6 +35,7 @@ type ModuleInputs struct {
 	StakingKeeper types.StakingKeeper
 	AccountKeeper types.AccountKeeper
 	BankKeeper    types.BankKeeper
+	BlockSource   types.BlockSource
 }
 
 type ModuleOutputs struct {
@@ -57,6 +58,7 @@ func ProvideModule(in ModuleInputs) ModuleOutputs {
 		in.StakingKeeper,
 		in.AccountKeeper,
 		in.BankKeeper,
+		in.BlockSource,
 		authority.String(),
 	)
 	m := NewAppModule(

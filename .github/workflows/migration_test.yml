@@ -62,7 +62,7 @@ jobs:
             ATTEMPT=$((ATTEMPT+1))
             
             # check if the chain is still running
-            if ! ps -p $CHAIN_PID > /dev/null; then
+            if ! ps -p $COSMOS_PID > /dev/null; then
               echo "Chain process died unexpectedly"
               cat cosmos-chain.log
               exit 1

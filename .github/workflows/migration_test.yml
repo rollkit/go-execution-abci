@@ -199,8 +199,6 @@ jobs:
           # migrate the chain data from cosmos sdk to rollkit
           gmd rollkit-migrate --home ~/.gm
 
-          echo "Migration completed successfully"
-
       - name: Start Local DA for Rollkit
         run: |
           # clone rollkit repository for local DA

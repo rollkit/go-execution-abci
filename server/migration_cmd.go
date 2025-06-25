@@ -51,6 +51,8 @@ This command will:
 After migration, start the node normally - it will automatically detect and use the rollkit_genesis.json file.`,
 		Args: cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+
 			config, err := cometbftcmd.ParseConfig(cmd)
 			if err != nil {
 				return err
@@ -70,7 +72,7 @@ After migration, start the node normally - it will automatically detect and use 
 
 			cmd.Printf("Last block height: %d\n", lastBlockHeight)
 
-			rollkitStore, err := loadRollkitStateStore(config.RootDir, config.DBPath)
+			rollkitStore, err := loadRollkitStateStore(config.RootDir)
 			if err != nil {
 				return err
 			}
@@ -79,21 +81,21 @@ After migration, start the node normally - it will automatically detect and use 
 			if err != nil {
 				return fmt.Errorf("error reading %s flag: %w", flagDaHeight, err)
 			}
+
 			rollkitState, err := rollkitStateFromCometBFTState(cometBFTstate, daHeight)
 			if err != nil {
 				return err
 			}
 
-			if err = rollkitStore.UpdateState(
-				context.Background(), rollkitState,
-			); err != nil {
-				return err
+			if err = rollkitStore.UpdateState(ctx, rollkitState); err != nil {
+				return fmt.Errorf("failed to update Rollkit state: %w", err)
 			}
 
 			// create minimal rollkit genesis file for future startups
 			if err := createRollkitMigrationGenesis(config.RootDir, cometBFTstate); err != nil {
 				return fmt.Errorf("failed to create rollkit migration genesis: %w", err)
 			}
+
 			cmd.Println("Created rollkit_genesis.json for migration - the node will use this on subsequent startups")
 
 			// migrate all the blocks from the CometBFT block store to the rollkit store
@@ -116,8 +118,8 @@ After migration, start the node normally - it will automatically detect and use 
 
 				header, data, signature := cometBlockToRollkit(block)
 
-				if err = rollkitStore.SaveBlockData(context.Background(), header, data, &signature); err != nil {
-					return err
+				if err = rollkitStore.SaveBlockData(ctx, header, data, &signature); err != nil {
+					return fmt.Errorf("failed to save block data: %w", err)
 				}
 
 				// Only save extended commit info if vote extensions are enabled
@@ -149,11 +151,16 @@ After migration, start the node normally - it will automatically detect and use 
 					}
 
 					_ = extendedCommitInfo
-					// rollkitStore.SaveExtendedCommit(context.Background(), header.Height(), &extendedCommitInfo)
+					// rollkitStore.SaveExtendedCommit(ctx, header.Height(), &extendedCommitInfo)
 					panic("Saving extended commit info is not implemented yet")
 				}
 
 				cmd.Println("Block", height, "migrated")
+			}
+
+			// set the last height in the Rollkit store
+			if err = rollkitStore.SetHeight(ctx, uint64(lastBlockHeight)); err != nil {
+				return fmt.Errorf("failed to set last height in Rollkit store: %w", err)
 			}
 
 			cmd.Println("Migration completed successfully")
@@ -251,8 +258,8 @@ func loadStateAndBlockStore(config *cfg.Config) (*store.BlockStore, state.Store,
 	return blockStore, stateStore, nil
 }
 
-func loadRollkitStateStore(rootDir, dbPath string) (rollkitstore.Store, error) {
-	baseKV, err := rollkitstore.NewDefaultKVStore(rootDir, dbPath, "rollkit")
+func loadRollkitStateStore(rootDir string) (rollkitstore.Store, error) {
+	baseKV, err := rollkitstore.NewDefaultKVStore(rootDir, "data", "rollkit")
 	if err != nil {
 		return nil, err
 	}
@@ -276,19 +283,6 @@ func rollkitStateFromCometBFTState(cometBFTState state.State, daHeight uint64) (
 		LastResultsHash: cometBFTState.LastResultsHash,
 		AppHash:         cometBFTState.AppHash,
 	}, nil
-}
-
-// fileExists checks if a file/directory exists.
-func fileExists(filename string) (bool, error) {
-	_, err := os.Stat(filename)
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("error checking file %s: %w", filename, err)
-	}
-
-	return true, nil
 }
 
 // createRollkitMigrationGenesis creates a minimal rollkit genesis file for migration.
@@ -320,4 +314,17 @@ func createRollkitMigrationGenesis(rootDir string, cometBFTState state.State) er
 	}
 
 	return nil
+}
+
+// fileExists checks if a file/directory exists.
+func fileExists(filename string) (bool, error) {
+	_, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("error checking file %s: %w", filename, err)
+	}
+
+	return true, nil
 }

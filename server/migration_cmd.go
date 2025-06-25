@@ -3,15 +3,16 @@ package server
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	dbm "github.com/cometbft/cometbft-db"
 	abci "github.com/cometbft/cometbft/abci/types"
 	cometbftcmd "github.com/cometbft/cometbft/cmd/cometbft/commands"
 	cfg "github.com/cometbft/cometbft/config"
-	"github.com/cometbft/cometbft/libs/os"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	"github.com/cometbft/cometbft/state"
 	"github.com/cometbft/cometbft/store"
@@ -27,13 +28,28 @@ var (
 	maxMissedBlock = 50
 )
 
+// RollkitMigrationGenesis represents the minimal genesis for rollkit migration.
+type RollkitMigrationGenesis struct {
+	ChainID       string `json:"chain_id"`
+	InitialHeight uint64 `json:"initial_height"`
+	GenesisTime   int64  `json:"genesis_time"`
+	Sequencer     []byte `json:"sequencer"`
+}
+
 // MigrateToRollkitCmd returns a command that migrates the data from the CometBFT chain to Rollkit.
 func MigrateToRollkitCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rollkit-migrate",
 		Short: "Migrate the data from the CometBFT chain to Rollkit",
-		Long:  "Migrate the data from the CometBFT chain to Rollkit. This command should be used to migrate nodes or the sequencer.",
-		Args:  cobra.ExactArgs(0),
+		Long: `Migrate the data from the CometBFT chain to Rollkit. This command should be used to migrate nodes or the sequencer.
+
+This command will:
+1. Migrate all blocks from the CometBFT blockstore to the Rollkit store
+2. Convert the CometBFT state to Rollkit state format
+3. Create a minimal rollkit_genesis.json file for subsequent startups
+
+After migration, start the node normally - it will automatically detect and use the rollkit_genesis.json file.`,
+		Args: cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			config, err := cometbftcmd.ParseConfig(cmd)
 			if err != nil {
@@ -73,6 +89,12 @@ func MigrateToRollkitCmd() *cobra.Command {
 			); err != nil {
 				return err
 			}
+
+			// create minimal rollkit genesis file for future startups
+			if err := createRollkitMigrationGenesis(config.RootDir, cometBFTstate); err != nil {
+				return fmt.Errorf("failed to create rollkit migration genesis: %w", err)
+			}
+			cmd.Println("Created rollkit_genesis.json for migration - the node will use this on subsequent startups")
 
 			// migrate all the blocks from the CometBFT block store to the rollkit store
 			// the migration is done in reverse order, starting from the last block
@@ -202,7 +224,7 @@ func cometBlockToRollkit(block *cometbfttypes.Block) (*rollkittypes.SignedHeader
 func loadStateAndBlockStore(config *cfg.Config) (*store.BlockStore, state.Store, error) {
 	dbType := dbm.BackendType(config.DBBackend)
 
-	if !os.FileExists(filepath.Join(config.DBDir(), "blockstore.db")) {
+	if !fileExists(filepath.Join(config.DBDir(), "blockstore.db")) {
 		return nil, nil, fmt.Errorf("no blockstore found in %v", config.DBDir())
 	}
 
@@ -213,7 +235,7 @@ func loadStateAndBlockStore(config *cfg.Config) (*store.BlockStore, state.Store,
 	}
 	blockStore := store.NewBlockStore(blockStoreDB)
 
-	if !os.FileExists(filepath.Join(config.DBDir(), "state.db")) {
+	if !fileExists(filepath.Join(config.DBDir(), "state.db")) {
 		return nil, nil, fmt.Errorf("no statestore found in %v", config.DBDir())
 	}
 
@@ -254,4 +276,44 @@ func rollkitStateFromCometBFTState(cometBFTState state.State, daHeight uint64) (
 		LastResultsHash: cometBFTState.LastResultsHash,
 		AppHash:         cometBFTState.AppHash,
 	}, nil
+}
+
+// fileExists checks if a file exists and is not a directory.
+func fileExists(filename string) bool {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return !info.IsDir()
+}
+
+// createRollkitMigrationGenesis creates a minimal rollkit genesis file for migration.
+// This creates a lightweight genesis containing only the essential information needed
+// for rollkit to start after migration. The full state is stored separately in the
+// rollkit state store.
+func createRollkitMigrationGenesis(rootDir string, cometBFTState state.State) error {
+	// use the first validator as sequencer (assuming single validator setup for migration)
+	var sequencerAddr []byte
+	if len(cometBFTState.LastValidators.Validators) > 0 {
+		sequencerAddr = cometBFTState.LastValidators.Validators[0].Address.Bytes()
+	}
+
+	migrationGenesis := RollkitMigrationGenesis{
+		ChainID:       cometBFTState.ChainID,
+		InitialHeight: uint64(cometBFTState.InitialHeight),
+		GenesisTime:   cometBFTState.LastBlockTime.UnixNano(),
+		Sequencer:     sequencerAddr,
+	}
+
+	genesisBytes, err := json.MarshalIndent(migrationGenesis, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal rollkit migration genesis: %w", err)
+	}
+
+	genesisPath := filepath.Join(rootDir, rollkitGenesisFilename)
+	if err := os.WriteFile(genesisPath, genesisBytes, 0o644); err != nil {
+		return fmt.Errorf("failed to write rollkit migration genesis to %s: %w", genesisPath, err)
+	}
+
+	return nil
 }

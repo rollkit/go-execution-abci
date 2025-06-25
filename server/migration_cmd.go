@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -16,6 +15,7 @@ import (
 	cometbftcmd "github.com/cometbft/cometbft/cmd/cometbft/commands"
 	cfg "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/crypto"
+	cmtjson "github.com/cometbft/cometbft/libs/json"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	"github.com/cometbft/cometbft/state"
 	"github.com/cometbft/cometbft/store"
@@ -385,7 +385,7 @@ func createRollkitMigrationGenesis(rootDir string, cometBFTState state.State) er
 		SequencerPubKey: sequencerPubKey,
 	}
 
-	genesisBytes, err := json.MarshalIndent(migrationGenesis, "", "  ")
+	genesisBytes, err := cmtjson.MarshalIndent(migrationGenesis, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal rollkit migration genesis: %w", err)
 	}

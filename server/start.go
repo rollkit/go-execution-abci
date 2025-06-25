@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -12,6 +11,7 @@ import (
 
 	"cosmossdk.io/log"
 	cmtcfg "github.com/cometbft/cometbft/config"
+	cmtjson "github.com/cometbft/cometbft/libs/json"
 	"github.com/cometbft/cometbft/mempool"
 	cmtp2p "github.com/cometbft/cometbft/p2p"
 	pvm "github.com/cometbft/cometbft/privval"
@@ -663,7 +663,7 @@ func loadRollkitMigrationGenesis(rootDir string) (*rollkitMigrationGenesis, erro
 	}
 
 	var migrationGenesis rollkitMigrationGenesis
-	if err := json.Unmarshal(genesisBytes, &migrationGenesis); err != nil {
+	if err := cmtjson.Unmarshal(genesisBytes, &migrationGenesis); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal rollkit migration genesis: %w", err)
 	}
 

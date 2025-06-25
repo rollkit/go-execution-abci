@@ -111,6 +111,8 @@ After migration, start the node normally - it will automatically detect and use 
 			// migrate all the blocks from the CometBFT block store to the rollkit store
 			// the migration is done in reverse order, starting from the last block
 			missedBlocks := make(map[int64]bool)
+			initSyncStores := true
+
 			for height := lastBlockHeight; height > 0; height-- {
 				cmd.Printf("Migrating block %d...\n", height)
 
@@ -130,6 +132,19 @@ After migration, start the node normally - it will automatically detect and use 
 
 				if err = rollkitStores.rollkitStore.SaveBlockData(ctx, header, data, &signature); err != nil {
 					return fmt.Errorf("failed to save block data: %w", err)
+				}
+
+				// set last data in sync stores
+				if initSyncStores {
+					if err = rollkitStores.headerSyncStore.Init(ctx, header); err != nil {
+						return fmt.Errorf("failed to initialize header sync store: %w", err)
+					}
+
+					if err = rollkitStores.dataSyncStore.Init(ctx, data); err != nil {
+						return fmt.Errorf("failed to initialize data sync store: %w", err)
+					}
+
+					initSyncStores = false
 				}
 
 				// Only save extended commit info if vote extensions are enabled
@@ -171,15 +186,6 @@ After migration, start the node normally - it will automatically detect and use 
 			// set the last height in the Rollkit store
 			if err = rollkitStores.rollkitStore.SetHeight(ctx, uint64(lastBlockHeight)); err != nil {
 				return fmt.Errorf("failed to set last height in Rollkit store: %w", err)
-			}
-
-			// set last height in sync stores
-			if err = rollkitStores.headerSyncStore.Init(ctx, &rollkittypes.SignedHeader{}); err != nil {
-				return fmt.Errorf("failed to initialize header sync store: %w", err)
-			}
-
-			if err = rollkitStores.dataSyncStore.Init(ctx, &rollkittypes.Data{}); err != nil {
-				return fmt.Errorf("failed to initialize data sync store: %w", err)
 			}
 
 			cmd.Println("Migration completed successfully")
@@ -294,39 +300,30 @@ func loadRollkitStores(rootDir string) (rollkitStores, error) {
 		Prefix: ds.NewKey(rollkitnode.RollkitPrefix),
 	})
 
-	dataSyncStore, headerSyncStore, err := loadRollkitSyncStores(rollkitPrefixStore)
+	ds, err := goheaderstore.NewStore[*rollkittypes.Data](
+		store,
+		goheaderstore.WithStorePrefix("dataSync"), // https://github.com/rollkit/rollkit/blob/6ad581a97a161594e19772d0e1441bdffff53811/pkg/sync/sync_service.go#L32
+		goheaderstore.WithMetrics(),
+	)
 	if err != nil {
-		return rollkitStores{}, fmt.Errorf("failed to load rollkit sync stores: %w", err)
+		return rollkitStores{}, err
+	}
+
+	hs, err := goheaderstore.NewStore[*rollkittypes.SignedHeader](
+		store,
+		goheaderstore.WithStorePrefix("headerSync"), // https://github.com/rollkit/rollkit/blob/6ad581a97a161594e19772d0e1441bdffff53811/pkg/sync/sync_service.go#L31
+		goheaderstore.WithMetrics(),
+	)
+	if err != nil {
+		return rollkitStores{}, err
 	}
 
 	return rollkitStores{
 		rollkitStore:    rollkitstore.New(rollkitPrefixStore),
 		abciExecStore:   adapter.NewExecABCIStore(store),
-		dataSyncStore:   dataSyncStore,
-		headerSyncStore: headerSyncStore,
+		dataSyncStore:   ds,
+		headerSyncStore: hs,
 	}, nil
-}
-
-func loadRollkitSyncStores(store ds.Batching) (*goheaderstore.Store[*rollkittypes.Data], *goheaderstore.Store[*rollkittypes.SignedHeader], error) {
-	ds, err := goheaderstore.NewStore[*rollkittypes.Data](
-		store,
-		goheaderstore.WithStorePrefix("dataSync"),
-		goheaderstore.WithMetrics(),
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	hs, err := goheaderstore.NewStore[*rollkittypes.SignedHeader](
-		store,
-		goheaderstore.WithStorePrefix("headersSync"),
-		goheaderstore.WithMetrics(),
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return ds, hs, nil
 }
 
 func cometbftStateToRollkitState(cometBFTState state.State, daHeight uint64) (rollkittypes.State, error) {

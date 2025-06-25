@@ -13,7 +13,7 @@ import (
 )
 
 // ToABCIBlock converts Rolkit block into block format defined by ABCI.
-func ToABCIBlock(header *rlktypes.SignedHeader, data *rlktypes.Data, lastCommit *cmttypes.Commit) (*cmttypes.Block, error) {
+func ToABCIBlock(header *rlktypes.SignedHeader, data *rlktypes.Data, lastCommit *cmttypes.Commit, valSet *cmttypes.ValidatorSet) (*cmttypes.Block, error) {
 	abciHeader, err := ToABCIHeader(&header.Header)
 	if err != nil {
 		return nil, err
@@ -28,7 +28,10 @@ func ToABCIBlock(header *rlktypes.SignedHeader, data *rlktypes.Data, lastCommit 
 	abciHeader.LastCommitHash = lastCommit.Hash()
 
 	// set validator hash
-	if header.Signer.Address != nil {
+	if valSet != nil {
+		abciHeader.ValidatorsHash = valSet.Hash()
+		abciHeader.NextValidatorsHash = valSet.Hash()
+	} else if header.Signer.Address != nil {
 		validatorHash, err := validatorHasher(header.ProposerAddress, header.Signer.PubKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to compute validator hash: %w", err)
@@ -54,8 +57,8 @@ func ToABCIBlock(header *rlktypes.SignedHeader, data *rlktypes.Data, lastCommit 
 }
 
 // ToABCIBlockMeta converts Rollkit block into BlockMeta format defined by ABCI
-func ToABCIBlockMeta(header *rlktypes.SignedHeader, data *rlktypes.Data, lastCommit *cmttypes.Commit) (*cmttypes.BlockMeta, error) {
-	cmblock, err := ToABCIBlock(header, data, lastCommit)
+func ToABCIBlockMeta(header *rlktypes.SignedHeader, data *rlktypes.Data, lastCommit *cmttypes.Commit, valSet *cmttypes.ValidatorSet) (*cmttypes.BlockMeta, error) {
+	cmblock, err := ToABCIBlock(header, data, lastCommit, valSet)
 	if err != nil {
 		return nil, err
 	}

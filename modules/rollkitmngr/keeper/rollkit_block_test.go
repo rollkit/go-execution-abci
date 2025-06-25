@@ -3,8 +3,12 @@ package keeper_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cometbft/cometbft/crypto/ed25519"
+	"github.com/cometbft/cometbft/libs/math"
+	"github.com/cometbft/cometbft/light"
+	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	cmttypes "github.com/cometbft/cometbft/types"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/stretchr/testify/mock"
@@ -23,6 +27,7 @@ type ValidatorInfo struct {
 	CmtPubKey    ed25519.PubKey
 	Signer       *noop.NoopSigner
 	Address      []byte
+	CmtAddress   []byte
 	CmtValidator *cmttypes.Validator
 }
 
@@ -101,7 +106,7 @@ func TestRollkitConsecutiveBlocksWithMultipleValidators(t *testing.T) {
 	// =========================
 	// SETUP: CREATE 3 VALIDATORS
 	// =========================
-	t.Log("🔧 Setting up validator set with 3 validators using real RPC Commit endpoint...")
+	t.Log("🔧 Setting up validator set with 3 validators...")
 
 	validators := make([]*ValidatorInfo, 3)
 	cmtValidators := make([]*cmttypes.Validator, 3)
@@ -134,6 +139,7 @@ func TestRollkitConsecutiveBlocksWithMultipleValidators(t *testing.T) {
 			CmtPubKey:    cmtPubKey.(ed25519.PubKey),
 			Signer:       signer.(*noop.NoopSigner),
 			Address:      address,
+			CmtAddress:   cmtPubKey.Address(),
 			CmtValidator: cmtValidator,
 		}
 		cmtValidators[i] = cmtValidator
@@ -143,6 +149,12 @@ func TestRollkitConsecutiveBlocksWithMultipleValidators(t *testing.T) {
 
 	// Sequencer is the first validator
 	sequencer := validators[0]
+
+	// Create a validator set for light client verification
+	valSet := &cmttypes.ValidatorSet{
+		Validators: cmtValidators,
+		Proposer:   cmtValidators[0], // Sequencer is the proposer
+	}
 
 	// =========================
 	// SETUP RPC ENVIRONMENT (exactly like blocks_test.go)
@@ -161,14 +173,8 @@ func TestRollkitConsecutiveBlocksWithMultipleValidators(t *testing.T) {
 	// Create mock rollkit store
 	mockRollkitStore := &MockRollkitStore{}
 
-	// For now, we'll skip the full RPC setup due to complex Store interface requirements
-	// and focus on the core multi-validator functionality
-	t.Log("⚠️  Skipping RPC Commit endpoint due to complex mock setup requirements")
-	t.Log("✅ Will demonstrate multi-validator block creation and validation instead")
-
-	t.Log("🚀 Creating and validating 3 consecutive blocks with multi-validator demonstration...")
+	t.Log("✨ Simulating multi-validator commits and verifying with light client...")
 	t.Log("🔐 Using ABCI-compatible signature payload provider for realistic signing")
-	t.Log("🔍 Including multi-validator commit structure creation")
 
 	// =========================
 	// CREATE BLOCKS WITH MULTI-VALIDATOR SUPPORT
@@ -176,6 +182,9 @@ func TestRollkitConsecutiveBlocksWithMultipleValidators(t *testing.T) {
 
 	blocks := make([]*rollkittypes.SignedHeader, 3)
 	blockData := make([]*rollkittypes.Data, 3)
+
+	var lastCommit *cmttypes.Commit
+	var trustedHeader *cmttypes.SignedHeader
 
 	// Create 3 blocks
 	for i := 0; i < 3; i++ {
@@ -190,6 +199,7 @@ func TestRollkitConsecutiveBlocksWithMultipleValidators(t *testing.T) {
 			t.Logf("📦 Creating Genesis Block (Height %d)...", height)
 			block, err = rollkittypes.GetFirstSignedHeader(sequencer.Signer, chainID)
 			require.NoError(t, err, "Failed to create genesis block")
+			lastCommit = &cmttypes.Commit{Height: 0}
 		} else {
 			// Subsequent blocks
 			t.Logf("📦 Creating Block %d (Height %d)...", i+1, height)
@@ -234,57 +244,50 @@ func TestRollkitConsecutiveBlocksWithMultipleValidators(t *testing.T) {
 
 		t.Logf("✅ Block %d created: Height=%d, Hash=%x, Transactions=%d",
 			i+1, block.Height(), block.Hash(), len(data.Txs))
-	}
 
-	// =========================
-	// MULTI-VALIDATOR VERIFICATION
-	// =========================
+		// =========================
+		// MULTI-VALIDATOR COMMIT & LIGHT CLIENT VERIFICATION
+		// =========================
 
-	t.Log("🔍 Demonstrating multi-validator setup and block validation...")
+		// Create a copy of the block to modify for CometBFT compatibility
+		cometCompatBlock := *block
+		cometCompatBlock.ProposerAddress = sequencer.CmtAddress
 
-	// Validate each block and demonstrate multi-validator capabilities
-	for i, block := range blocks {
-		// Validate block structure
-		err := block.ValidateBasic()
-		require.NoError(t, err, "Block %d should be valid", i+1)
+		// Get the block hash (BlockID) for signing the commit
+		cometBlock, err := cometcompat.ToABCIBlock(&cometCompatBlock, data, lastCommit, valSet)
+		require.NoError(t, err, "Failed to convert to CometBFT block for block %d", i+1)
+		blockID := cmttypes.BlockID{Hash: cometBlock.Hash()}
 
-		// Verify block data consistency
-		expectedDataHash := blockData[i].DACommitment()
-		require.Equal(t, expectedDataHash, block.DataHash, "Block %d data hash should match", i+1)
+		// Create a commit with signatures from all validators
+		currentCommit := createMultiValidatorCommit(t, &block.Header, blockID, valSet, validators, chainID)
 
-		// Verify chain continuity (except for genesis)
-		if i > 0 {
-			require.Equal(t, blocks[i-1].Hash(), block.LastHeaderHash,
-				"Block %d should reference previous block hash", i+1)
-			require.Equal(t, blocks[i-1].Height()+1, block.Height(),
-				"Block %d should increment height", i+1)
+		// Create a CometBFT signed header for light client verification
+		cmtSignedHeader := &cmttypes.SignedHeader{
+			Header: &cometBlock.Header,
+			Commit: currentCommit,
 		}
 
-		// Demonstrate ABCI-compatible signing
-		payloadProvider := cometcompat.PayloadProvider()
-		abciPayload, err := payloadProvider(&block.Header)
-		require.NoError(t, err, "Block %d ABCI payload generation should succeed", i+1)
+		// Perform light client verification
+		if i == 0 {
+			// For the first block, we trust it and verify its own commit
+			trustedHeader = cmtSignedHeader
+			err = valSet.VerifyCommitLight(chainID, trustedHeader.Commit.BlockID, trustedHeader.Height, trustedHeader.Commit)
+			require.NoError(t, err, "Light client verification of first block commit should pass")
+		} else {
+			// For subsequent blocks, verify against the previously trusted header
+			trustingPeriod := 3 * time.Hour
+			trustLevel := math.Fraction{Numerator: 2, Denominator: 3}
+			maxClockDrift := 10 * time.Second
+			now := block.Time()
 
-		// Verify sequencer signature on the block itself
-		verified, err := sequencer.PubKey.Verify(abciPayload, block.Signature)
-		require.NoError(t, err, "Block %d sequencer signature verification should not error", i+1)
-		require.True(t, verified, "Block %d sequencer signature should be valid with ABCI payload", i+1)
-
-		// Demonstrate multi-validator signing capability
-		for j, validator := range validators {
-			// Each validator can create valid signatures for the block
-			validatorSignature, err := validator.CmtPrivKey.Sign(abciPayload)
-			require.NoError(t, err, "Block %d Validator %d should be able to sign", i+1, j)
-			require.NotEmpty(t, validatorSignature, "Block %d Validator %d signature should not be empty", i+1, j)
-
-			// Verify validator signature
-			verified, err := validator.PubKey.Verify(abciPayload, validatorSignature)
-			require.NoError(t, err, "Block %d Validator %d signature verification should not error", i+1, j)
-			require.True(t, verified, "Block %d Validator %d signature should be valid", i+1, j)
+			err = light.Verify(trustedHeader, valSet, cmtSignedHeader, valSet, trustingPeriod, now, maxClockDrift, trustLevel)
+			require.NoError(t, err, "Light client verification should pass for block %d", i+1)
+			trustedHeader = cmtSignedHeader
 		}
+		t.Logf("✅ Light client verification passed for block %d", i+1)
 
-		t.Logf("✅ Block %d: Height=%d, Hash=%x, Transactions=%d, Multi-validator capable=%t",
-			i+1, block.Height(), block.Hash(), len(blockData[i].Txs), true)
+		// The current commit becomes the lastCommit for the next block
+		lastCommit = currentCommit
 	}
 
 	t.Log("🎉 MULTI-VALIDATOR BLOCKCHAIN DEMONSTRATION COMPLETE!")
@@ -299,8 +302,47 @@ func TestRollkitConsecutiveBlocksWithMultipleValidators(t *testing.T) {
 	t.Logf("✅ Total Transactions: %d", len(blockData[0].Txs)+len(blockData[1].Txs)+len(blockData[2].Txs))
 	t.Log("✅ All blocks created and validated")
 	t.Log("✅ ABCI-compatible signature payload provider used")
-	t.Log("✅ Multi-validator signing demonstrated successfully")
-	t.Log("✅ Chain continuity verified")
-	t.Log("🎯 Test demonstrates multi-validator infrastructure for Rollkit")
-	t.Log("📋 Summary: 3 validators, 3 blocks, ABCI compatibility, multi-validator signing = SUCCESS")
+	t.Log("✅ Multi-validator commits simulated successfully")
+	t.Log("✅ Light client verification passed for all blocks")
+	t.Log("🎯 Test demonstrates multi-validator infrastructure for Rollkit and light client compatibility")
+}
+
+// createMultiValidatorCommit creates a CometBFT commit with signatures from all specified validators.
+func createMultiValidatorCommit(t *testing.T, header *rollkittypes.Header, blockID cmttypes.BlockID, valSet *cmttypes.ValidatorSet, validators []*ValidatorInfo, chainID string) *cmttypes.Commit {
+	t.Helper()
+	commitSigs := []cmttypes.CommitSig{}
+
+	// Sign with all validators
+	for _, validator := range validators {
+		index, val := valSet.GetByAddress(validator.CmtPubKey.Address())
+		require.NotNil(t, val, "validator %X not found in valset", validator.CmtPubKey.Address())
+
+		vote := cmtproto.Vote{
+			Type:             cmtproto.PrecommitType,
+			Height:           int64(header.Height()),
+			Round:            0,
+			BlockID:          cmtproto.BlockID{Hash: blockID.Hash, PartSetHeader: blockID.PartSetHeader.ToProto()},
+			Timestamp:        header.Time(),
+			ValidatorAddress: validator.CmtPubKey.Address(),
+			ValidatorIndex:   int32(index),
+		}
+
+		signBytes := cmttypes.VoteSignBytes(chainID, &vote)
+		signature, err := validator.CmtPrivKey.Sign(signBytes)
+		require.NoError(t, err)
+
+		commitSigs = append(commitSigs, cmttypes.CommitSig{
+			BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+			ValidatorAddress: validator.CmtPubKey.Address(),
+			Timestamp:        header.Time(),
+			Signature:        signature,
+		})
+	}
+
+	return &cmttypes.Commit{
+		Height:     int64(header.Height()),
+		Round:      0,
+		BlockID:    blockID,
+		Signatures: commitSigs,
+	}
 }

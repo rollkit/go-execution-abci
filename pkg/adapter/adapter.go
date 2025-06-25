@@ -476,6 +476,10 @@ func (a *Adapter) ExecuteTxs(
 	}
 
 	if a.blockFilter.IsPublishable(ctx, int64(header.Height())) {
+		// save response before the events are fired (current behaviour in CometBFT)
+		if err := a.Store.SaveBlockResponse(ctx, blockHeight, fbResp); err != nil {
+			return nil, 0, fmt.Errorf("save block response: %w", err)
+		}
 		if err := fireEvents(a.EventBus, block, currentBlockID, fbResp, validatorUpdates); err != nil {
 			return nil, 0, fmt.Errorf("fire events: %w", err)
 		}
@@ -483,9 +487,9 @@ func (a *Adapter) ExecuteTxs(
 		a.stackBlockCommitEvents(currentBlockID, block, fbResp, validatorUpdates)
 		// clear events so that they are not stored with the block data at this stage.
 		fbResp.Events = nil
-	}
-	if err := a.Store.SaveBlockResponse(ctx, blockHeight, fbResp); err != nil {
-		return nil, 0, fmt.Errorf("save block response: %w", err)
+		if err := a.Store.SaveBlockResponse(ctx, blockHeight, fbResp); err != nil {
+			return nil, 0, fmt.Errorf("save block response: %w", err)
+		}
 	}
 
 	a.Logger.Info("block executed successfully", "height", blockHeight, "appHash", fmt.Sprintf("%X", fbResp.AppHash))

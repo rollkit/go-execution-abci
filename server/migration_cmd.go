@@ -24,6 +24,8 @@ import (
 	rollkitnode "github.com/rollkit/rollkit/node"
 	rollkitstore "github.com/rollkit/rollkit/pkg/store"
 	rollkittypes "github.com/rollkit/rollkit/types"
+
+	"github.com/rollkit/go-execution-abci/pkg/adapter"
 )
 
 var (
@@ -72,12 +74,16 @@ After migration, start the node normally - it will automatically detect and use 
 			}
 
 			lastBlockHeight := cometBFTstate.LastBlockHeight
-
 			cmd.Printf("Last block height: %d\n", lastBlockHeight)
 
-			rollkitStore, err := loadRollkitStateStore(config.RootDir)
+			rollkitStore, abciExecStore, err := loadRollkitStores(config.RootDir)
 			if err != nil {
 				return err
+			}
+
+			// save current CometBFT state to the ABCI exec store
+			if err = abciExecStore.SaveState(ctx, &cometBFTstate); err != nil {
+				return fmt.Errorf("failed to save CometBFT state to ABCI exec store: %w", err)
 			}
 
 			daHeight, err := cmd.Flags().GetUint64(flagDaHeight)
@@ -85,7 +91,7 @@ After migration, start the node normally - it will automatically detect and use 
 				return fmt.Errorf("error reading %s flag: %w", flagDaHeight, err)
 			}
 
-			rollkitState, err := rollkitStateFromCometBFTState(cometBFTstate, daHeight)
+			rollkitState, err := cometbftStateToRollkitState(cometBFTstate, daHeight)
 			if err != nil {
 				return err
 			}
@@ -261,18 +267,23 @@ func loadStateAndBlockStore(config *cfg.Config) (*store.BlockStore, state.Store,
 	return blockStore, stateStore, nil
 }
 
-func loadRollkitStateStore(rootDir string) (rollkitstore.Store, error) {
-	baseKV, err := rollkitstore.NewDefaultKVStore(rootDir, "data", "rollkit")
+func loadRollkitStores(rootDir string) (rollkitstore.Store, *adapter.Store, error) {
+	store, err := rollkitstore.NewDefaultKVStore(rootDir, "data", "rollkit")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	mainKV := ktds.Wrap(baseKV, ktds.PrefixTransform{Prefix: ds.NewKey(rollkitnode.RollkitPrefix)})
+	rollkitPrefixStore := ktds.Wrap(store, &ktds.PrefixTransform{
+		Prefix: ds.NewKey(rollkitnode.RollkitPrefix),
+	})
 
-	return rollkitstore.New(mainKV), nil
+	rollkitStore := rollkitstore.New(rollkitPrefixStore)
+	abciStore := adapter.NewExecABCIStore(store)
+
+	return rollkitStore, abciStore, nil
 }
 
-func rollkitStateFromCometBFTState(cometBFTState state.State, daHeight uint64) (rollkittypes.State, error) {
+func cometbftStateToRollkitState(cometBFTState state.State, daHeight uint64) (rollkittypes.State, error) {
 	return rollkittypes.State{
 		Version: rollkittypes.Version{
 			Block: cometBFTState.Version.Consensus.Block,

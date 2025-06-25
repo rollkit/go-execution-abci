@@ -224,8 +224,8 @@ func cometBlockToRollkit(block *cometbfttypes.Block) (*rollkittypes.SignedHeader
 func loadStateAndBlockStore(config *cfg.Config) (*store.BlockStore, state.Store, error) {
 	dbType := dbm.BackendType(config.DBBackend)
 
-	if !fileExists(filepath.Join(config.DBDir(), "blockstore.db")) {
-		return nil, nil, fmt.Errorf("no blockstore found in %v", config.DBDir())
+	if ok, err := fileExists(filepath.Join(config.DBDir(), "blockstore.db")); !ok || err != nil {
+		return nil, nil, fmt.Errorf("no blockstore found in %v: %w", config.DBDir(), err)
 	}
 
 	// Get BlockStore
@@ -235,8 +235,8 @@ func loadStateAndBlockStore(config *cfg.Config) (*store.BlockStore, state.Store,
 	}
 	blockStore := store.NewBlockStore(blockStoreDB)
 
-	if !fileExists(filepath.Join(config.DBDir(), "state.db")) {
-		return nil, nil, fmt.Errorf("no statestore found in %v", config.DBDir())
+	if ok, err := fileExists(filepath.Join(config.DBDir(), "state.db")); !ok || err != nil {
+		return nil, nil, fmt.Errorf("no statestore found in %v: %w", config.DBDir(), err)
 	}
 
 	// Get StateStore
@@ -278,13 +278,17 @@ func rollkitStateFromCometBFTState(cometBFTState state.State, daHeight uint64) (
 	}, nil
 }
 
-// fileExists checks if a file exists and is not a directory.
-func fileExists(filename string) bool {
-	info, err := os.Stat(filename)
+// fileExists checks if a file/directory exists.
+func fileExists(filename string) (bool, error) {
+	_, err := os.Stat(filename)
 	if os.IsNotExist(err) {
-		return false
+		return false, nil
 	}
-	return !info.IsDir()
+	if err != nil {
+		return false, fmt.Errorf("error checking file %s: %w", filename, err)
+	}
+
+	return true, nil
 }
 
 // createRollkitMigrationGenesis creates a minimal rollkit genesis file for migration.
@@ -293,7 +297,7 @@ func fileExists(filename string) bool {
 // rollkit state store.
 func createRollkitMigrationGenesis(rootDir string, cometBFTState state.State) error {
 	// use the first validator as sequencer (assuming single validator setup for migration)
-	var sequencerAddr []byte
+	var sequencerAddr []byte // TODO(@julienrbrt): Allow to rollkitmanager for sequencer address instead. However rollkitmanager is an optional module
 	if len(cometBFTState.LastValidators.Validators) > 0 {
 		sequencerAddr = cometBFTState.LastValidators.Validators[0].Address.Bytes()
 	}

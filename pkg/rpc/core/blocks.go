@@ -78,7 +78,7 @@ func BlockSearch(
 			return nil, fmt.Errorf("failed to get last commit for block %d: %w", results[i], err)
 		}
 
-		block, err := cometcompat.ToABCIBlock(header, data, lastCommit)
+		block, err := cometcompat.ToABCIBlock(header, data, lastCommit, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -135,8 +135,7 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 		return nil, fmt.Errorf("failed to get last commit for block %d: %w", heightValue, err)
 	}
 
-	// First apply ToABCIBlock to get the final header with all transformations
-	abciBlock, err := cometcompat.ToABCIBlock(header, data, lastCommit)
+	block, err := cometcompat.ToABCIBlock(header, data, lastCommit, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -149,10 +148,10 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 			Height: int64(header.Height()), //nolint:gosec
 			Round:  0,
 			BlockID: cmtproto.BlockID{
-				Hash:          abciBlock.Header.Hash(),
+				Hash:          block.Header.Hash(),
 				PartSetHeader: cmtproto.PartSetHeader{},
 			},
-			Timestamp:        abciBlock.Time,
+			Timestamp:        block.Time,
 			ValidatorAddress: header.ProposerAddress,
 			ValidatorIndex:   0,
 		}
@@ -165,14 +164,14 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 		}
 
 		// Update the signature in the block
-		if len(abciBlock.LastCommit.Signatures) > 0 {
-			abciBlock.LastCommit.Signatures[0].Signature = newSignature
+		if len(block.LastCommit.Signatures) > 0 {
+			block.LastCommit.Signatures[0].Signature = newSignature
 		}
 	}
 
 	return &ctypes.ResultBlock{
-		BlockID: cmttypes.BlockID{Hash: abciBlock.Hash()},
-		Block:   abciBlock,
+		BlockID: cmttypes.BlockID{Hash: block.Hash()},
+		Block:   block,
 	}, nil
 }
 
@@ -189,7 +188,7 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 		return nil, fmt.Errorf("failed to get last commit for block %d: %w", header.Height(), err)
 	}
 
-	abciBlock, err := cometcompat.ToABCIBlock(header, data, lastCommit)
+	block, err := cometcompat.ToABCIBlock(header, data, lastCommit, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +201,7 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 				Hash:  nil,
 			},
 		},
-		Block: abciBlock,
+		Block: block,
 	}, nil
 }
 
@@ -236,8 +235,7 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 		}},
 	}
 
-	// First apply ToABCIBlock to get the final header with all transformations
-	abciBlock, err := cometcompat.ToABCIBlock(header, rollkitData, abciCommit)
+	block, err := cometcompat.ToABCIBlock(header, rollkitData, abciCommit, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -250,10 +248,10 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 			Height: int64(header.Height()), //nolint:gosec
 			Round:  0,
 			BlockID: cmtproto.BlockID{
-				Hash:          abciBlock.Header.Hash(),
+				Hash:          block.Header.Hash(),
 				PartSetHeader: cmtproto.PartSetHeader{},
 			},
-			Timestamp:        abciBlock.Time,
+			Timestamp:        block.Time,
 			ValidatorAddress: header.ProposerAddress,
 			ValidatorIndex:   0,
 		}
@@ -266,16 +264,16 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 		}
 
 		// Update the commit with the new signature
-		abciBlock.LastCommit.Signatures[0].Signature = newSignature
+		block.LastCommit.Signatures[0].Signature = newSignature
 	}
 
 	// Update the commit's BlockID to match the final ABCI block hash
-	abciBlock.LastCommit.BlockID.Hash = abciBlock.Header.Hash()
+	block.LastCommit.BlockID.Hash = block.Header.Hash()
 
 	return &ctypes.ResultCommit{
 		SignedHeader: cmttypes.SignedHeader{
-			Header: &abciBlock.Header,
-			Commit: abciBlock.LastCommit,
+			Header: &block.Header,
+			Commit: block.LastCommit,
 		},
 		CanonicalCommit: true,
 	}, nil
@@ -337,7 +335,7 @@ func HeaderByHash(ctx *rpctypes.Context, hash cmbytes.HexBytes) (*ctypes.ResultH
 		return nil, fmt.Errorf("failed to get last commit for block %d: %w", header.Height(), err)
 	}
 
-	blockMeta, err := cometcompat.ToABCIBlockMeta(header, data, lastCommit)
+	blockMeta, err := cometcompat.ToABCIBlockMeta(header, data, lastCommit, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -380,7 +378,7 @@ func BlockchainInfo(ctx *rpctypes.Context, minHeight, maxHeight int64) (*ctypes.
 				return nil, fmt.Errorf("failed to get last commit for block %d: %w", block.header.Height(), err)
 			}
 
-			cmblockmeta, err := cometcompat.ToABCIBlockMeta(block.header, block.data, lastCommit)
+			cmblockmeta, err := cometcompat.ToABCIBlockMeta(block.header, block.data, lastCommit, nil)
 			if err != nil {
 				return nil, err
 			}

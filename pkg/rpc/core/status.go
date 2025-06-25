@@ -46,7 +46,6 @@ func Status(ctx *rpctypes.Context) (*ctypes.ResultStatus, error) {
 	}
 
 	genesisValidators := env.Adapter.AppGenesis.Consensus.Validators
-
 	if len(genesisValidators) != 1 {
 		return nil, fmt.Errorf("there should be exactly one validator in genesis")
 	}
@@ -54,10 +53,9 @@ func Status(ctx *rpctypes.Context) (*ctypes.ResultStatus, error) {
 	// Changed behavior to get this from genesis
 	genesisValidator := genesisValidators[0]
 	validator := cmttypes.Validator{
-		Address:          genesisValidator.Address,
-		PubKey:           genesisValidator.PubKey,
-		VotingPower:      int64(1),
-		ProposerPriority: int64(1),
+		Address:     genesisValidator.Address,
+		PubKey:      genesisValidator.PubKey,
+		VotingPower: int64(1),
 	}
 
 	state, err := env.Adapter.RollkitStore.GetState(unwrappedCtx)

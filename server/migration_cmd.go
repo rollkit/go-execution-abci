@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	goheaderstore "github.com/celestiaorg/go-header/store"
 	dbm "github.com/cometbft/cometbft-db"
 	abci "github.com/cometbft/cometbft/abci/types"
 	cometbftcmd "github.com/cometbft/cometbft/cmd/cometbft/commands"
 	cfg "github.com/cometbft/cometbft/config"
+	"github.com/cometbft/cometbft/crypto"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	"github.com/cometbft/cometbft/state"
 	"github.com/cometbft/cometbft/store"
@@ -23,6 +25,7 @@ import (
 	"github.com/spf13/cobra"
 
 	rollkitnode "github.com/rollkit/rollkit/node"
+	rollkitgenesis "github.com/rollkit/rollkit/pkg/genesis"
 	rollkitstore "github.com/rollkit/rollkit/pkg/store"
 	rollkittypes "github.com/rollkit/rollkit/types"
 
@@ -34,12 +37,25 @@ var (
 	maxMissedBlock = 50
 )
 
-// RollkitMigrationGenesis represents the minimal genesis for rollkit migration.
-type RollkitMigrationGenesis struct {
-	ChainID       string `json:"chain_id"`
-	InitialHeight uint64 `json:"initial_height"`
-	GenesisTime   int64  `json:"genesis_time"`
-	Sequencer     []byte `json:"sequencer"`
+// rollkitMigrationGenesis represents the minimal genesis for rollkit migration.
+type rollkitMigrationGenesis struct {
+	ChainID         string        `json:"chain_id"`
+	InitialHeight   uint64        `json:"initial_height"`
+	GenesisTime     int64         `json:"genesis_time"`
+	SequencerAddr   []byte        `json:"sequencer_address"`
+	SequencerPubKey crypto.PubKey `json:"sequencer_pub_key,omitempty"`
+}
+
+// ToRollkitGenesis converts the rollkit migration genesis to a Rollkit genesis.
+func (g rollkitMigrationGenesis) ToRollkitGenesis() *rollkitgenesis.Genesis {
+	genesis := rollkitgenesis.NewGenesis(
+		g.ChainID,
+		g.InitialHeight,
+		time.Unix(0, g.GenesisTime),
+		g.SequencerAddr,
+	)
+
+	return &genesis
 }
 
 // MigrateToRollkitCmd returns a command that migrates the data from the CometBFT chain to Rollkit.
@@ -349,17 +365,24 @@ func cometbftStateToRollkitState(cometBFTState state.State, daHeight uint64) (ro
 // for rollkit to start after migration. The full state is stored separately in the
 // rollkit state store.
 func createRollkitMigrationGenesis(rootDir string, cometBFTState state.State) error {
+	var (
+		sequencerAddr   []byte
+		sequencerPubKey crypto.PubKey
+	)
+
 	// use the first validator as sequencer (assuming single validator setup for migration)
-	var sequencerAddr []byte // TODO(@julienrbrt): Allow to rollkitmanager for sequencer address instead. However rollkitmanager is an optional module
+	// TODO(@julienrbrt): Allow to rollkitmanager for sequencer address instead. However rollkitmanager is an optional module
 	if len(cometBFTState.LastValidators.Validators) > 0 {
 		sequencerAddr = cometBFTState.LastValidators.Validators[0].Address.Bytes()
+		sequencerPubKey = cometBFTState.LastValidators.Validators[0].PubKey
 	}
 
-	migrationGenesis := RollkitMigrationGenesis{
-		ChainID:       cometBFTState.ChainID,
-		InitialHeight: uint64(cometBFTState.InitialHeight),
-		GenesisTime:   cometBFTState.LastBlockTime.UnixNano(),
-		Sequencer:     sequencerAddr,
+	migrationGenesis := rollkitMigrationGenesis{
+		ChainID:         cometBFTState.ChainID,
+		InitialHeight:   uint64(cometBFTState.InitialHeight),
+		GenesisTime:     cometBFTState.LastBlockTime.UnixNano(),
+		SequencerAddr:   sequencerAddr,
+		SequencerPubKey: sequencerPubKey,
 	}
 
 	genesisBytes, err := json.MarshalIndent(migrationGenesis, "", "  ")

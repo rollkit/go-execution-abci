@@ -340,7 +340,7 @@ func setupNodeAndExecutor(
 	}
 
 	if migrationGenesis != nil {
-		rollkitGenesis = migrationGenesis
+		rollkitGenesis = migrationGenesis.ToRollkitGenesis()
 
 		logger.Info("using rollkit migration genesis",
 			"chain_id", migrationGenesis.ChainID,
@@ -350,7 +350,16 @@ func setupNodeAndExecutor(
 		appGenesis = &genutiltypes.AppGenesis{
 			ChainID:       migrationGenesis.ChainID,
 			InitialHeight: int64(migrationGenesis.InitialHeight),
-			GenesisTime:   migrationGenesis.GenesisDAStartTime,
+			GenesisTime:   rollkitGenesis.GenesisDAStartTime,
+			Consensus: &genutiltypes.ConsensusGenesis{ // used in rpc/status.go
+				Validators: []cmttypes.GenesisValidator{
+					{
+						Address: migrationGenesis.SequencerAddr,
+						PubKey:  migrationGenesis.SequencerPubKey,
+						Power:   1,
+					},
+				},
+			},
 		}
 	} else {
 		// normal scenario: create rollkit genesis from full cometbft genesis
@@ -642,7 +651,7 @@ const rollkitGenesisFilename = "rollkit_genesis.json"
 
 // loadRollkitMigrationGenesis loads a minimal rollkit genesis from a migration genesis file.
 // Returns nil if no migration genesis is found (normal startup scenario).
-func loadRollkitMigrationGenesis(rootDir string) (*genesis.Genesis, error) {
+func loadRollkitMigrationGenesis(rootDir string) (*rollkitMigrationGenesis, error) {
 	genesisPath := filepath.Join(rootDir, rollkitGenesisFilename)
 	if _, err := os.Stat(genesisPath); os.IsNotExist(err) {
 		return nil, nil // no migration genesis found
@@ -653,19 +662,12 @@ func loadRollkitMigrationGenesis(rootDir string) (*genesis.Genesis, error) {
 		return nil, fmt.Errorf("failed to read rollkit migration genesis: %w", err)
 	}
 
-	var migrationGenesis RollkitMigrationGenesis
+	var migrationGenesis rollkitMigrationGenesis
 	if err := json.Unmarshal(genesisBytes, &migrationGenesis); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal rollkit migration genesis: %w", err)
 	}
 
-	rollkitGenesis := genesis.NewGenesis(
-		migrationGenesis.ChainID,
-		migrationGenesis.InitialHeight,
-		time.Unix(0, migrationGenesis.GenesisTime),
-		migrationGenesis.Sequencer,
-	)
-
-	return &rollkitGenesis, nil
+	return &migrationGenesis, nil
 }
 
 // createRollkitGenesisFromCometBFT creates a rollkit genesis from cometbft genesis.

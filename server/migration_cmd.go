@@ -17,8 +17,11 @@ import (
 	"github.com/cometbft/cometbft/state"
 	"github.com/cometbft/cometbft/store"
 	cometbfttypes "github.com/cometbft/cometbft/types"
+	ds "github.com/ipfs/go-datastore"
+	ktds "github.com/ipfs/go-datastore/keytransform"
 	"github.com/spf13/cobra"
 
+	rollkitnode "github.com/rollkit/rollkit/node"
 	rollkitstore "github.com/rollkit/rollkit/pkg/store"
 	rollkittypes "github.com/rollkit/rollkit/types"
 )
@@ -264,7 +267,9 @@ func loadRollkitStateStore(rootDir string) (rollkitstore.Store, error) {
 		return nil, err
 	}
 
-	return rollkitstore.New(baseKV), nil
+	mainKV := ktds.Wrap(baseKV, ktds.PrefixTransform{Prefix: ds.NewKey(rollkitnode.RollkitPrefix)})
+
+	return rollkitstore.New(mainKV), nil
 }
 
 func rollkitStateFromCometBFTState(cometBFTState state.State, daHeight uint64) (rollkittypes.State, error) {

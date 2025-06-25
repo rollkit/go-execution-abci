@@ -1,11 +1,16 @@
 package keeper
 
 import (
+	"fmt"
+	"time"
+
 	"cosmossdk.io/collections"
 	"cosmossdk.io/core/store"
 	"cosmossdk.io/log"
 	"cosmossdk.io/math"
-	"fmt"
+	cmbytes "github.com/cometbft/cometbft/libs/bytes"
+	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
+	cmttypes "github.com/cometbft/cometbft/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
@@ -31,7 +36,7 @@ type Keeper struct {
 	// EpochBitmap track tracks participation over a range of epochs
 	EpochBitmap           collections.Map[uint64, []byte]
 	AttesterSet           collections.KeySet[string]
-	Signatures            collections.Map[collections.Pair[int64, string], []byte]
+	CommitSignatures      collections.Map[collections.Pair[int64, string], cmtproto.CommitSig]
 	StoredAttestationInfo collections.Map[int64, types.AttestationBitmap]
 	Params                collections.Item[types.Params]
 }
@@ -62,7 +67,7 @@ func NewKeeper(
 		AttestationBitmap:     collections.NewMap(sb, types.AttestationBitmapPrefix, "attestation_bitmap", collections.Int64Key, collections.BytesValue),
 		EpochBitmap:           collections.NewMap(sb, types.EpochBitmapPrefix, "epoch_bitmap", collections.Uint64Key, collections.BytesValue),
 		AttesterSet:           collections.NewKeySet(sb, types.AttesterSetPrefix, "attester_set", collections.StringKey),
-		Signatures:            collections.NewMap(sb, types.SignaturePrefix, "signatures", collections.PairKeyCodec(collections.Int64Key, collections.StringKey), collections.BytesValue),
+		CommitSignatures:      collections.NewMap(sb, types.CommitPrefix, "commits", collections.PairKeyCodec(collections.Int64Key, collections.StringKey), codec.CollValue[cmtproto.CommitSig](cdc)),
 		StoredAttestationInfo: collections.NewMap(sb, types.StoredAttestationInfoPrefix, "stored_attestation_info", collections.Int64Key, codec.CollValue[types.AttestationBitmap](cdc)), // Initialize new collection
 		Params:                collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
 	}
@@ -308,23 +313,63 @@ func (k Keeper) PruneOldBitmaps(ctx sdk.Context, currentEpoch uint64) error {
 	}
 
 	// TODO: Consider pruning signatures associated with pruned heights.
-	// This would involve iterating k.Signatures and removing entries where height < pruneHeight.
+	// This would involve iterating k.CommitsByHeight and removing entries where height < pruneHeight.
 
 	k.Logger(ctx).Info("Pruned old bitmaps and attestation info", "prunedBeforeEpoch", pruneBeforeEpoch, "prunedBeforeHeight", pruneHeight)
 	return nil
 }
 
 // SetSignature stores the vote signature for a given height and validator
-func (k Keeper) SetSignature(ctx sdk.Context, height int64, validatorAddr string, signature []byte) error {
-	return k.Signatures.Set(ctx, collections.Join(height, validatorAddr), signature)
+func (k Keeper) SetSignature(ctx sdk.Context, height int64, validatorAddr string, consAddr []byte, timestamp time.Time, signature []byte) error {
+	cmtSig := cmtproto.CommitSig{
+		BlockIdFlag:      cmtproto.BlockIDFlagCommit,
+		ValidatorAddress: consAddr,
+		Timestamp:        timestamp,
+		Signature:        signature,
+	}
+	return k.CommitSignatures.Set(ctx, collections.Join(height, validatorAddr), cmtSig)
 }
 
 // GetSignature retrieves the vote signature for a given height and validator
-func (k Keeper) GetSignature(ctx sdk.Context, height int64, validatorAddr string) ([]byte, error) {
-	return k.Signatures.Get(ctx, collections.Join(height, validatorAddr))
+func (k Keeper) GetSignature(ctx sdk.Context, height int64, validatorAddr string) (cmtproto.CommitSig, error) {
+	rsp, err := k.CommitSignatures.Get(ctx, collections.Join(height, validatorAddr))
+	return rsp, err
 }
 
 // HasSignature checks if a signature exists for a given height and validator
 func (k Keeper) HasSignature(ctx sdk.Context, height int64, validatorAddr string) (bool, error) {
-	return k.Signatures.Has(ctx, collections.Join(height, validatorAddr))
+	return k.CommitSignatures.Has(ctx, collections.Join(height, validatorAddr))
+}
+
+func (k Keeper) GetCommits(ctx sdk.Context, height int64) (*cmttypes.Commit, error) {
+	header, data, err := k.blockSource.GetBlockData(ctx, uint64(height))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get block at height %d: %w", height, err)
+	}
+	_ = data
+
+	commit := &cmttypes.Commit{
+		Height: height,
+		Round:  0,
+		BlockID: cmttypes.BlockID{
+			Hash:          cmbytes.HexBytes(header.LastHeaderHash),
+			PartSetHeader: cmttypes.PartSetHeader{Total: 0, Hash: nil},
+		},
+		Signatures: make([]cmttypes.CommitSig, 0),
+	}
+	// add the signatures (unordered) // todo (Alex): do we need them ordered?
+	rng := collections.NewPrefixedPairRange[int64, string](height)
+	err = k.CommitSignatures.Walk(ctx, rng, func(key collections.Pair[int64, string], value cmtproto.CommitSig) (bool, error) {
+		var sig cmttypes.CommitSig
+		if err := sig.FromProto(value); err != nil {
+			return true, err
+		}
+		commit.Signatures = append(commit.Signatures, sig)
+		return false, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return commit, nil
 }

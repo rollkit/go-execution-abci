@@ -197,7 +197,7 @@ jobs:
 
           echo "Running migration command..."
           # migrate the chain data from cosmos sdk to rollkit
-          gmd rollkit-migrate --config ~/.gm
+          gmd rollkit-migrate --home ~/.gm
 
           echo "Migration completed successfully"
 

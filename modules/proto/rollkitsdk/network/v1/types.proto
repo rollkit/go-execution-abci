@@ -36,12 +36,6 @@ enum SignMode {
   
   // SIGN_MODE_CHECKPOINT means validators sign only at checkpoint heights
   SIGN_MODE_CHECKPOINT = 1;
-  
-  // SIGN_MODE_ALL means validators sign every block
-  SIGN_MODE_ALL = 2;
-  
-  // SIGN_MODE_IBC_ONLY means validators sign only blocks with outbound IBC
-  SIGN_MODE_IBC_ONLY = 3;
 }
 
 // AttestationBitmap stores the bitmap and metadata for a checkpoint

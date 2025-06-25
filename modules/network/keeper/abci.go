@@ -17,9 +17,8 @@ import (
 func (k Keeper) BeginBlocker(ctx sdk.Context) error {
 	params := k.GetParams(ctx)
 
-	// Only process if sign mode is IBC_ONLY and we have outbound IBC packets
-	if params.SignMode == types.SignMode_SIGN_MODE_IBC_ONLY {
-		return errors.New("IBC only sign mode not yet implemented")
+	if params.SignMode != types.SignMode_SIGN_MODE_CHECKPOINT {
+		return errors.New("only checkpoint sign mode is implemented")
 	}
 	return nil
 }

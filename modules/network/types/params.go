@@ -173,7 +173,7 @@ func validateSignMode(i interface{}) error {
 		return fmt.Errorf("sign mode cannot be unspecified")
 	}
 
-	if v < SignMode_SIGN_MODE_CHECKPOINT || v > SignMode_SIGN_MODE_IBC_ONLY {
+	if v != SignMode_SIGN_MODE_CHECKPOINT {
 		return fmt.Errorf("invalid sign mode: %d", v)
 	}
 

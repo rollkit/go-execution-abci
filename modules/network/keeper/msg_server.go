@@ -28,7 +28,8 @@ var _ types.MsgServer = msgServer{}
 func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.MsgAttestResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
-	if !k.IsCheckpointHeight(ctx, msg.Height) {
+	if k.GetParams(ctx).SignMode == types.SignMode_SIGN_MODE_CHECKPOINT &&
+		!k.IsCheckpointHeight(ctx, msg.Height) {
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "height %d is not a checkpoint", msg.Height)
 	}
 	has, err := k.IsInAttesterSet(ctx, msg.Validator)
@@ -70,12 +71,12 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 	// Set the bit
 	k.bitmapHelper.SetBit(bitmap, int(index))
 	if err := k.SetAttestationBitmap(ctx, msg.Height, bitmap); err != nil {
-		return nil, errors.Wrap(err, "failed to set attestation bitmap")
+		return nil, errors.Wrap(err, "set attestation bitmap")
 	}
 
 	// Store signature using the new collection method
 	if err := k.SetSignature(ctx, msg.Height, msg.Validator, msg.Vote); err != nil {
-		return nil, errors.Wrap(err, "failed to store signature")
+		return nil, errors.Wrap(err, "store signature")
 	}
 
 	epoch := k.GetCurrentEpoch(ctx)
@@ -95,7 +96,7 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 	}
 	k.bitmapHelper.SetBit(epochBitmap, int(index))
 	if err := k.SetEpochBitmap(ctx, epoch, epochBitmap); err != nil {
-		return nil, errors.Wrap(err, "failed to set epoch bitmap")
+		return nil, errors.Wrap(err, "set epoch bitmap")
 	}
 
 	// Emit event
@@ -137,7 +138,7 @@ func (k msgServer) JoinAttesterSet(goCtx context.Context, msg *types.MsgJoinAtte
 
 	// TODO (Alex): the valset should be updated at the end of an epoch only
 	if err := k.SetAttesterSetMember(ctx, msg.Validator); err != nil {
-		return nil, errors.Wrap(err, "failed to set attester set member")
+		return nil, errors.Wrap(err, "set attester set member")
 	}
 
 	ctx.EventManager().EmitEvent(
@@ -164,7 +165,7 @@ func (k msgServer) LeaveAttesterSet(goCtx context.Context, msg *types.MsgLeaveAt
 
 	// TODO (Alex): the valset should be updated at the end of an epoch only
 	if err := k.RemoveAttesterSetMember(ctx, msg.Validator); err != nil {
-		return nil, errors.Wrap(err, "failed to remove attester set member")
+		return nil, errors.Wrap(err, "remove attester set member")
 	}
 
 	ctx.EventManager().EmitEvent(

@@ -110,7 +110,6 @@ func NewABCIExecutor(
 	rollkitStore := rstore.New(rollkitPrefixStore)
 
 	abciStore := NewExecABCIStore(store)
-
 	a := &Adapter{
 		App:          app,
 		Store:        abciStore,

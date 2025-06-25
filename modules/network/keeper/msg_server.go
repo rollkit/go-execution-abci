@@ -3,17 +3,17 @@ package keeper
 import (
 	"bytes"
 	"context"
-	"cosmossdk.io/collections"
 	"fmt"
-	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
-	cmttypes "github.com/cometbft/cometbft/types"
-	"github.com/cosmos/gogoproto/proto"
 
+	"cosmossdk.io/collections"
 	"cosmossdk.io/errors"
 	"cosmossdk.io/math"
+	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
+	cmttypes "github.com/cometbft/cometbft/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
+	"github.com/cosmos/gogoproto/proto"
 
 	"github.com/rollkit/go-execution-abci/modules/network/types"
 )
@@ -55,7 +55,7 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 		return nil, err
 	}
 
-	if err := k.SetSignature(ctx, msg.Height, msg.Validator, vote.Signature); err != nil {
+	if err := k.SetSignature(ctx, msg.Height, msg.Validator, vote.ValidatorAddress, vote.Timestamp, vote.Signature); err != nil {
 		return nil, errors.Wrap(err, "store signature")
 	}
 
@@ -160,7 +160,7 @@ func (k msgServer) verifyVote(ctx sdk.Context, msg *types.MsgAttest) (*cmtproto.
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "block header not found for height %d", msg.Height)
 	}
 
-	if !bytes.Equal(vote.BlockID.Hash, header.Header.AppHash) {
+	if !bytes.Equal(vote.BlockID.Hash, header.AppHash) {
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "vote block ID hash does not match app hash for height %d", msg.Height)
 	}
 
@@ -174,7 +174,7 @@ func (k msgServer) verifyVote(ctx sdk.Context, msg *types.MsgAttest) (*cmtproto.
 		return nil, errors.Wrapf(err, "pubkey")
 	}
 
-	voteSignBytes := cmttypes.VoteSignBytes(header.Header.ChainID(), &vote)
+	voteSignBytes := cmttypes.VoteSignBytes(header.ChainID(), &vote)
 	if !pubKey.VerifySignature(voteSignBytes, vote.Signature) {
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "invalid vote signature")
 	}

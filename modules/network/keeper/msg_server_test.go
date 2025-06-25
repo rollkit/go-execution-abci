@@ -9,23 +9,14 @@ import (
 	"testing"
 	"time"
 
-	cmttypes "github.com/cometbft/cometbft/types"
-	"github.com/libp2p/go-libp2p/core/crypto"
-
-	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
-
-	"github.com/cosmos/gogoproto/proto"
-	ds "github.com/ipfs/go-datastore"
-	kt "github.com/ipfs/go-datastore/keytransform"
-	rollnode "github.com/rollkit/rollkit/node"
-	rstore "github.com/rollkit/rollkit/pkg/store"
-
 	"cosmossdk.io/collections"
 	"cosmossdk.io/log"
 	"cosmossdk.io/math"
 	storetypes "cosmossdk.io/store/types"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
+	cmttypes "github.com/cometbft/cometbft/types"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
+	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	"github.com/cosmos/cosmos-sdk/runtime"
 	"github.com/cosmos/cosmos-sdk/testutil/integration"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -33,9 +24,16 @@ import (
 	moduletestutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
-	rollkittypes "github.com/rollkit/rollkit/types"
+	"github.com/cosmos/gogoproto/proto"
+	ds "github.com/ipfs/go-datastore"
+	kt "github.com/ipfs/go-datastore/keytransform"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	rollnode "github.com/rollkit/rollkit/node"
+	rstore "github.com/rollkit/rollkit/pkg/store"
+	rollkittypes "github.com/rollkit/rollkit/types"
 
 	"github.com/rollkit/go-execution-abci/modules/network/types"
 )
@@ -295,7 +293,13 @@ func TestAttest(t *testing.T) {
 			require.NoError(t, err)
 			var vote cmtproto.Vote
 			require.NoError(t, proto.Unmarshal(spec.msg.Vote, &vote))
-			assert.Equal(t, vote.Signature, gotSig)
+			expSig := cmtproto.CommitSig{
+				BlockIdFlag:      cmtproto.BlockIDFlagCommit,
+				ValidatorAddress: vote.ValidatorAddress,
+				Timestamp:        vote.Timestamp,
+				Signature:        vote.Signature,
+			}
+			assert.Equal(t, expSig, gotSig)
 		})
 	}
 }

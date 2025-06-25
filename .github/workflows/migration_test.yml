@@ -334,7 +334,7 @@ jobs:
           # query old blocks by height
           for height in 5 7 9; do
             echo "Querying old block at height $height"
-            BLOCK_RESULT=$(gmd query block $height --output json)
+            BLOCK_RESULT=$(gmd query block --type=height $height --output json)
             BLOCK_HEIGHT=$(echo $BLOCK_RESULT | jq -r '.header.height')
             if [ "$BLOCK_HEIGHT" != "$height" ]; then
               echo "Error: Block height mismatch for block $height"

@@ -3,12 +3,14 @@ package keeper
 import (
 	"context"
 	"crypto/sha256"
-	cmttypes "github.com/cometbft/cometbft/types"
 	"maps"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	cmttypes "github.com/cometbft/cometbft/types"
+	"github.com/libp2p/go-libp2p/core/crypto"
 
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 
@@ -18,6 +20,7 @@ import (
 	rollnode "github.com/rollkit/rollkit/node"
 	rstore "github.com/rollkit/rollkit/pkg/store"
 
+	"cosmossdk.io/collections"
 	"cosmossdk.io/log"
 	"cosmossdk.io/math"
 	storetypes "cosmossdk.io/store/types"
@@ -155,34 +158,23 @@ func TestJoinAttesterSet(t *testing.T) {
 
 func TestAttest(t *testing.T) {
 	var (
-		myHash     = sha256.Sum256([]byte("app_hash"))
-		myAppHash  = myHash[:]
-		chainID    = "testing"
-		voteSigner = ed25519.GenPrivKey()
-		validVote  = &cmtproto.Vote{
-			Type:             cmtproto.PrecommitType,
-			Height:           10,
-			Round:            0,
-			BlockID:          cmtproto.BlockID{Hash: myAppHash, PartSetHeader: cmtproto.PartSetHeader{Total: 1, Hash: myAppHash}},
-			Timestamp:        time.Now(),
-			ValidatorAddress: voteSigner.PubKey().Address(),
-			ValidatorIndex:   0,
-		}
-		// Create the vote signature using VoteSignBytes
+		myHash      = sha256.Sum256([]byte("app_hash"))
+		myAppHash   = myHash[:]
+		voteSigner  = ed25519.GenPrivKey()
+		valAddrStr  = sdk.ValAddress(voteSigner.PubKey().Address()).String()
+		validVote   = VoteFixture(myAppHash, voteSigner)
+		validVoteBz = must(proto.Marshal(validVote))
 	)
-	validVote.Signature = must(voteSigner.Sign(cmttypes.VoteSignBytes(chainID, validVote)))
-	validVoteBz := must(proto.Marshal(validVote))
 
-	testCases := map[string]struct {
-		setupMock func(t *testing.T, ctx sdk.Context, keeper *Keeper, sk *MockStakingKeeper, bs rstore.Store)
-		msg       *types.MsgAttest
-		expErr    error
+	specs := map[string]struct {
+		setup  func(t *testing.T, ctx sdk.Context, keeper *Keeper, sk *MockStakingKeeper, bs rstore.Store)
+		msg    *types.MsgAttest
+		expErr error
 	}{
 		"valid attestation": {
-			setupMock: func(t *testing.T, ctx sdk.Context, keeper *Keeper, sk *MockStakingKeeper, bs rstore.Store) {
-				// Use the validator address from the vote
-				valAddrStr := sdk.ValAddress(voteSigner.PubKey().Address()).String()
+			setup: func(t *testing.T, ctx sdk.Context, keeper *Keeper, sk *MockStakingKeeper, bs rstore.Store) {
 				validator, err := stakingtypes.NewValidator(valAddrStr, voteSigner.PubKey(), stakingtypes.Description{})
+				validator.Status = stakingtypes.Bonded
 				require.NoError(t, err)
 				require.NoError(t, sk.SetValidator(ctx, validator))
 				require.NoError(t, keeper.SetAttesterSetMember(ctx, valAddrStr))
@@ -194,32 +186,13 @@ func TestAttest(t *testing.T) {
 				params.EpochLength = 10
 				require.NoError(t, keeper.SetParams(ctx, params))
 
-				header := rollkittypes.Header{
-					BaseHeader: rollkittypes.BaseHeader{
-						Height:  10,
-						Time:    uint64(time.Now().UnixNano()),
-						ChainID: "testing",
-					},
-					Version:         rollkittypes.Version{Block: 1, App: 1},
-					ProposerAddress: voteSigner.PubKey().Address(),
-					AppHash:         myAppHash,
-					DataHash:        []byte("data_hash"),
-					ConsensusHash:   []byte("consensus_hash"),
-					ValidatorHash:   []byte("validator_hash"),
-				}
-				signedHeader := &rollkittypes.SignedHeader{
-					Header:    header,
-					Signature: myAppHash,
-					//Signer:    rollkittypes.Signer{PubKey: voteSigner.PubKey()},
-				}
-				data := &rollkittypes.Data{
-					Txs: rollkittypes.Txs{},
-				}
+				signedHeader := HeaderFixture(voteSigner, myAppHash)
+				data := &rollkittypes.Data{Txs: rollkittypes.Txs{}}
 				var signature rollkittypes.Signature
 				require.NoError(t, bs.SaveBlockData(ctx, signedHeader, data, &signature))
 			},
 			msg: &types.MsgAttest{
-				Validator: sdk.ValAddress(voteSigner.PubKey().Address()).String(),
+				Validator: valAddrStr,
 				Height:    10,
 				Vote:      validVoteBz,
 			},
@@ -271,16 +244,12 @@ func TestAttest(t *testing.T) {
 		//},
 	}
 
-	for name, tc := range testCases {
+	for name, spec := range specs {
 		t.Run(name, func(t *testing.T) {
-			// Create mocks with test doubles
-			sk := NewMockStakingKeeper()
-
 			rollkitPrefixStore := kt.Wrap(ds.NewMapDatastore(), &kt.PrefixTransform{
 				Prefix: ds.NewKey(rollnode.RollkitPrefix),
 			})
 			bs := rstore.New(rollkitPrefixStore)
-
 			// Set up codec and store
 			cdc := moduletestutil.MakeTestEncodingConfig().Codec
 			keys := storetypes.NewKVStoreKeys(types.StoreKey)
@@ -289,6 +258,7 @@ func TestAttest(t *testing.T) {
 			logger := log.NewTestLogger(t)
 			cms := integration.CreateMultiStore(keys, logger)
 			authority := authtypes.NewModuleAddress("gov")
+			sk := NewMockStakingKeeper()
 			keeper := NewKeeper(cdc, runtime.NewKVStoreService(keys[types.StoreKey]), &sk, nil, nil, bs, authority.String())
 			server := NewMsgServerImpl(keeper)
 
@@ -296,28 +266,83 @@ func TestAttest(t *testing.T) {
 				WithContext(t.Context())
 
 			// Run setup
-			tc.setupMock(t, ctx, &keeper, &sk, bs)
+			spec.setup(t, ctx, &keeper, &sk, bs)
 
 			// when
-			rsp, err := server.Attest(ctx, tc.msg)
+			gotRsp, gotErr := server.Attest(ctx, spec.msg)
 
 			// then
-			if tc.expErr != nil {
-				require.Error(t, err)
-				require.ErrorIs(t, err, tc.expErr)
-				require.Nil(t, rsp)
+			if spec.expErr != nil {
+				require.Error(t, gotErr)
+				require.ErrorIs(t, gotErr, spec.expErr)
+				// and ensure the signature is not stored
+				_, err := keeper.GetSignature(ctx, spec.msg.Height, valAddrStr)
+				assert.ErrorIs(t, err, collections.ErrNotFound)
 				return
 			}
 
-			require.NoError(t, err)
-			require.NotNil(t, rsp)
+			require.NoError(t, gotErr)
+			require.NotNil(t, gotRsp)
 
-			// In a successful case, we would check that the signature was stored
-			// and the attestation bitmap was updated
-			// But since we're mocking the verifyVote method, we can't check these
-			// in a meaningful way
+			// and attestation marked
+			bitmap, gotErr := keeper.GetAttestationBitmap(ctx, spec.msg.Height)
+			require.NoError(t, gotErr)
+			require.NotEmpty(t, bitmap)
+			require.Equal(t, byte(1), bitmap[0])
+
+			// and the signature was stored properly
+			gotSig, err := keeper.GetSignature(ctx, spec.msg.Height, valAddrStr)
+			require.NoError(t, err)
+			var vote cmtproto.Vote
+			require.NoError(t, proto.Unmarshal(spec.msg.Vote, &vote))
+			assert.Equal(t, vote.Signature, gotSig)
 		})
 	}
+}
+
+func HeaderFixture(signer *ed25519.PrivKey, myAppHash []byte, mutators ...func(*rollkittypes.SignedHeader)) *rollkittypes.SignedHeader {
+	header := rollkittypes.Header{
+		BaseHeader: rollkittypes.BaseHeader{
+			Height:  10,
+			Time:    uint64(time.Now().UnixNano()),
+			ChainID: "testing",
+		},
+		Version:         rollkittypes.Version{Block: 1, App: 1},
+		ProposerAddress: signer.PubKey().Address(),
+		AppHash:         myAppHash,
+		DataHash:        []byte("data_hash"),
+		ConsensusHash:   []byte("consensus_hash"),
+		ValidatorHash:   []byte("validator_hash"),
+	}
+	signedHeader := &rollkittypes.SignedHeader{
+		Header:    header,
+		Signature: myAppHash,
+		Signer:    rollkittypes.Signer{PubKey: must(crypto.UnmarshalEd25519PublicKey(signer.PubKey().Bytes()))},
+	}
+	for _, m := range mutators {
+		m(signedHeader)
+	}
+	return signedHeader
+}
+
+func VoteFixture(myAppHash []byte, voteSigner *ed25519.PrivKey, mutators ...func(vote *cmtproto.Vote)) *cmtproto.Vote {
+	const chainID = "testing"
+
+	vote := &cmtproto.Vote{
+		Type:             cmtproto.PrecommitType,
+		Height:           10,
+		Round:            0,
+		BlockID:          cmtproto.BlockID{Hash: myAppHash, PartSetHeader: cmtproto.PartSetHeader{Total: 1, Hash: myAppHash}},
+		Timestamp:        time.Now(),
+		ValidatorAddress: voteSigner.PubKey().Address(),
+		ValidatorIndex:   0,
+	}
+	vote.Signature = must(voteSigner.Sign(cmttypes.VoteSignBytes(chainID, vote)))
+
+	for _, m := range mutators {
+		m(vote)
+	}
+	return vote
 }
 
 var _ types.StakingKeeper = &MockStakingKeeper{}

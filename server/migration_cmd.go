@@ -301,8 +301,8 @@ func loadRollkitStores(rootDir string) (rollkitStores, error) {
 	})
 
 	ds, err := goheaderstore.NewStore[*rollkittypes.Data](
-		store,
-		goheaderstore.WithStorePrefix("dataSync"), // https://github.com/rollkit/rollkit/blob/6ad581a97a161594e19772d0e1441bdffff53811/pkg/sync/sync_service.go#L32
+		rollkitPrefixStore,
+		goheaderstore.WithStorePrefix("dataSync"),
 		goheaderstore.WithMetrics(),
 	)
 	if err != nil {
@@ -310,8 +310,8 @@ func loadRollkitStores(rootDir string) (rollkitStores, error) {
 	}
 
 	hs, err := goheaderstore.NewStore[*rollkittypes.SignedHeader](
-		store,
-		goheaderstore.WithStorePrefix("headerSync"), // https://github.com/rollkit/rollkit/blob/6ad581a97a161594e19772d0e1441bdffff53811/pkg/sync/sync_service.go#L31
+		rollkitPrefixStore,
+		goheaderstore.WithStorePrefix("headerSync"),
 		goheaderstore.WithMetrics(),
 	)
 	if err != nil {

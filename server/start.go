@@ -340,6 +340,8 @@ func setupNodeAndExecutor(
 	}
 
 	if migrationGenesis != nil {
+		rollkitGenesis = migrationGenesis
+
 		logger.Info("using rollkit migration genesis",
 			"chain_id", migrationGenesis.ChainID,
 			"initial_height", migrationGenesis.InitialHeight)

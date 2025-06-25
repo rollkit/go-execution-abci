@@ -346,3 +346,163 @@ func createMultiValidatorCommit(t *testing.T, header *rollkittypes.Header, block
 		Signatures: commitSigs,
 	}
 }
+
+// TestRollkitAsyncValidatorSignatures tests a scenario where block production by the sequencer
+// is decoupled from the finalization by the validator set. It first creates a series of
+// blocks signed only by the sequencer, and only then simulates the asynchronous arrival
+// of validator signatures to create the final commits, which are then verified by a light client.
+func TestRollkitAsyncValidatorSignatures(t *testing.T) {
+	chainID := "test-async-sigs-chain"
+
+	// =========================
+	// SETUP: CREATE 3 VALIDATORS
+	// =========================
+	t.Log("🔧 Setting up validator set with 3 validators...")
+
+	validators := make([]*ValidatorInfo, 3)
+	cmtValidators := make([]*cmttypes.Validator, 3)
+
+	for i := 0; i < 3; i++ {
+		cmtPrivKey := ed25519.GenPrivKey()
+		cmtPubKey := cmtPrivKey.PubKey()
+		privKey, err := crypto.UnmarshalEd25519PrivateKey(cmtPrivKey.Bytes())
+		require.NoError(t, err)
+		signer, err := noop.NewNoopSigner(privKey)
+		require.NoError(t, err)
+		address, err := signer.GetAddress()
+		require.NoError(t, err)
+		cmtValidator := cmttypes.NewValidator(cmtPubKey, 1)
+
+		validators[i] = &ValidatorInfo{
+			PrivKey:      privKey,
+			PubKey:       privKey.GetPublic(),
+			CmtPrivKey:   cmtPrivKey,
+			CmtPubKey:    cmtPubKey.(ed25519.PubKey),
+			Signer:       signer.(*noop.NoopSigner),
+			Address:      address,
+			CmtAddress:   cmtPubKey.Address(),
+			CmtValidator: cmtValidator,
+		}
+		cmtValidators[i] = cmtValidator
+	}
+
+	sequencer := validators[0]
+	valSet := &cmttypes.ValidatorSet{
+		Validators: cmtValidators,
+		Proposer:   cmtValidators[0],
+	}
+
+	// =========================
+	// SETUP RPC ENVIRONMENT
+	// =========================
+	mockRollkitStore := &MockRollkitStore{}
+
+	// =========================
+	// PHASE 1: BLOCK PRODUCTION (SEQUENCER ONLY)
+	// =========================
+	t.Log("PHASE 1: Sequencer is producing blocks ahead of finalization...")
+
+	blocks := make([]*rollkittypes.SignedHeader, 3)
+	blockData := make([]*rollkittypes.Data, 3)
+
+	for i := 0; i < 3; i++ {
+		height := uint64(i + 1)
+		var block *rollkittypes.SignedHeader
+		var data *rollkittypes.Data
+		var err error
+
+		if i == 0 {
+			t.Logf("📦 Proposing Genesis Block (Height %d)...", height)
+			block, err = rollkittypes.GetFirstSignedHeader(sequencer.Signer, chainID)
+			require.NoError(t, err, "Failed to create genesis block")
+		} else {
+			t.Logf("📦 Proposing Block %d (Height %d)...", i+1, height)
+			block, err = rollkittypes.GetRandomNextSignedHeader(blocks[i-1], sequencer.Signer, chainID)
+			require.NoError(t, err, "Failed to create block %d", i+1)
+		}
+
+		data = &rollkittypes.Data{
+			Txs: make(rollkittypes.Txs, i+1),
+		}
+		for j := range data.Txs {
+			data.Txs[j] = rollkittypes.GetRandomTx()
+		}
+		block.DataHash = data.DACommitment()
+
+		payloadProvider := cometcompat.PayloadProvider()
+		payload, err := payloadProvider(&block.Header)
+		require.NoError(t, err)
+		signature, err := sequencer.Signer.Sign(payload)
+		require.NoError(t, err)
+		block.Signature = signature
+
+		err = block.SetCustomVerifier(rollkittypes.SignatureVerifier(payloadProvider))
+		require.NoError(t, err)
+		err = block.ValidateBasic()
+		require.NoError(t, err)
+
+		blocks[i] = block
+		blockData[i] = data
+
+		mockRollkitStore.On("GetBlockData", mock.Anything, height).Return(block, data, nil).Once()
+		mockRollkitStore.On("Height", mock.Anything).Return(height, nil).Maybe()
+
+		t.Logf("✅ Block %d proposed: Height=%d, Hash=%x", i+1, block.Height(), block.Hash())
+	}
+
+	t.Log("🎉 All blocks produced by sequencer. Now simulating delayed finalization.")
+
+	// =========================
+	// PHASE 2: ASYNCHRONOUS FINALIZATION & VERIFICATION
+	// =========================
+	t.Log("PHASE 2: Simulating delayed validator signatures and running light client verification...")
+
+	var lastCommit *cmttypes.Commit
+	var trustedHeader *cmttypes.SignedHeader
+
+	for i := 0; i < 3; i++ {
+		t.Logf("⏳ Finalizing block %d (Height %d)...", i+1, blocks[i].Height())
+		block := blocks[i]
+		data := blockData[i]
+
+		if i == 0 {
+			lastCommit = &cmttypes.Commit{Height: 0}
+		}
+
+		cometCompatBlock := *block
+		cometCompatBlock.ProposerAddress = sequencer.CmtAddress
+
+		cometBlock, err := cometcompat.ToABCIBlock(&cometCompatBlock, data, lastCommit, valSet)
+		require.NoError(t, err, "Failed to convert to CometBFT block for block %d", i+1)
+		blockID := cmttypes.BlockID{Hash: cometBlock.Hash()}
+
+		t.Logf("   ✍️  Aggregating signatures for block %d...", i+1)
+		currentCommit := createMultiValidatorCommit(t, &block.Header, blockID, valSet, validators, chainID)
+
+		cmtSignedHeader := &cmttypes.SignedHeader{
+			Header: &cometBlock.Header,
+			Commit: currentCommit,
+		}
+
+		if i == 0 {
+			trustedHeader = cmtSignedHeader
+			err = valSet.VerifyCommitLight(chainID, trustedHeader.Commit.BlockID, trustedHeader.Height, trustedHeader.Commit)
+			require.NoError(t, err, "Light client verification of first block commit should pass")
+		} else {
+			trustingPeriod := 3 * time.Hour
+			trustLevel := math.Fraction{Numerator: 2, Denominator: 3}
+			maxClockDrift := 10 * time.Second
+			now := block.Time()
+
+			err = light.Verify(trustedHeader, valSet, cmtSignedHeader, valSet, trustingPeriod, now, maxClockDrift, trustLevel)
+			require.NoError(t, err, "Light client verification should pass for block %d", i+1)
+			trustedHeader = cmtSignedHeader
+		}
+		t.Logf("   ✅ Light client verification passed for block %d", i+1)
+
+		lastCommit = currentCommit
+	}
+
+	t.Log("🎉 ASYNCHRONOUS SIGNATURE DEMONSTRATION COMPLETE!")
+	t.Log("✅ All blocks successfully verified by the light client after delayed finalization.")
+}

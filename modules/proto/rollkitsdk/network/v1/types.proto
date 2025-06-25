@@ -23,7 +23,7 @@ message Params {
   uint64 prune_after = 4;
   
   // sign_mode determines when validators must sign
-  SignMode sign_mode = 6;
+  SignMode sign_mode = 5;
 }
 
 // SignMode defines when validators must sign

@@ -50,7 +50,10 @@ func (k Keeper) EndBlocker(ctx sdk.Context) error {
 
 // processCheckpoint handles checkpoint processing
 func (k Keeper) processCheckpoint(ctx sdk.Context, height int64) error {
-	bitmapBytes, _ := k.GetAttestationBitmap(ctx, height)
+	bitmapBytes, err := k.GetAttestationBitmap(ctx, height)
+	if err != nil {
+		return err
+	}
 	if bitmapBytes == nil {
 		return nil
 	}

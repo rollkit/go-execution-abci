@@ -239,7 +239,7 @@ jobs:
             fi
             
             # get current block height
-            CURRENT_HEIGHT=$(gmd query block --output json 2>/dev/null | jq -r '.block.header.height // 0' || echo "0")
+            CURRENT_HEIGHT=$(gmd query block --output json | tail -n +2 | jq -r '.header.height')
             BLOCKS_FOUND=$((CURRENT_HEIGHT - INITIAL_HEIGHT))
             echo "New blocks produced: $BLOCKS_FOUND, current height: $CURRENT_HEIGHT (attempt $ATTEMPT/$MAX_ATTEMPTS)"
           done
@@ -335,7 +335,7 @@ jobs:
           for height in 5 7 9; do
             echo "Querying old block at height $height"
             BLOCK_RESULT=$(gmd query block $height --output json)
-            BLOCK_HEIGHT=$(echo $BLOCK_RESULT | jq -r '.block.header.height')
+            BLOCK_HEIGHT=$(echo $BLOCK_RESULT | jq -r '.header.height')
             if [ "$BLOCK_HEIGHT" != "$height" ]; then
               echo "Error: Block height mismatch for block $height"
               exit 1

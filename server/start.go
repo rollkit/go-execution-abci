@@ -663,6 +663,7 @@ func loadRollkitMigrationGenesis(rootDir string) (*rollkitMigrationGenesis, erro
 	}
 
 	var migrationGenesis rollkitMigrationGenesis
+	// using cmtjson for unmarshalling to ensure compatibility with cometbft genesis format
 	if err := cmtjson.Unmarshal(genesisBytes, &migrationGenesis); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal rollkit migration genesis: %w", err)
 	}

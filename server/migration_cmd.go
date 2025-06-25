@@ -385,6 +385,7 @@ func createRollkitMigrationGenesis(rootDir string, cometBFTState state.State) er
 		SequencerPubKey: sequencerPubKey,
 	}
 
+	// using cmtjson for marshalling to ensure compatibility with cometbft genesis format
 	genesisBytes, err := cmtjson.MarshalIndent(migrationGenesis, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal rollkit migration genesis: %w", err)

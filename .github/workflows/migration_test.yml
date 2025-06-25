@@ -172,7 +172,7 @@ jobs:
           GO_EXECUTION_ABCI_DIR=$CURRENT_DIR
 
           # install rollkit app
-          ignite app install github.com/ignite/apps/rollkit@main
+          ignite app install github.com/ignite/apps/rollkit@9d9a0a1b3281c13427b360765220cb8cd8b677a3 # todo: use main when https://github.com/ignite/apps/pull/209 is merged
 
           # add rollkit to the chain
           ignite rollkit add

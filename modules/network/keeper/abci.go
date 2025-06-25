@@ -119,30 +119,6 @@ func (k Keeper) processEpochEnd(ctx sdk.Context, epoch uint64) error {
 		}
 	}
 
-	if !params.EmergencyMode {
-		epochStartHeight := int64(epoch * params.EpochLength)
-		checkpointsInEpoch := 0
-		softConfirmedCheckpoints := 0
-
-		for h := epochStartHeight; h < epochStartHeight+int64(params.EpochLength); h++ {
-			if h > ctx.BlockHeight() {
-				break
-			}
-			if k.IsCheckpointHeight(ctx, h) {
-				checkpointsInEpoch++
-				if q, err := k.IsSoftConfirmed(ctx, h); q && err == nil {
-					softConfirmedCheckpoints++
-				}
-			}
-		}
-
-		if checkpointsInEpoch > 0 && softConfirmedCheckpoints == 0 {
-			// todo (Alex): should we really fail?
-			//return fmt.Errorf("no checkpoints achieved quorum in epoch: %d", epoch)
-			k.Logger(ctx).Info("No checkpoints achieved quorum in epoch", "epoch", epoch)
-		}
-	}
-
 	// todo (Alex): find a way to prune only bitmaps that are not used anymore
 	//if err := k.PruneOldBitmaps(ctx, epoch); err != nil {
 	//	return fmt.Errorf("pruning old data at epoch %d: %w", epoch, err)

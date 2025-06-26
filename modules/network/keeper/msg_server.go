@@ -3,17 +3,18 @@ package keeper
 import (
 	"bytes"
 	"context"
-	"cosmossdk.io/collections"
 	"fmt"
-	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
-	cmttypes "github.com/cometbft/cometbft/types"
-	"github.com/cosmos/gogoproto/proto"
+	"time"
 
+	"cosmossdk.io/collections"
 	"cosmossdk.io/errors"
 	"cosmossdk.io/math"
+	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
+	cmttypes "github.com/cometbft/cometbft/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
+	"github.com/cosmos/gogoproto/proto"
 
 	"github.com/rollkit/go-execution-abci/modules/network/types"
 )
@@ -36,9 +37,9 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 	if err := k.validateAttestation(ctx, msg); err != nil {
 		return nil, err
 	}
-	votedEpoch := k.GetEpochForHeight(ctx, msg.Height)
-	if k.GetCurrentEpoch(ctx) != votedEpoch+1 { // can vote only for last epoch
-		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator %s not voted for epoch %d", msg.Validator, votedEpoch)
+	// can vote only for the last epoch
+	if delta := ctx.BlockHeight() - msg.Height; delta < 0 || delta > int64(k.GetParams(ctx).EpochLength) {
+		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "exceeded voting window: %d blocks", delta)
 	}
 
 	valIndexPos, found := k.GetValidatorIndex(ctx, msg.Validator)
@@ -59,7 +60,7 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 		return nil, errors.Wrap(err, "store signature")
 	}
 
-	if err := k.updateEpochBitmap(ctx, votedEpoch, valIndexPos); err != nil {
+	if err := k.updateEpochBitmap(ctx, k.GetEpochForHeight(ctx, msg.Height), valIndexPos); err != nil {
 		return nil, err
 	}
 
@@ -152,30 +153,39 @@ func (k msgServer) verifyVote(ctx sdk.Context, msg *types.MsgAttest) (*cmtproto.
 	if err := proto.Unmarshal(msg.Vote, &vote); err != nil {
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "unmarshal vote: %s", err)
 	}
-
-	header, _, err := k.blockSource.GetBlockData(ctx, uint64(msg.Height))
+	if msg.Height != vote.Height {
+		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "vote height does not match attestation height")
+	}
+	header, _, err := k.blockSource.GetBlockData(ctx, uint64(vote.Height))
 	if err != nil {
-		return nil, errors.Wrapf(err, "block data for height %d", msg.Height)
+		return nil, errors.Wrapf(err, "block data for height %d", vote.Height)
 	}
 	if header == nil {
-		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "block header not found for height %d", msg.Height)
+		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "block header not found for height %d", vote.Height)
 	}
 
-	if !bytes.Equal(vote.BlockID.Hash, header.Header.AppHash) {
-		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "vote block ID hash does not match app hash for height %d", msg.Height)
+	if !bytes.Equal(vote.BlockID.Hash, header.AppHash) { // todo (Alex): is this the correct hash?
+		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "vote block ID hash does not match app hash for height %d", vote.Height)
+	}
+
+	maxClockDrift := 5 * time.Second // todo (Alex): make this a parameter?
+	if drift := vote.Timestamp.Sub(header.Time()); drift < 0*time.Nanosecond || drift > maxClockDrift {
+		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "vote timestamp drift exceeds limit: %s", drift)
 	}
 
 	validator, err := k.stakingKeeper.GetValidator(ctx, vote.ValidatorAddress)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get validator")
 	}
-
 	pubKey, err := validator.ConsPubKey()
 	if err != nil {
 		return nil, errors.Wrapf(err, "pubkey")
 	}
+	if !bytes.Equal(pubKey.Address(), vote.ValidatorAddress) {
+		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "pubkey address does not match validator address")
+	}
 
-	voteSignBytes := cmttypes.VoteSignBytes(header.Header.ChainID(), &vote)
+	voteSignBytes := cmttypes.VoteSignBytes(header.ChainID(), &vote)
 	if !pubKey.VerifySignature(voteSignBytes, vote.Signature) {
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "invalid vote signature")
 	}

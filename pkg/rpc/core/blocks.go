@@ -8,7 +8,6 @@ import (
 
 	cmbytes "github.com/cometbft/cometbft/libs/bytes"
 	cmquery "github.com/cometbft/cometbft/libs/pubsub/query"
-	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	cmttypes "github.com/cometbft/cometbft/types"
@@ -141,35 +140,6 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 		return nil, err
 	}
 
-	// Then re-sign the final ABCI header if we have a signer
-	if env.Signer != nil {
-		// Create a vote for the final ABCI header
-		vote := cmtproto.Vote{
-			Type:   cmtproto.PrecommitType,
-			Height: int64(header.Height()), //nolint:gosec
-			Round:  0,
-			BlockID: cmtproto.BlockID{
-				Hash:          abciBlock.Header.Hash(),
-				PartSetHeader: cmtproto.PartSetHeader{},
-			},
-			Timestamp:        abciBlock.Time,
-			ValidatorAddress: header.ProposerAddress,
-			ValidatorIndex:   0,
-		}
-		chainID := header.ChainID()
-		finalSignBytes := cmttypes.VoteSignBytes(chainID, &vote)
-
-		newSignature, err := env.Signer.Sign(finalSignBytes)
-		if err != nil {
-			return nil, fmt.Errorf("failed to sign final ABCI header: %w", err)
-		}
-
-		// Update the signature in the block
-		if len(abciBlock.LastCommit.Signatures) > 0 {
-			abciBlock.LastCommit.Signatures[0].Signature = newSignature
-		}
-	}
-
 	return &ctypes.ResultBlock{
 		BlockID: cmttypes.BlockID{Hash: abciBlock.Hash()},
 		Block:   abciBlock,
@@ -240,33 +210,6 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 	abciBlock, err := cometcompat.ToABCIBlock(header, rollkitData, abciCommit)
 	if err != nil {
 		return nil, err
-	}
-
-	// Then re-sign the final ABCI header if we have a signer
-	if env.Signer != nil {
-		// Create a vote for the final ABCI header
-		vote := cmtproto.Vote{
-			Type:   cmtproto.PrecommitType,
-			Height: int64(header.Height()), //nolint:gosec
-			Round:  0,
-			BlockID: cmtproto.BlockID{
-				Hash:          abciBlock.Header.Hash(),
-				PartSetHeader: cmtproto.PartSetHeader{},
-			},
-			Timestamp:        abciBlock.Time,
-			ValidatorAddress: header.ProposerAddress,
-			ValidatorIndex:   0,
-		}
-		chainID := header.ChainID()
-		finalSignBytes := cmttypes.VoteSignBytes(chainID, &vote)
-
-		newSignature, err := env.Signer.Sign(finalSignBytes)
-		if err != nil {
-			return nil, fmt.Errorf("failed to sign final ABCI header: %w", err)
-		}
-
-		// Update the commit with the new signature
-		abciBlock.LastCommit.Signatures[0].Signature = newSignature
 	}
 
 	// Update the commit's BlockID to match the final ABCI block hash

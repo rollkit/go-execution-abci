@@ -13,7 +13,7 @@ import (
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	cmttypes "github.com/cometbft/cometbft/types"
 
-	"github.com/rollkit/rollkit/block"
+	storepkg "github.com/rollkit/rollkit/pkg/store"
 	rlktypes "github.com/rollkit/rollkit/types"
 
 	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
@@ -107,7 +107,7 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 	case heightPtr != nil && *heightPtr == -1:
 		rawVal, err := env.Adapter.RollkitStore.GetMetadata(
 			ctx.Context(),
-			block.DAIncludedHeightKey,
+			storepkg.DAIncludedHeightKey,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get DA included height: %w", err)

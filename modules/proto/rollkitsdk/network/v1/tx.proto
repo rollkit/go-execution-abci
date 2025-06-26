@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package rollkitsdk.network.v1;
+
+option go_package = "github.com/rollkit/go-execution-abci/modules/network/types";
+
+import "cosmos/msg/v1/msg.proto";
+import "cosmos_proto/cosmos.proto";
+import "gogoproto/gogo.proto";
+import "rollkitsdk/network/v1/types.proto";
+
+// Msg defines the network module's gRPC message service.
+service Msg {
+  option (cosmos.msg.v1.service) = true;
+
+  // Attest submits a signed vote for a checkpoint
+  rpc Attest(MsgAttest) returns (MsgAttestResponse);
+  
+  // JoinAttesterSet opts a validator into the attester set
+  rpc JoinAttesterSet(MsgJoinAttesterSet) returns (MsgJoinAttesterSetResponse);
+  
+  // LeaveAttesterSet opts a validator out of the attester set
+  rpc LeaveAttesterSet(MsgLeaveAttesterSet) returns (MsgLeaveAttesterSetResponse);
+  
+  // UpdateParams updates the module parameters
+  rpc UpdateParams(MsgUpdateParams) returns (MsgUpdateParamsResponse);
+}
+
+// MsgAttest submits a signed vote for a checkpoint
+message MsgAttest {
+  option (cosmos.msg.v1.signer) = "validator";
+  option (gogoproto.equal) = false;
+  option (gogoproto.goproto_getters) = false;
+
+  // validator is the address of the validator submitting the attestation
+  string validator = 1 [(cosmos_proto.scalar) = "cosmos.ValidatorAddressString"];
+  
+  // height is the checkpoint height being attested
+  int64 height = 2;
+  
+  // vote is the base64-encoded canonical Comet vote
+  bytes vote = 3;
+}
+
+// MsgAttestResponse is the response type for the Attest RPC
+message MsgAttestResponse {}
+
+// MsgJoinAttesterSet opts a validator into the attester set
+message MsgJoinAttesterSet {
+  option (cosmos.msg.v1.signer) = "validator";
+  option (gogoproto.equal) = false;
+  option (gogoproto.goproto_getters) = false;
+
+  // validator is the address of the validator joining
+  string validator = 1 [(cosmos_proto.scalar) = "cosmos.ValidatorAddressString"];
+}
+
+// MsgJoinAttesterSetResponse is the response type for the JoinAttesterSet RPC
+message MsgJoinAttesterSetResponse {}
+
+// MsgLeaveAttesterSet opts a validator out of the attester set
+message MsgLeaveAttesterSet {
+  option (cosmos.msg.v1.signer) = "validator";
+  option (gogoproto.equal) = false;
+  option (gogoproto.goproto_getters) = false;
+
+  // validator is the address of the validator leaving
+  string validator = 1 [(cosmos_proto.scalar) = "cosmos.ValidatorAddressString"];
+}
+
+// MsgLeaveAttesterSetResponse is the response type for the LeaveAttesterSet RPC
+message MsgLeaveAttesterSetResponse {}
+
+// MsgUpdateParams updates the network module parameters
+message MsgUpdateParams {
+  option (cosmos.msg.v1.signer) = "authority";
+  option (gogoproto.equal) = false;
+  option (gogoproto.goproto_getters) = false;
+
+  // authority is the address that controls the module
+  string authority = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+
+  // params defines the module parameters to update
+  Params params = 2 [(gogoproto.nullable) = false];
+}
+
+// MsgUpdateParamsResponse is the response type for the UpdateParams RPC
+message MsgUpdateParamsResponse {}

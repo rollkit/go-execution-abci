@@ -2,11 +2,12 @@ package types
 
 import (
 	"context"
-	tyrollkittypes "github.com/rollkit/rollkit/types"
 
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
+
+	tyrollkittypes "github.com/rollkit/rollkit/types"
 )
 
 // StakingKeeper defines the expected staking keeper interface

@@ -1,0 +1,372 @@
+name: Cosmos SDK to Rollkit Migration Test
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  migration-test:
+    name: Test Migration from Cosmos SDK to Rollkit
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DO_NOT_TRACK: true
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ./go.mod
+          cache: true
+
+      - name: Install Ignite CLI
+        run: |
+          curl -sSL https://get.ignite.com/cli@v28.10.0! | bash
+
+      - name: Scaffold Standard Cosmos SDK Chain
+        run: |
+          # scaffold a new chain without rollkit
+          ignite scaffold chain gm --no-module --skip-git --address-prefix gm
+          cd gm
+
+          # build the standard cosmos sdk chain
+          ignite chain build --skip-proto
+
+          # initialize the chain
+          ignite chain init
+
+      - name: Start Cosmos SDK Chain and Generate Blocks
+        run: |
+          cd gm
+          # start the standard cosmos sdk chain
+          gmd start --log_format=json > cosmos-chain.log 2>&1 &
+          COSMOS_PID=$!
+          echo "COSMOS_PID=$COSMOS_PID" >> $GITHUB_ENV
+
+          echo "Waiting for Cosmos SDK chain to produce blocks..."
+
+          # wait for chain to start and check for 5 blocks
+          BLOCKS_FOUND=0
+          MAX_ATTEMPTS=60
+          ATTEMPT=0
+
+          while [ $BLOCKS_FOUND -lt 5 ] && [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            sleep 2
+            ATTEMPT=$((ATTEMPT+1))
+            
+            # check if the chain is still running
+            if ! ps -p $COSMOS_PID > /dev/null; then
+              echo "Chain process died unexpectedly"
+              cat cosmos-chain.log
+              exit 1
+            fi
+            
+            # count blocks in log
+            BLOCKS_FOUND=$(gmd query block --output json | tail -n +2 | jq -r '.header.height')
+            echo "Found $BLOCKS_FOUND blocks so far (attempt $ATTEMPT/$MAX_ATTEMPTS)"
+          done
+
+          if [ $BLOCKS_FOUND -lt 5 ]; then
+            echo "Failed to find 5 blocks within time limit"
+            cat cosmos-chain.log
+            exit 1
+          fi
+
+          echo "Success! Chain produced at least 5 blocks."
+
+      - name: Send Transactions on Cosmos SDK Chain
+        run: |
+          cd gm
+
+          # create additional account
+          gmd keys add carol --output json > carol.json
+          CAROL_ADDRESS=$(gmd keys show carol -a)
+          echo "Carol's address: $CAROL_ADDRESS"
+
+          # get bob's address and initial balance
+          BOB_ADDRESS=$(gmd keys show bob -a)
+          echo "Bob's address: $BOB_ADDRESS"
+
+          INITIAL_BALANCE=$(gmd query bank balances $BOB_ADDRESS --output json | jq '.balances[0].amount' -r)
+          echo "Bob's initial balance: $INITIAL_BALANCE stake"
+
+          # send multiple transactions
+          echo "Sending transactions on Cosmos SDK chain..."
+          TX_HASH_1=$(gmd tx bank send $BOB_ADDRESS $CAROL_ADDRESS 1000stake -y --output json | jq -r .txhash)
+          sleep 3
+          TX_HASH_2=$(gmd tx bank send $BOB_ADDRESS $CAROL_ADDRESS 2000stake -y --output json | jq -r .txhash)
+          sleep 3
+          TX_HASH_3=$(gmd tx bank send $BOB_ADDRESS $CAROL_ADDRESS 3000stake -y --output json | jq -r .txhash)
+          sleep 5
+
+          # store transaction hashes for later verification
+          echo "$TX_HASH_1" > tx_hash_1.txt
+          echo "$TX_HASH_2" > tx_hash_2.txt
+          echo "$TX_HASH_3" > tx_hash_3.txt
+
+          # verify transactions were successful
+          for tx_hash in $TX_HASH_1 $TX_HASH_2 $TX_HASH_3; do
+            TX_RESULT=$(gmd query tx $tx_hash --output json)
+            TX_CODE=$(echo $TX_RESULT | jq -r '.code')
+            if [ "$TX_CODE" != "0" ]; then
+              echo "Error: Transaction $tx_hash failed with code $TX_CODE"
+              exit 1
+            fi
+            echo "Transaction $tx_hash successful"
+          done
+
+          # check final balances
+          CAROL_BALANCE=$(gmd query bank balances $CAROL_ADDRESS --output json | jq '.balances[0].amount' -r)
+          echo "Carol's final balance: $CAROL_BALANCE stake"
+
+          if [ "$CAROL_BALANCE" != "6000" ]; then
+            echo "Error: Carol's balance should be 6000, got $CAROL_BALANCE"
+            exit 1
+          fi
+
+          echo "✅ All transactions successful on Cosmos SDK chain"
+
+      - name: Record Pre-Migration State
+        run: |
+          cd gm
+
+          # record current block height
+          CURRENT_HEIGHT=$(gmd query block --output json | tail -n +2 | jq -r '.header.height')
+          echo "PRE_MIGRATION_HEIGHT=$CURRENT_HEIGHT" >> $GITHUB_ENV
+          echo "Pre-migration block height: $CURRENT_HEIGHT"
+
+          # query a few old blocks to verify they exist
+          for height in 5 7 9; do
+            BLOCK_RESULT=$(gmd query block --type=height $height --output json)
+            BLOCK_HEIGHT=$(echo $BLOCK_RESULT | jq -r '.header.height')
+            echo "Block $height exists with height: $BLOCK_HEIGHT"
+            if [ "$BLOCK_HEIGHT" != "$height" ]; then
+              echo "Error: Block height mismatch"
+              exit 1
+            fi
+          done
+
+      - name: Stop Cosmos SDK Chain
+        run: |
+          echo "Stopping Cosmos SDK chain..."
+          if [[ -n "${COSMOS_PID}" ]]; then
+            kill -TERM $COSMOS_PID || true
+            sleep 5
+            kill -9 $COSMOS_PID || true
+          fi
+          echo "Cosmos SDK chain stopped"
+
+      - name: Add Rollkit Wiring to Chain
+        run: |
+          cd gm
+
+          # get the path to the current checkout of go-execution-abci
+          CURRENT_DIR=$(pwd)/..
+          GO_EXECUTION_ABCI_DIR=$CURRENT_DIR
+
+          # install rollkit app
+          ignite app install github.com/ignite/apps/rollkit@main
+
+          # add rollkit to the chain
+          ignite rollkit add
+
+          # replace the github.com/rollkit/rollkit module with latest main
+          go get github.com/rollkit/rollkit@main
+          UPGRADED_ROLLKIT=$(go list -m -json github.com/rollkit/rollkit | jq -r .Version)
+          go mod edit -replace github.com/rollkit/rollkit=github.com/rollkit/rollkit@$UPGRADED_ROLLKIT
+
+          # replace the github.com/rollkit/go-execution-abci module with the local version
+          go mod edit -replace github.com/rollkit/go-execution-abci=$GO_EXECUTION_ABCI_DIR
+
+          # download dependencies and update go.mod/go.sum
+          go mod tidy
+
+          # rebuild the chain with rollkit
+          ignite chain build --skip-proto
+
+      - name: Migrate Chain Data
+        run: |
+          cd gm
+
+          echo "Running migration command..."
+          # migrate the chain data from cosmos sdk to rollkit
+          gmd rollkit-migrate --home ~/.gm
+
+      - name: Start Local DA for Rollkit
+        run: |
+          # clone rollkit repository for local DA
+          git clone https://github.com/rollkit/rollkit --depth 1
+          cd rollkit/da/cmd/local-da
+          # start the local da in the background
+          go run . &
+          echo "DA_PID=$!" >> $GITHUB_ENV
+          sleep 3
+
+      - name: Start Rollkit Chain After Migration
+        run: |
+          cd gm
+
+          echo "Starting Rollkit chain after migration..."
+          # start the rollkit chain
+          gmd start --rollkit.node.aggregator --log_format=json > rollkit-chain.log 2>&1 &
+          ROLLKIT_PID=$!
+          echo "ROLLKIT_PID=$ROLLKIT_PID" >> $GITHUB_ENV
+
+          echo "Waiting for Rollkit chain to start and produce blocks..."
+
+          # wait for rollkit chain to start and produce new blocks
+          INITIAL_HEIGHT=$PRE_MIGRATION_HEIGHT
+          BLOCKS_FOUND=0
+          MAX_ATTEMPTS=60
+          ATTEMPT=0
+
+          while [ $BLOCKS_FOUND -lt 5 ] && [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            sleep 2
+            ATTEMPT=$((ATTEMPT+1))
+            
+            # check if the chain is still running
+            if ! ps -p $ROLLKIT_PID > /dev/null; then
+              echo "Rollkit chain process died unexpectedly"
+              cat rollkit-chain.log
+              exit 1
+            fi
+            
+            # get current block height
+            CURRENT_HEIGHT=$(gmd query block --output json | tail -n +2 | jq -r '.header.height')
+            BLOCKS_FOUND=$((CURRENT_HEIGHT - INITIAL_HEIGHT))
+            echo "New blocks produced: $BLOCKS_FOUND, current height: $CURRENT_HEIGHT (attempt $ATTEMPT/$MAX_ATTEMPTS)"
+          done
+
+          if [ $BLOCKS_FOUND -lt 5 ]; then
+            echo "Failed to produce 5 new blocks after migration"
+            cat rollkit-chain.log
+            exit 1
+          fi
+
+          echo "Success! Rollkit chain produced $BLOCKS_FOUND new blocks after migration."
+
+      - name: Send Transactions on Rollkit Chain
+        run: |
+          cd gm
+
+          echo "Sending transactions on migrated Rollkit chain..."
+
+          # get addresses
+          BOB_ADDRESS=$(gmd keys show bob -a)
+          CAROL_ADDRESS=$(gmd keys show carol -a)
+
+          # get pre-transaction balances
+          BOB_BALANCE_BEFORE=$(gmd query bank balances $BOB_ADDRESS --output json | jq '.balances[0].amount' -r)
+          CAROL_BALANCE_BEFORE=$(gmd query bank balances $CAROL_ADDRESS --output json | jq '.balances[0].amount' -r)
+
+          echo "Bob's balance before: $BOB_BALANCE_BEFORE stake"
+          echo "Carol's balance before: $CAROL_BALANCE_BEFORE stake"
+
+          # send transactions on rollkit chain
+          TX_HASH_4=$(gmd tx bank send $BOB_ADDRESS $CAROL_ADDRESS 4000stake -y --output json | jq -r .txhash)
+          sleep 3
+          TX_HASH_5=$(gmd tx bank send $CAROL_ADDRESS $BOB_ADDRESS 1000stake -y --output json | jq -r .txhash)
+          sleep 5
+
+          # verify new transactions
+          for tx_hash in $TX_HASH_4 $TX_HASH_5; do
+            TX_RESULT=$(gmd query tx $tx_hash --output json)
+            TX_CODE=$(echo $TX_RESULT | jq -r '.code')
+            if [ "$TX_CODE" != "0" ]; then
+              echo "Error: Transaction $tx_hash failed with code $TX_CODE"
+              exit 1
+            fi
+            echo "Transaction $tx_hash successful on Rollkit chain"
+          done
+
+          # check final balances
+          BOB_BALANCE_AFTER=$(gmd query bank balances $BOB_ADDRESS --output json | jq '.balances[0].amount' -r)
+          CAROL_BALANCE_AFTER=$(gmd query bank balances $CAROL_ADDRESS --output json | jq '.balances[0].amount' -r)
+
+          echo "Bob's balance after: $BOB_BALANCE_AFTER stake"
+          echo "Carol's balance after: $CAROL_BALANCE_AFTER stake"
+
+          # verify balance changes
+          EXPECTED_BOB_BALANCE=$((BOB_BALANCE_BEFORE - 4000 + 1000))
+          EXPECTED_CAROL_BALANCE=$((CAROL_BALANCE_BEFORE + 4000 - 1000))
+
+          if [ "$BOB_BALANCE_AFTER" != "$EXPECTED_BOB_BALANCE" ]; then
+            echo "Error: Bob's balance mismatch. Expected: $EXPECTED_BOB_BALANCE, Got: $BOB_BALANCE_AFTER"
+            exit 1
+          fi
+
+          if [ "$CAROL_BALANCE_AFTER" != "$EXPECTED_CAROL_BALANCE" ]; then
+            echo "Error: Carol's balance mismatch. Expected: $EXPECTED_CAROL_BALANCE, Got: $CAROL_BALANCE_AFTER"
+            exit 1
+          fi
+
+          echo "✅ All transactions successful on Rollkit chain"
+
+      - name: Query Old Blocks After Migration
+        run: |
+          cd gm
+
+          echo "Querying old blocks from pre-migration era..."
+
+          # verify old transactions are still queryable
+          TX_HASH_1=$(cat tx_hash_1.txt)
+          TX_HASH_2=$(cat tx_hash_2.txt)
+          TX_HASH_3=$(cat tx_hash_3.txt)
+
+          for tx_hash in $TX_HASH_1 $TX_HASH_2 $TX_HASH_3; do
+            echo "Querying old transaction: $tx_hash"
+            TX_RESULT=$(gmd query tx $tx_hash --output json)
+            TX_CODE=$(echo $TX_RESULT | jq -r '.code')
+            if [ "$TX_CODE" != "0" ]; then
+              echo "Error: Old transaction $tx_hash query failed with code $TX_CODE"
+              exit 1
+            fi
+            echo "✅ Old transaction $tx_hash successfully queried"
+          done
+
+          # query old blocks by height
+          for height in 5 7 9; do
+            echo "Querying old block at height $height"
+            BLOCK_RESULT=$(gmd query block --type=height $height --output json)
+            BLOCK_HEIGHT=$(echo $BLOCK_RESULT | jq -r '.header.height')
+            if [ "$BLOCK_HEIGHT" != "$height" ]; then
+              echo "Error: Block height mismatch for block $height"
+              exit 1
+            fi
+            echo "✅ Old block at height $height successfully queried"
+          done
+
+          echo "✅ All old blocks and transactions are accessible after migration"
+
+      - name: Print logs on failure
+        if: failure()
+        run: |
+          echo '--- cosmos-chain.log ---'
+          cat gm/cosmos-chain.log || true
+          echo '--- rollkit-chain.log ---'
+          cat gm/rollkit-chain.log || true
+
+      - name: Cleanup Processes
+        if: always()
+        run: |
+          # kill rollkit chain process if it exists
+          if [[ -n "${ROLLKIT_PID}" ]]; then
+            kill -9 $ROLLKIT_PID || true
+          fi
+
+          # kill cosmos chain process if it exists
+          if [[ -n "${COSMOS_PID}" ]]; then
+            kill -9 $COSMOS_PID || true
+          fi
+
+          # kill DA process if it exists
+          if [[ -n "${DA_PID}" ]]; then
+            kill -9 $DA_PID || true
+          fi

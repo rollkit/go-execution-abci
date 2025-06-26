@@ -6,10 +6,12 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"time"
 
 	"cosmossdk.io/log"
 	cmtcfg "github.com/cometbft/cometbft/config"
+	cmtjson "github.com/cometbft/cometbft/libs/json"
 	"github.com/cometbft/cometbft/mempool"
 	cmtp2p "github.com/cometbft/cometbft/p2p"
 	pvm "github.com/cometbft/cometbft/privval"
@@ -326,20 +328,55 @@ func setupNodeAndExecutor(
 		}
 	}
 
-	genDoc, err := getGenDocProvider(cfg)()
+	var (
+		rollkitGenesis *genesis.Genesis
+		appGenesis     *genutiltypes.AppGenesis
+	)
+
+	// determine the genesis source: rollkit genesis or app genesis
+	migrationGenesis, err := loadRollkitMigrationGenesis(cfg.RootDir)
 	if err != nil {
 		return nil, nil, cleanupFn, err
 	}
 
-	cmtGenDoc, err := genDoc.ToGenesisDoc()
-	if err != nil {
-		return nil, nil, cleanupFn, err
-	}
+	if migrationGenesis != nil {
+		rollkitGenesis = migrationGenesis.ToRollkitGenesis()
 
-	// Get AppGenesis before creating the executor
-	appGenesis, err := genutiltypes.AppGenesisFromFile(cfg.GenesisFile())
-	if err != nil {
-		return nil, nil, cleanupFn, err
+		logger.Info("using rollkit migration genesis",
+			"chain_id", migrationGenesis.ChainID,
+			"initial_height", migrationGenesis.InitialHeight)
+
+		// this genesis is technically not needed, as abci exec won't run init chain again.
+		appGenesis = &genutiltypes.AppGenesis{
+			ChainID:       migrationGenesis.ChainID,
+			InitialHeight: int64(migrationGenesis.InitialHeight),
+			GenesisTime:   rollkitGenesis.GenesisDAStartTime,
+			Consensus: &genutiltypes.ConsensusGenesis{ // used in rpc/status.go
+				Validators: []cmttypes.GenesisValidator{
+					{
+						Address: migrationGenesis.SequencerAddr,
+						PubKey:  migrationGenesis.SequencerPubKey,
+						Power:   1,
+					},
+				},
+			},
+		}
+	} else {
+		// normal scenario: create rollkit genesis from full cometbft genesis
+		appGenesis, err = getAppGenesis(cfg)()
+		if err != nil {
+			return nil, nil, cleanupFn, err
+		}
+
+		cmtGenDoc, err := appGenesis.ToGenesisDoc()
+		if err != nil {
+			return nil, nil, cleanupFn, err
+		}
+
+		rollkitGenesis = createRollkitGenesisFromCometBFT(cmtGenDoc)
+		logger.Info("created rollkit genesis from cometbft genesis",
+			"chain_id", cmtGenDoc.ChainID,
+			"initial_height", cmtGenDoc.InitialHeight)
 	}
 
 	database, err := store.NewDefaultKVStore(cfg.RootDir, "data", "rollkit")
@@ -349,7 +386,7 @@ func setupNodeAndExecutor(
 
 	metrics := node.DefaultMetricsProvider(rollkitcfg.Instrumentation)
 
-	_, p2pMetrics := metrics(cmtGenDoc.ChainID)
+	_, p2pMetrics := metrics(rollkitGenesis.ChainID)
 	p2pClient, err := p2p.NewClient(rollkitcfg, nodeKey, database, logger.With("module", "p2p"), p2pMetrics)
 	if err != nil {
 		return nil, nil, cleanupFn, err
@@ -357,7 +394,7 @@ func setupNodeAndExecutor(
 
 	adapterMetrics := adapter.NopMetrics()
 	if rollkitcfg.Instrumentation.IsPrometheusEnabled() {
-		adapterMetrics = adapter.PrometheusMetrics(config.DefaultInstrumentationConfig().Namespace, "chain_id", cmtGenDoc.ChainID)
+		adapterMetrics = adapter.PrometheusMetrics(config.DefaultInstrumentationConfig().Namespace, "chain_id", rollkitGenesis.ChainID)
 	}
 
 	executor = adapter.NewABCIExecutor(
@@ -367,7 +404,7 @@ func setupNodeAndExecutor(
 		p2pMetrics,
 		logger,
 		cfg,
-		appGenesis,
+		appGenesis, // only used for init chain
 		adapterMetrics,
 	)
 
@@ -386,13 +423,6 @@ func setupNodeAndExecutor(
 	mempool := mempool.NewCListMempool(cfg.Mempool, proxyApp.Mempool(), int64(height))
 	executor.SetMempool(mempool)
 
-	rollkitGenesis := genesis.NewGenesis(
-		cmtGenDoc.ChainID,
-		uint64(cmtGenDoc.InitialHeight),
-		cmtGenDoc.GenesisTime,
-		cmtGenDoc.Validators[0].Address.Bytes(), // use the first validator as sequencer
-	)
-
 	// create the DA client
 	daClient, err := jsonrpc.NewClient(ctx, logger, rollkitcfg.DA.Address, rollkitcfg.DA.AuthToken, rollkitcfg.DA.Namespace)
 	if err != nil {
@@ -405,7 +435,7 @@ func setupNodeAndExecutor(
 	}
 
 	if rollkitcfg.Instrumentation.IsPrometheusEnabled() {
-		singleMetrics, err = single.PrometheusMetrics(config.DefaultInstrumentationConfig().Namespace, "chain_id", cmtGenDoc.ChainID)
+		singleMetrics, err = single.PrometheusMetrics(config.DefaultInstrumentationConfig().Namespace, "chain_id", rollkitGenesis.ChainID)
 		if err != nil {
 			return nil, nil, cleanupFn, err
 		}
@@ -416,7 +446,7 @@ func setupNodeAndExecutor(
 		logger,
 		database,
 		&daClient.DA,
-		[]byte(cmtGenDoc.ChainID),
+		[]byte(rollkitGenesis.ChainID),
 		rollkitcfg.Node.BlockTime.Duration,
 		singleMetrics,
 		rollkitcfg.Node.Aggregator,
@@ -433,7 +463,7 @@ func setupNodeAndExecutor(
 		&daClient.DA,
 		signer,
 		p2pClient,
-		rollkitGenesis,
+		*rollkitGenesis,
 		database,
 		metrics,
 		logger,
@@ -448,7 +478,7 @@ func setupNodeAndExecutor(
 	}
 	executor.EventBus = eventBus
 
-	idxSvc, txIndexer, blockIndexer, err := createAndStartIndexerService(cfg, cmtGenDoc.ChainID, cmtcfg.DefaultDBProvider, eventBus, logger)
+	idxSvc, txIndexer, blockIndexer, err := createAndStartIndexerService(cfg, rollkitGenesis.ChainID, cmtcfg.DefaultDBProvider, eventBus, logger)
 	if err != nil {
 		return nil, nil, cleanupFn, fmt.Errorf("start indexer service: %w", err)
 	}
@@ -524,8 +554,8 @@ func createAndStartIndexerService(
 	return indexerService, txIndexer, blockIndexer, nil
 }
 
-// getGenDocProvider returns a function which returns the genesis doc from the genesis file.
-func getGenDocProvider(cfg *cmtcfg.Config) func() (*genutiltypes.AppGenesis, error) {
+// getAppGenesis returns a function which returns the app genesis based on its location in the config.
+func getAppGenesis(cfg *cmtcfg.Config) func() (*genutiltypes.AppGenesis, error) {
 	return func() (*genutiltypes.AppGenesis, error) {
 		appGenesis, err := genutiltypes.AppGenesisFromFile(cfg.GenesisFile())
 		if err != nil {
@@ -615,4 +645,42 @@ func initProxyApp(clientCreator proxy.ClientCreator, logger log.Logger, metrics 
 		return nil, fmt.Errorf("error while starting proxy app connections: %w", err)
 	}
 	return proxyApp, nil
+}
+
+const rollkitGenesisFilename = "rollkit_genesis.json"
+
+// loadRollkitMigrationGenesis loads a minimal rollkit genesis from a migration genesis file.
+// Returns nil if no migration genesis is found (normal startup scenario).
+func loadRollkitMigrationGenesis(rootDir string) (*rollkitMigrationGenesis, error) {
+	genesisPath := filepath.Join(rootDir, rollkitGenesisFilename)
+	if _, err := os.Stat(genesisPath); os.IsNotExist(err) {
+		return nil, nil // no migration genesis found
+	}
+
+	genesisBytes, err := os.ReadFile(genesisPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read rollkit migration genesis: %w", err)
+	}
+
+	var migrationGenesis rollkitMigrationGenesis
+	// using cmtjson for unmarshalling to ensure compatibility with cometbft genesis format
+	if err := cmtjson.Unmarshal(genesisBytes, &migrationGenesis); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal rollkit migration genesis: %w", err)
+	}
+
+	return &migrationGenesis, nil
+}
+
+// createRollkitGenesisFromCometBFT creates a rollkit genesis from cometbft genesis.
+// This is used for normal startup scenarios where a full cometbft genesis document
+// is available and contains all the necessary information.
+func createRollkitGenesisFromCometBFT(cmtGenDoc *cmttypes.GenesisDoc) *genesis.Genesis {
+	rollkitGenesis := genesis.NewGenesis(
+		cmtGenDoc.ChainID,
+		uint64(cmtGenDoc.InitialHeight),
+		cmtGenDoc.GenesisTime,
+		cmtGenDoc.Validators[0].Address.Bytes(), // use the first validator as sequencer
+	)
+
+	return &rollkitGenesis
 }

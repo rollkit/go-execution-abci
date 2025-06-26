@@ -307,7 +307,7 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("failed to get last commit: %w", err)
 	}
 
-	emptyBlock, err := cometcompat.ToABCIBlock(header, &types.Data{}, lastCommit)
+	emptyBlock, err := cometcompat.ToABCIBlock(header, &types.Data{}, lastCommit, s.Validators)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to compute header hash: %w", err)
 	}

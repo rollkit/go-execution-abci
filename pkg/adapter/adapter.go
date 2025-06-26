@@ -9,7 +9,6 @@ import (
 	"cosmossdk.io/log"
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtcfg "github.com/cometbft/cometbft/config"
-	"github.com/cometbft/cometbft/libs/bytes"
 	"github.com/cometbft/cometbft/mempool"
 	corep2p "github.com/cometbft/cometbft/p2p"
 	cmtprototypes "github.com/cometbft/cometbft/proto/tendermint/types"
@@ -528,7 +527,7 @@ func fireEvents(
 
 func (a *Adapter) getLastCommit(ctx context.Context, blockHeight uint64) (*cmttypes.Commit, error) {
 	if blockHeight > 1 {
-		header, data, err := a.RollkitStore.GetBlockData(ctx, blockHeight-1)
+		header, _, err := a.RollkitStore.GetBlockData(ctx, blockHeight-1)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get previous block data: %w", err)
 		}
@@ -536,7 +535,7 @@ func (a *Adapter) getLastCommit(ctx context.Context, blockHeight uint64) (*cmtty
 		commitForPrevBlock := &cmttypes.Commit{
 			Height:  int64(header.Height()),
 			Round:   0,
-			BlockID: cmttypes.BlockID{Hash: bytes.HexBytes(header.Hash()), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: bytes.HexBytes(data.Hash())}},
+			BlockID: cmttypes.BlockID{},
 			Signatures: []cmttypes.CommitSig{
 				{
 					BlockIDFlag:      cmttypes.BlockIDFlagCommit,
@@ -571,7 +570,7 @@ func cometCommitToABCICommitInfo(commit *cmttypes.Commit) abci.CommitInfo {
 		votes[i] = abci.VoteInfo{
 			Validator: abci.Validator{
 				Address: sig.ValidatorAddress,
-				Power:   0,
+				Power:   1,
 			},
 			BlockIdFlag: cmtprototypes.BlockIDFlag(sig.BlockIDFlag),
 		}

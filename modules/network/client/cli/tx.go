@@ -57,10 +57,6 @@ func CmdAttest() *cobra.Command {
 				vote,
 			)
 
-			if err := msg.ValidateBasic(); err != nil {
-				return err
-			}
-
 			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), msg)
 		},
 	}
@@ -84,9 +80,6 @@ func CmdJoinAttesterSet() *cobra.Command {
 
 			valAddress := sdk.ValAddress(clientCtx.GetFromAddress()).String()
 			msg := types.NewMsgJoinAttesterSet(valAddress)
-			if err := msg.ValidateBasic(); err != nil {
-				return err
-			}
 
 			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), msg)
 		},
@@ -111,10 +104,6 @@ func CmdLeaveAttesterSet() *cobra.Command {
 
 			valAddress := sdk.ValAddress(clientCtx.GetFromAddress()).String()
 			msg := types.NewMsgLeaveAttesterSet(valAddress)
-
-			if err := msg.ValidateBasic(); err != nil {
-				return err
-			}
 
 			return tx.GenerateOrBroadcastTxCLI(clientCtx, cmd.Flags(), msg)
 		},

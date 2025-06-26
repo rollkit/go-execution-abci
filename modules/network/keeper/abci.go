@@ -3,25 +3,13 @@ package keeper
 import (
 	"crypto/sha256"
 	"encoding/base64"
-	"errors"
 	"fmt"
 
-	// For error wrapping if needed
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"github.com/rollkit/go-execution-abci/modules/network/types"
 )
-
-// BeginBlocker handles begin block logic for the network module
-func (k Keeper) BeginBlocker(ctx sdk.Context) error {
-	params := k.GetParams(ctx)
-
-	if params.SignMode != types.SignMode_SIGN_MODE_CHECKPOINT {
-		return errors.New("only checkpoint sign mode is implemented")
-	}
-	return nil
-}
 
 // EndBlocker handles end block logic for the network module
 func (k Keeper) EndBlocker(ctx sdk.Context) error {

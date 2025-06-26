@@ -1,6 +1,7 @@
 package keeper
 
 import (
+	"errors"
 	"fmt"
 
 	"cosmossdk.io/collections"
@@ -31,6 +32,7 @@ type Keeper struct {
 	Signatures            collections.Map[collections.Pair[int64, string], []byte]
 	StoredAttestationInfo collections.Map[int64, types.AttestationBitmap]
 	Params                collections.Item[types.Params]
+	Schema                collections.Schema
 }
 
 // NewKeeper creates a new network Keeper instance
@@ -62,13 +64,11 @@ func NewKeeper(
 		Params:                collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
 	}
 
-	// The schema is built implicitly when the first collection is created or can be explicitly built.
-	// schema, err := sb.Build()
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// keeper.schema = schema
-
+	schema, err := sb.Build()
+	if err != nil {
+		panic(err)
+	}
+	keeper.Schema = schema
 	return keeper
 }
 
@@ -84,8 +84,11 @@ func (k Keeper) Logger(ctx sdk.Context) log.Logger {
 
 // GetParams get all parameters as types.Params
 func (k Keeper) GetParams(ctx sdk.Context) types.Params {
-	p, _ := k.Params.Get(ctx)
-	return p
+	params, err := k.Params.Get(ctx)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		panic(err)
+	}
+	return params
 }
 
 // SetParams set the params

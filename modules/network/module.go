@@ -11,6 +11,7 @@ import (
 	cdctypes "github.com/cosmos/cosmos-sdk/codec/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
+	simtypes "github.com/cosmos/cosmos-sdk/types/simulation"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 
 	"github.com/rollkit/go-execution-abci/modules/network/keeper"
@@ -18,12 +19,11 @@ import (
 )
 
 var (
-	_ module.AppModuleBasic     = AppModuleBasic{}
-	_ appmodule.AppModule       = AppModule{}
-	_ module.HasServices        = AppModule{}
-	_ module.HasGenesis         = AppModule{}
-	_ appmodule.HasBeginBlocker = AppModule{}
-	_ appmodule.HasEndBlocker   = AppModule{}
+	_ module.AppModuleBasic   = AppModuleBasic{}
+	_ appmodule.AppModule     = AppModule{}
+	_ module.HasServices      = AppModule{}
+	_ module.HasGenesis       = AppModule{}
+	_ appmodule.HasEndBlocker = AppModule{}
 )
 
 type AppModuleBasic struct {
@@ -104,10 +104,11 @@ func (am AppModule) RegisterServices(cfg module.Configurator) {
 	types.RegisterQueryServer(cfg.QueryServer(), keeper.NewQueryServer(am.keeper))
 }
 
-func (am AppModule) EndBlock(ctx context.Context) error {
-	return am.keeper.EndBlocker(sdk.UnwrapSDKContext(ctx))
+// RegisterStoreDecoder registers a decoder for supply module's types
+func (am AppModule) RegisterStoreDecoder(sdr simtypes.StoreDecoderRegistry) {
+	sdr[types.StoreKey] = simtypes.NewStoreDecoderFuncFromCollectionsSchema(am.keeper.Schema)
 }
 
-func (am AppModule) BeginBlock(ctx context.Context) error {
-	return am.keeper.BeginBlocker(sdk.UnwrapSDKContext(ctx))
+func (am AppModule) EndBlock(ctx context.Context) error {
+	return am.keeper.EndBlocker(sdk.UnwrapSDKContext(ctx))
 }

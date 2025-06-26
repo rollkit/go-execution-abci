@@ -140,6 +140,8 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 		return nil, err
 	}
 
+	abciBlock.LastCommit.Signatures[0].Signature = header.Signature
+
 	return &ctypes.ResultBlock{
 		BlockID: cmttypes.BlockID{Hash: abciBlock.Hash()},
 		Block:   abciBlock,
@@ -214,6 +216,7 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 
 	// Update the commit's BlockID to match the final ABCI block hash
 	abciBlock.LastCommit.BlockID.Hash = abciBlock.Header.Hash()
+	abciBlock.LastCommit.Signatures[0].Signature = header.Signature
 
 	return &ctypes.ResultCommit{
 		SignedHeader: cmttypes.SignedHeader{

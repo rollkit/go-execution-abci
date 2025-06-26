@@ -181,7 +181,7 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 	}
 
 	var trustedHeader cmttypes.SignedHeader
-	var isFirstBlock = true
+	isFirstBlock := true
 
 	// Test multiple blocks
 	for i := 1; i <= 3; i++ {
@@ -206,7 +206,7 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 			verifyFirstBlock(t, fixedValSet, chainID, trustedHeader)
 			isFirstBlock = false
 		} else {
-			verifySubsequentBlock(t, fixedValSet, &trustedHeader, &commitResult.SignedHeader, rollkitHeader, realSignature)
+			verifySubsequentBlock(t, fixedValSet, &trustedHeader, &commitResult.SignedHeader, rollkitHeader)
 			trustedHeader = commitResult.SignedHeader
 		}
 	}
@@ -311,7 +311,7 @@ func verifyFirstBlock(t *testing.T, valSet *cmttypes.ValidatorSet, chainID strin
 	}
 }
 
-func verifySubsequentBlock(t *testing.T, valSet *cmttypes.ValidatorSet, trustedHeader, newHeader *cmttypes.SignedHeader, rollkitHeader types.Header, realSignature []byte) {
+func verifySubsequentBlock(t *testing.T, valSet *cmttypes.ValidatorSet, trustedHeader, newHeader *cmttypes.SignedHeader, rollkitHeader types.Header) {
 	require := require.New(t)
 
 	trustingPeriod := 3 * time.Hour

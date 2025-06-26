@@ -371,10 +371,13 @@ func createRollkitMigrationGenesis(rootDir string, cometBFTState state.State) er
 	)
 
 	// use the first validator as sequencer (assuming single validator setup for migration)
-	// TODO(@julienrbrt): Allow to rollkitmanager for sequencer address instead. However rollkitmanager is an optional module
-	if len(cometBFTState.LastValidators.Validators) > 0 {
+	if len(cometBFTState.LastValidators.Validators) == 1 {
 		sequencerAddr = cometBFTState.LastValidators.Validators[0].Address.Bytes()
 		sequencerPubKey = cometBFTState.LastValidators.Validators[0].PubKey
+	} else {
+		// TODO(@julienrbrt): Allow to use rollkitmngr state to get the sequencer address
+		// ref: https://github.com/rollkit/go-execution-abci/issues/164
+		return fmt.Errorf("expected exactly one validator in the last validators, found %d", len(cometBFTState.LastValidators.Validators))
 	}
 
 	migrationGenesis := rollkitMigrationGenesis{

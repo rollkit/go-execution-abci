@@ -110,7 +110,6 @@ func NewABCIExecutor(
 	rollkitStore := rstore.New(rollkitPrefixStore)
 
 	abciStore := NewExecABCIStore(store)
-
 	a := &Adapter{
 		App:          app,
 		Store:        abciStore,
@@ -327,7 +326,7 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("get last commit: %w", err)
 	}
 
-	emptyBlock, err := cometcompat.ToABCIBlock(header, &types.Data{}, lastCommit)
+	emptyBlock, err := cometcompat.ToABCIBlock(header, &types.Data{}, lastCommit, s.Validators)
 	if err != nil {
 		return nil, 0, fmt.Errorf("compute header hash: %w", err)
 	}
@@ -491,7 +490,12 @@ func (a *Adapter) ExecuteTxs(
 			return nil, 0, fmt.Errorf("save block response: %w", err)
 		}
 	}
-
+	a.stackBlockCommitEvents(currentBlockID, block, fbResp, validatorUpdates)
+	if a.blockFilter.IsPublishable(ctx, int64(header.Height())) {
+		if err := a.publishQueuedBlockEvents(ctx, int64(header.Height())); err != nil {
+			return nil, 0, err
+		}
+	}
 	a.Logger.Info("block executed successfully", "height", blockHeight, "appHash", fmt.Sprintf("%X", fbResp.AppHash))
 	return fbResp.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
 }

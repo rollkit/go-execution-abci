@@ -13,6 +13,17 @@ import (
 	"github.com/rollkit/go-execution-abci/modules/network/types"
 )
 
+// BeginBlocker handles begin block logic for the network module
+func (k Keeper) BeginBlocker(ctx sdk.Context) error {
+	params := k.GetParams(ctx)
+
+	// Only process if sign mode is IBC_ONLY and we have outbound IBC packets
+	if params.SignMode == types.SignMode_SIGN_MODE_IBC_ONLY {
+		return errors.New("IBC only sign mode not yet implemented")
+	}
+	return nil
+}
+
 // EndBlocker handles end block logic for the network module
 func (k Keeper) EndBlocker(ctx sdk.Context) error {
 	height := ctx.BlockHeight()
@@ -109,6 +120,30 @@ func (k Keeper) processEpochEnd(ctx sdk.Context, epoch uint64) error {
 			if participationRate.LT(minParticipation) {
 				k.ejectLowParticipants(ctx, epochBitmap)
 			}
+		}
+	}
+
+	if !params.EmergencyMode {
+		epochStartHeight := int64(epoch * params.EpochLength)
+		checkpointsInEpoch := 0
+		softConfirmedCheckpoints := 0
+
+		for h := epochStartHeight; h < epochStartHeight+int64(params.EpochLength); h++ {
+			if h > ctx.BlockHeight() {
+				break
+			}
+			if k.IsCheckpointHeight(ctx, h) {
+				checkpointsInEpoch++
+				if q, err := k.IsSoftConfirmed(ctx, h); q && err == nil {
+					softConfirmedCheckpoints++
+				}
+			}
+		}
+
+		if checkpointsInEpoch > 0 && softConfirmedCheckpoints == 0 {
+			// todo (Alex): should we really fail?
+			//return fmt.Errorf("no checkpoints achieved quorum in epoch: %d", epoch)
+			k.Logger(ctx).Info("No checkpoints achieved quorum in epoch", "epoch", epoch)
 		}
 	}
 

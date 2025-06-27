@@ -256,7 +256,7 @@ func signBlock(t *testing.T, header types.Header, data *types.Data, privKey cryp
 		Signature: types.Signature(make([]byte, 64)),
 	}
 
-	abciBlock, err := cometcompat.ToABCIBlock(tempSignedHeader, data, tempCommit)
+	abciBlock, err := cometcompat.ToABCIBlock(tempSignedHeader, data, tempCommit, nil)
 	require.NoError(t, err)
 
 	vote := cmtproto.Vote{

@@ -84,15 +84,9 @@ func getBlockMeta(ctx context.Context, n uint64) *cmttypes.BlockMeta {
 	}
 
 	// Create empty commit for ToABCIBlockMeta call
-	emptyCommit := &cmttypes.Commit{
-		Height:     int64(header.Height()),
-		Round:      0,
-		BlockID:    cmttypes.BlockID{},
-		Signatures: []cmttypes.CommitSig{},
-	}
-
+	emptyCommit := &cmttypes.Commit{}
 	// Assuming ToABCIBlockMeta is now in pkg/rpc/provider/provider_utils.go
-	bmeta, err := cometcompat.ToABCIBlockMeta(header, data, emptyCommit) // Removed rpc. prefix
+	bmeta, err := cometcompat.ToABCIBlockMeta(header, data, emptyCommit, nil) // Removed rpc. prefix
 	if err != nil {
 		env.Logger.Error("Failed to convert block to ABCI block meta", "height", n, "err", err)
 		return nil

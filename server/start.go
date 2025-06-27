@@ -392,9 +392,14 @@ func setupNodeAndExecutor(
 		return nil, nil, cleanupFn, err
 	}
 
-	adapterMetrics := adapter.NopMetrics()
+	var opts []adapter.Option
 	if rollkitcfg.Instrumentation.IsPrometheusEnabled() {
-		adapterMetrics = adapter.PrometheusMetrics(config.DefaultInstrumentationConfig().Namespace, "chain_id", rollkitGenesis.ChainID)
+		m := adapter.PrometheusMetrics(config.DefaultInstrumentationConfig().Namespace, "chain_id", rollkitGenesis.ChainID)
+		opts = append(opts, adapter.WithMetrics(m))
+	}
+
+	if srvCtx.Viper.GetBool(FlagNetworkSoftConfirmation) {
+		opts = append(opts, adapter.WithNetworkSoftConfirmationBlockFilter())
 	}
 
 	executor = adapter.NewABCIExecutor(
@@ -404,8 +409,8 @@ func setupNodeAndExecutor(
 		p2pMetrics,
 		logger,
 		cfg,
-		appGenesis, // only used for init chain
-		adapterMetrics,
+		appGenesis,
+		opts...,
 	)
 
 	cmtApp := server.NewCometABCIWrapper(app)

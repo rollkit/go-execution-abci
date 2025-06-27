@@ -2,8 +2,11 @@ package adapter
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"cosmossdk.io/log"
@@ -43,12 +46,25 @@ type P2PClientInfo interface {
 	Peers() []rollkitp2p.PeerConnection
 }
 
+// BlockFilter decides if a block commit is build and published
+type BlockFilter interface {
+	IsPublishable(ctx context.Context, height int64) bool
+}
+
+var _ BlockFilter = BlockFilterFn(nil)
+
+type BlockFilterFn func(ctx context.Context, height int64) bool
+
+func (b BlockFilterFn) IsPublishable(ctx context.Context, height int64) bool {
+	return b(ctx, height)
+}
+
 // LoadGenesisDoc returns the genesis document from the provided config file.
 func LoadGenesisDoc(cfg *cmtcfg.Config) (*cmttypes.GenesisDoc, error) {
 	genesisFile := cfg.GenesisFile()
 	doc, err := cmttypes.GenesisDocFromFile(genesisFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read genesis doc from file: %w", err)
+		return nil, fmt.Errorf("read genesis doc from file: %w", err)
 	}
 	return doc, nil
 }
@@ -69,7 +85,10 @@ type Adapter struct {
 	AppGenesis *genutiltypes.AppGenesis
 
 	Logger  log.Logger
-	Metrics *Metrics
+	metrics *Metrics
+
+	blockFilter   BlockFilter
+	stackedEvents []StackedEvent
 }
 
 // NewABCIExecutor creates a new Adapter instance that implements the go-execution.Executor interface.
@@ -82,13 +101,9 @@ func NewABCIExecutor(
 	logger log.Logger,
 	cfg *cmtcfg.Config,
 	appGenesis *genutiltypes.AppGenesis,
-	metrics *Metrics,
+	opts ...Option,
 ) *Adapter {
-	if metrics == nil {
-		metrics = NopMetrics()
-	}
 
-	// create rollkit prefix
 	rollkitPrefixStore := kt.Wrap(store, &kt.PrefixTransform{
 		Prefix: ds.NewKey(rollnode.RollkitPrefix),
 	})
@@ -105,7 +120,12 @@ func NewABCIExecutor(
 		p2pMetrics:   p2pMetrics,
 		AppGenesis:   appGenesis,
 		MempoolIDs:   newMempoolIDs(),
-		Metrics:      metrics,
+		metrics:      NopMetrics(),
+		blockFilter:  BlockFilterFn(func(ctx context.Context, height int64) bool { return true }),
+	}
+
+	for _, opt := range opts {
+		opt(a)
 	}
 
 	return a
@@ -132,7 +152,7 @@ func (a *Adapter) Start(ctx context.Context) error {
 
 func (a *Adapter) newTxValidator(ctx context.Context) p2p.GossipValidator {
 	return func(m *p2p.GossipMessage) bool {
-		a.Metrics.TxValidationTotal.Add(1)
+		a.metrics.TxValidationTotal.Add(1)
 		a.Logger.Debug("transaction received", "bytes", len(m.Data))
 
 		msgBytes := m.Data
@@ -154,23 +174,23 @@ func (a *Adapter) newTxValidator(ctx context.Context) p2p.GossipValidator {
 			SenderP2PID: corep2p.ID(m.From),
 		})
 		checkTxDuration := time.Since(checkTxStart).Seconds()
-		a.Metrics.CheckTxDurationSeconds.Observe(checkTxDuration)
+		a.metrics.CheckTxDurationSeconds.Observe(checkTxDuration)
 
 		switch {
 		case errors.Is(err, mempool.ErrTxInCache):
-			a.Metrics.TxValidationResultTotal.With("result", "rejected_in_cache").Add(1)
+			a.metrics.TxValidationResultTotal.With("result", "rejected_in_cache").Add(1)
 			return true
 		case errors.Is(err, mempool.ErrMempoolIsFull{}):
-			a.Metrics.TxValidationResultTotal.With("result", "rejected_mempool_full").Add(1)
+			a.metrics.TxValidationResultTotal.With("result", "rejected_mempool_full").Add(1)
 			return true
 		case errors.Is(err, mempool.ErrTxTooLarge{}):
-			a.Metrics.TxValidationResultTotal.With("result", "rejected_too_large").Add(1)
+			a.metrics.TxValidationResultTotal.With("result", "rejected_too_large").Add(1)
 			return false
 		case errors.Is(err, mempool.ErrPreCheck{}):
-			a.Metrics.TxValidationResultTotal.With("result", "rejected_precheck").Add(1)
+			a.metrics.TxValidationResultTotal.With("result", "rejected_precheck").Add(1)
 			return false
 		case err != nil:
-			a.Metrics.TxValidationResultTotal.With("result", "rejected_checktx_error").Add(1)
+			a.metrics.TxValidationResultTotal.With("result", "rejected_checktx_error").Add(1)
 			a.Logger.Error("CheckTx failed with unexpected error", "err", err)
 			return false
 		default:
@@ -178,17 +198,17 @@ func (a *Adapter) newTxValidator(ctx context.Context) p2p.GossipValidator {
 
 		select {
 		case <-ctx.Done():
-			a.Metrics.TxValidationResultTotal.With("result", "rejected_context_canceled").Add(1)
+			a.metrics.TxValidationResultTotal.With("result", "rejected_context_canceled").Add(1)
 			return false
 		case checkTxResp := <-checkTxResCh:
 			if checkTxResp.Code == abci.CodeTypeOK {
-				a.Metrics.TxValidationResultTotal.With("result", "accepted").Add(1)
+				a.metrics.TxValidationResultTotal.With("result", "accepted").Add(1)
 				return true
 			}
-			a.Metrics.TxValidationResultTotal.With("result", "rejected_checktx").Add(1)
+			a.metrics.TxValidationResultTotal.With("result", "rejected_checktx").Add(1)
 			return false
 		case <-time.After(5 * time.Second):
-			a.Metrics.TxValidationResultTotal.With("result", "rejected_timeout").Add(1)
+			a.metrics.TxValidationResultTotal.With("result", "rejected_timeout").Add(1)
 			a.Logger.Error("CheckTx response timed out")
 			return false
 		}
@@ -199,7 +219,7 @@ func (a *Adapter) newTxValidator(ctx context.Context) p2p.GossipValidator {
 func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialHeight uint64, chainID string) ([]byte, uint64, error) {
 	initChainStart := time.Now()
 	defer func() {
-		a.Metrics.InitChainDurationSeconds.Observe(time.Since(initChainStart).Seconds())
+		a.metrics.InitChainDurationSeconds.Observe(time.Since(initChainStart).Seconds())
 	}()
 	a.Logger.Info("Initializing chain", "chainID", chainID, "initialHeight", initialHeight, "genesisTime", genesisTime)
 
@@ -239,7 +259,7 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 		InitialHeight:   int64(initialHeight),
 	})
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("app initialize chain: %w", err)
 	}
 
 	s := &cmtstate.State{}
@@ -252,7 +272,7 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 
 	vals, err := cmttypes.PB2TM.ValidatorUpdates(res.Validators)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, fmt.Errorf("validator updates: %w", err)
 	}
 
 	nValSet := cmttypes.NewValidatorSet(vals)
@@ -270,7 +290,7 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 	s.AppHash = res.AppHash
 
 	if err := a.Store.SaveState(ctx, s); err != nil {
-		return nil, 0, fmt.Errorf("failed to save initial state: %w", err)
+		return nil, 0, fmt.Errorf("save initial state: %w", err)
 	}
 
 	a.Logger.Info("chain initialized successfully", "appHash", fmt.Sprintf("%X", res.AppHash))
@@ -287,14 +307,14 @@ func (a *Adapter) ExecuteTxs(
 ) ([]byte, uint64, error) {
 	execStart := time.Now()
 	defer func() {
-		a.Metrics.BlockExecutionDurationSeconds.Observe(time.Since(execStart).Seconds())
+		a.metrics.BlockExecutionDurationSeconds.Observe(time.Since(execStart).Seconds())
 	}()
 	a.Logger.Info("Executing block", "height", blockHeight, "num_txs", len(txs), "timestamp", timestamp)
-	a.Metrics.TxsExecutedPerBlock.Observe(float64(len(txs)))
+	a.metrics.TxsExecutedPerBlock.Observe(float64(len(txs)))
 
 	s, err := a.Store.LoadState(ctx)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to load state: %w", err)
+		return nil, 0, fmt.Errorf("load state: %w", err)
 	}
 
 	header, ok := types.SignedHeaderFromContext(ctx)
@@ -304,12 +324,12 @@ func (a *Adapter) ExecuteTxs(
 
 	lastCommit, err := a.getLastCommit(ctx, blockHeight)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to get last commit: %w", err)
+		return nil, 0, fmt.Errorf("get last commit: %w", err)
 	}
 
 	emptyBlock, err := cometcompat.ToABCIBlock(header, &types.Data{}, lastCommit)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to compute header hash: %w", err)
+		return nil, 0, fmt.Errorf("compute header hash: %w", err)
 	}
 
 	ppResp, err := a.App.ProcessProposal(&abci.RequestProcessProposal{
@@ -346,6 +366,11 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, err
 	}
 
+	for i, tx := range txs {
+		sum256 := sha256.Sum256(tx)
+		a.Logger.Debug("Processed TX", "hash", strings.ToUpper(hex.EncodeToString(sum256[:])), "result", fbResp.TxResults[i].Code, "log", fbResp.TxResults[i].Log, "height", blockHeight)
+	}
+
 	s.AppHash = fbResp.AppHash
 	s.LastBlockHeight = int64(blockHeight)
 
@@ -358,7 +383,7 @@ func (a *Adapter) ExecuteTxs(
 
 	lastHeightValsChanged := s.LastHeightValidatorsChanged
 	if len(validatorUpdates) > 0 {
-		a.Metrics.ValidatorUpdatesTotal.Add(float64(len(validatorUpdates)))
+		a.metrics.ValidatorUpdatesTotal.Add(float64(len(validatorUpdates)))
 		err := nValSet.UpdateWithChangeSet(validatorUpdates)
 		if err != nil {
 			return nil, 0, fmt.Errorf("changing validator set: %w", err)
@@ -369,7 +394,7 @@ func (a *Adapter) ExecuteTxs(
 	nValSet.IncrementProposerPriority(1)
 
 	if fbResp.ConsensusParamUpdates != nil {
-		a.Metrics.ConsensusParamUpdatesTotal.Add(1)
+		a.metrics.ConsensusParamUpdatesTotal.Add(1)
 		nextParams := s.ConsensusParams.Update(fbResp.ConsensusParamUpdates)
 		err := nextParams.ValidateBasic()
 		if err != nil {
@@ -392,7 +417,7 @@ func (a *Adapter) ExecuteTxs(
 	s.AppHash = fbResp.AppHash
 
 	if err := a.Store.SaveState(ctx, s); err != nil {
-		return nil, 0, fmt.Errorf("failed to save state: %w", err)
+		return nil, 0, fmt.Errorf("save state: %w", err)
 	}
 
 	err = func() error { // Lock mempool and commit
@@ -427,13 +452,11 @@ func (a *Adapter) ExecuteTxs(
 	if err != nil {
 		return nil, 0, err
 	}
-
 	cmtTxs := make(cmttypes.Txs, len(txs))
 	for i := range txs {
 		cmtTxs[i] = txs[i]
 	}
 
-	// if blockheight is 0, we create a signed last commit.
 	if blockHeight == 0 {
 		lastCommit.Signatures = []cmttypes.CommitSig{
 			{
@@ -452,13 +475,21 @@ func (a *Adapter) ExecuteTxs(
 		PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: block.DataHash},
 	}
 
-	if err := fireEvents(a.EventBus, block, currentBlockID, fbResp, validatorUpdates); err != nil {
-		a.Logger.Error("failed to fire events", "err", err)
-	}
-
-	// save the finalized block response
-	if err := a.Store.SaveBlockResponse(ctx, blockHeight, fbResp); err != nil {
-		return nil, 0, fmt.Errorf("failed to save block response: %w", err)
+	if a.blockFilter.IsPublishable(ctx, int64(header.Height())) {
+		// save response before the events are fired (current behaviour in CometBFT)
+		if err := a.Store.SaveBlockResponse(ctx, blockHeight, fbResp); err != nil {
+			return nil, 0, fmt.Errorf("save block response: %w", err)
+		}
+		if err := fireEvents(a.EventBus, block, currentBlockID, fbResp, validatorUpdates); err != nil {
+			return nil, 0, fmt.Errorf("fire events: %w", err)
+		}
+	} else {
+		a.stackBlockCommitEvents(currentBlockID, block, fbResp, validatorUpdates)
+		// clear events so that they are not stored with the block data at this stage.
+		fbResp.Events = nil
+		if err := a.Store.SaveBlockResponse(ctx, blockHeight, fbResp); err != nil {
+			return nil, 0, fmt.Errorf("save block response: %w", err)
+		}
 	}
 
 	a.Logger.Info("block executed successfully", "height", blockHeight, "appHash", fmt.Sprintf("%X", fbResp.AppHash))
@@ -477,13 +508,13 @@ func fireEvents(
 		BlockID:             blockID,
 		ResultFinalizeBlock: *abciResponse,
 	}); err != nil {
-		return fmt.Errorf("failed publishing new block: %w", err)
+		return fmt.Errorf("publish new block event: %w", err)
 	}
 
 	if err := eventBus.PublishEventNewBlockHeader(cmttypes.EventDataNewBlockHeader{
 		Header: block.Header,
 	}); err != nil {
-		return fmt.Errorf("failed publishing new block header: %w", err)
+		return fmt.Errorf("publish new block header event: %w", err)
 	}
 
 	if err := eventBus.PublishEventNewBlockEvents(cmttypes.EventDataNewBlockEvents{
@@ -491,7 +522,7 @@ func fireEvents(
 		Events: abciResponse.Events,
 		NumTxs: int64(len(block.Txs)),
 	}); err != nil {
-		return fmt.Errorf("failed publishing new block events: %w", err)
+		return fmt.Errorf("publish block events: %w", err)
 	}
 
 	if len(block.Evidence.Evidence) != 0 {
@@ -500,7 +531,7 @@ func fireEvents(
 				Evidence: ev,
 				Height:   block.Height,
 			}); err != nil {
-				return fmt.Errorf("failed publishing new evidence: %w", err)
+				return fmt.Errorf("publish new evidence event: %w", err)
 			}
 		}
 	}
@@ -512,14 +543,14 @@ func fireEvents(
 			Tx:     tx,
 			Result: *(abciResponse.TxResults[i]),
 		}}); err != nil {
-			return fmt.Errorf("failed publishing event TX: %w", err)
+			return fmt.Errorf("publish event TX: %w", err)
 		}
 	}
 
 	if len(validatorUpdates) > 0 {
 		if err := eventBus.PublishEventValidatorSetUpdates(
 			cmttypes.EventDataValidatorSetUpdates{ValidatorUpdates: validatorUpdates}); err != nil {
-			return fmt.Errorf("failed publishing event: %w", err)
+			return fmt.Errorf("publish valset update event: %w", err)
 		}
 	}
 
@@ -530,7 +561,7 @@ func (a *Adapter) getLastCommit(ctx context.Context, blockHeight uint64) (*cmtty
 	if blockHeight > 1 {
 		header, data, err := a.RollkitStore.GetBlockData(ctx, blockHeight-1)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get previous block data: %w", err)
+			return nil, fmt.Errorf("get previous block data: %w", err)
 		}
 
 		commitForPrevBlock := &cmttypes.Commit{
@@ -583,17 +614,39 @@ func cometCommitToABCICommitInfo(commit *cmttypes.Commit) abci.CommitInfo {
 	}
 }
 
+type StackedEvent struct {
+	blockID          cmttypes.BlockID
+	block            *cmttypes.Block
+	abciResponse     *abci.ResponseFinalizeBlock
+	validatorUpdates []*cmttypes.Validator
+}
+
+func (a *Adapter) stackBlockCommitEvents(
+	blockID cmttypes.BlockID,
+	block *cmttypes.Block,
+	abciResponse *abci.ResponseFinalizeBlock,
+	validatorUpdates []*cmttypes.Validator,
+) {
+	// todo (Alex): we need this persisted to recover from restart
+	a.stackedEvents = append(a.stackedEvents, StackedEvent{
+		blockID:          blockID,
+		block:            block,
+		abciResponse:     abciResponse,
+		validatorUpdates: validatorUpdates,
+	})
+}
+
 // GetTxs calls PrepareProposal with the next height from the store and returns the transactions from the ABCI app
 func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 	getTxsStart := time.Now()
 	defer func() {
-		a.Metrics.GetTxsDurationSeconds.Observe(time.Since(getTxsStart).Seconds())
+		a.metrics.GetTxsDurationSeconds.Observe(time.Since(getTxsStart).Seconds())
 	}()
 	a.Logger.Debug("Getting transactions for proposal")
 
 	s, err := a.Store.LoadState(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load state for GetTxs: %w", err)
+		return nil, fmt.Errorf("load state for GetTxs: %w", err)
 	}
 
 	if a.Mempool == nil {
@@ -624,12 +677,57 @@ func (a *Adapter) GetTxs(ctx context.Context) ([][]byte, error) {
 		return nil, err
 	}
 
-	a.Metrics.TxsProposedTotal.Add(float64(len(resp.Txs)))
+	a.metrics.TxsProposedTotal.Add(float64(len(resp.Txs)))
 	return resp.Txs, nil
 }
 
 // SetFinal handles extra logic once the block has been finalized (posted to DA).
-// For a Cosmos SDK app, this is a no-op we do not need to do anything to mark the block as finalized.
+// It publishes all queued events up to this height in the correct sequence, ensuring
+// that events are only emitted after consensus is achieved.
 func (a *Adapter) SetFinal(ctx context.Context, blockHeight uint64) error {
+	return a.publishQueuedBlockEvents(ctx, int64(blockHeight))
+}
+
+func (a *Adapter) publishQueuedBlockEvents(ctx context.Context, persistedHeight int64) error {
+	maxPosReleased := -1
+	for i, v := range a.stackedEvents {
+		h := v.block.Height
+		if h <= persistedHeight && a.blockFilter.IsPublishable(ctx, h) {
+			maxPosReleased = i
+		}
+	}
+	a.Logger.Info("processing stack for soft consensus", "count", len(a.stackedEvents), "soft_consensus", maxPosReleased != -1)
+
+	if maxPosReleased == -1 {
+		return nil
+	}
+	softCommitHeight := a.stackedEvents[maxPosReleased].block.Height
+outerLoop:
+	for i := 0; i <= maxPosReleased; i++ {
+		// todo (Alex): exit loop when ctx cancelled
+		select {
+		case <-ctx.Done():
+			maxPosReleased = i
+			break outerLoop
+		default:
+		}
+		evnt := a.stackedEvents[i]
+		// store events with block response
+		blockRsp, err := a.Store.GetBlockResponse(ctx, uint64(evnt.block.Height))
+		if err != nil {
+			return fmt.Errorf("get block response: %w", err)
+		}
+		blockRsp.Events = evnt.abciResponse.Events
+		if err := a.Store.SaveBlockResponse(ctx, uint64(evnt.block.Height), blockRsp); err != nil {
+			return fmt.Errorf("save block response: %w", err)
+		}
+
+		if err := fireEvents(a.EventBus, evnt.block, evnt.blockID, evnt.abciResponse, evnt.validatorUpdates); err != nil {
+			return fmt.Errorf("fire events: %w", err)
+		}
+		a.Logger.Debug("releasing block events with soft consensus", "height", evnt.block.Height, "soft_consensus", softCommitHeight)
+	}
+	a.stackedEvents = a.stackedEvents[maxPosReleased+1:]
+	a.Logger.Debug("remaining stack after soft consensus", "count", len(a.stackedEvents), "soft_consensus", softCommitHeight)
 	return nil
 }

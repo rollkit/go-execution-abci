@@ -51,7 +51,7 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 	// the retention period for pruning
 	bitmap, err := k.GetAttestationBitmap(ctx, msg.Height)
 	if err != nil && !errors.Is(err, collections.ErrNotFound) {
-		return nil, fmt.Errorf("get attestation bitmap: %w", err)
+		return nil, sdkerr.Wrap(err, "get attestation bitmap")
 	}
 	if bitmap == nil {
 		validators, err := k.stakingKeeper.GetLastValidators(ctx)

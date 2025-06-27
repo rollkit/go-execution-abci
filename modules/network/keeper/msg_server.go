@@ -2,9 +2,11 @@ package keeper
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
-	"cosmossdk.io/errors"
+	"cosmossdk.io/collections"
+	sdkerr "cosmossdk.io/errors"
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
@@ -30,24 +32,27 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 
 	if k.GetParams(ctx).SignMode == types.SignMode_SIGN_MODE_CHECKPOINT &&
 		!k.IsCheckpointHeight(ctx, msg.Height) {
-		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "height %d is not a checkpoint", msg.Height)
+		return nil, sdkerr.Wrapf(sdkerrors.ErrInvalidRequest, "height %d is not a checkpoint", msg.Height)
 	}
 	has, err := k.IsInAttesterSet(ctx, msg.Validator)
 	if err != nil {
-		return nil, errors.Wrapf(err, "in attester set")
+		return nil, sdkerr.Wrapf(err, "in attester set")
 	}
 	if !has {
-		return nil, errors.Wrapf(sdkerrors.ErrUnauthorized, "validator %s not in attester set", msg.Validator)
+		return nil, sdkerr.Wrapf(sdkerrors.ErrUnauthorized, "validator %s not in attester set", msg.Validator)
 	}
 
 	index, found := k.GetValidatorIndex(ctx, msg.Validator)
 	if !found {
-		return nil, errors.Wrapf(sdkerrors.ErrNotFound, "validator index not found for %s", msg.Validator)
+		return nil, sdkerr.Wrapf(sdkerrors.ErrNotFound, "validator index not found for %s", msg.Validator)
 	}
 
 	// todo (Alex): we need to set a limit to not have validators attest old blocks. Also make sure that this relates with
 	// the retention period for pruning
-	bitmap, _ := k.GetAttestationBitmap(ctx, msg.Height)
+	bitmap, err := k.GetAttestationBitmap(ctx, msg.Height)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return nil, sdkerr.Wrap(err, "get attestation bitmap")
+	}
 	if bitmap == nil {
 		validators, err := k.stakingKeeper.GetLastValidators(ctx)
 		if err != nil {
@@ -63,7 +68,7 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 	}
 
 	if k.bitmapHelper.IsSet(bitmap, int(index)) {
-		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator %s already attested for height %d", msg.Validator, msg.Height)
+		return nil, sdkerr.Wrapf(sdkerrors.ErrInvalidRequest, "validator %s already attested for height %d", msg.Validator, msg.Height)
 	}
 
 	// TODO: Verify the vote signature here once we implement vote parsing
@@ -71,12 +76,12 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 	// Set the bit
 	k.bitmapHelper.SetBit(bitmap, int(index))
 	if err := k.SetAttestationBitmap(ctx, msg.Height, bitmap); err != nil {
-		return nil, errors.Wrap(err, "set attestation bitmap")
+		return nil, sdkerr.Wrap(err, "set attestation bitmap")
 	}
 
 	// Store signature using the new collection method
 	if err := k.SetSignature(ctx, msg.Height, msg.Validator, msg.Vote); err != nil {
-		return nil, errors.Wrap(err, "store signature")
+		return nil, sdkerr.Wrap(err, "store signature")
 	}
 
 	epoch := k.GetCurrentEpoch(ctx)
@@ -96,7 +101,7 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 	}
 	k.bitmapHelper.SetBit(epochBitmap, int(index))
 	if err := k.SetEpochBitmap(ctx, epoch, epochBitmap); err != nil {
-		return nil, errors.Wrap(err, "set epoch bitmap")
+		return nil, sdkerr.Wrap(err, "set epoch bitmap")
 	}
 
 	// Emit event
@@ -117,7 +122,7 @@ func (k msgServer) JoinAttesterSet(goCtx context.Context, msg *types.MsgJoinAtte
 
 	valAddr, err := sdk.ValAddressFromBech32(msg.Validator)
 	if err != nil {
-		return nil, errors.Wrapf(sdkerrors.ErrInvalidAddress, "invalid validator address: %s", err)
+		return nil, sdkerr.Wrapf(sdkerrors.ErrInvalidAddress, "invalid validator address: %s", err)
 	}
 
 	validator, err := k.stakingKeeper.GetValidator(ctx, valAddr)
@@ -126,19 +131,19 @@ func (k msgServer) JoinAttesterSet(goCtx context.Context, msg *types.MsgJoinAtte
 	}
 
 	if !validator.IsBonded() {
-		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator must be bonded to join attester set")
+		return nil, sdkerr.Wrapf(sdkerrors.ErrInvalidRequest, "validator must be bonded to join attester set")
 	}
 	has, err := k.IsInAttesterSet(ctx, msg.Validator)
 	if err != nil {
-		return nil, errors.Wrapf(err, "in attester set")
+		return nil, sdkerr.Wrapf(err, "in attester set")
 	}
 	if has {
-		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator already in attester set")
+		return nil, sdkerr.Wrapf(sdkerrors.ErrInvalidRequest, "validator already in attester set")
 	}
 
 	// TODO (Alex): the valset should be updated at the end of an epoch only
 	if err := k.SetAttesterSetMember(ctx, msg.Validator); err != nil {
-		return nil, errors.Wrap(err, "set attester set member")
+		return nil, sdkerr.Wrap(err, "set attester set member")
 	}
 
 	ctx.EventManager().EmitEvent(
@@ -157,15 +162,15 @@ func (k msgServer) LeaveAttesterSet(goCtx context.Context, msg *types.MsgLeaveAt
 
 	has, err := k.IsInAttesterSet(ctx, msg.Validator)
 	if err != nil {
-		return nil, errors.Wrapf(err, "in attester set")
+		return nil, sdkerr.Wrapf(err, "in attester set")
 	}
 	if !has {
-		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "validator not in attester set")
+		return nil, sdkerr.Wrapf(sdkerrors.ErrInvalidRequest, "validator not in attester set")
 	}
 
 	// TODO (Alex): the valset should be updated at the end of an epoch only
 	if err := k.RemoveAttesterSetMember(ctx, msg.Validator); err != nil {
-		return nil, errors.Wrap(err, "remove attester set member")
+		return nil, sdkerr.Wrap(err, "remove attester set member")
 	}
 
 	ctx.EventManager().EmitEvent(
@@ -183,7 +188,7 @@ func (k msgServer) UpdateParams(goCtx context.Context, msg *types.MsgUpdateParam
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
 	if k.GetAuthority() != msg.Authority {
-		return nil, errors.Wrapf(govtypes.ErrInvalidSigner, "invalid authority; expected %s, got %s", k.GetAuthority(), msg.Authority)
+		return nil, sdkerr.Wrapf(govtypes.ErrInvalidSigner, "invalid authority; expected %s, got %s", k.GetAuthority(), msg.Authority)
 	}
 
 	if err := msg.Params.Validate(); err != nil {

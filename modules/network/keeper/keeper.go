@@ -254,8 +254,8 @@ func (k Keeper) CheckQuorum(ctx sdk.Context, votedPower, totalPower uint64) (boo
 // based on the attestation bitmap and quorum rules.
 func (k Keeper) IsSoftConfirmed(ctx sdk.Context, height int64) (bool, error) {
 	bitmap, err := k.GetAttestationBitmap(ctx, height)
-	if err != nil {
-		return false, err
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return false, fmt.Errorf("get attestation bitmap: %w", err)
 	}
 	if bitmap == nil {
 		return false, nil // No bitmap, so cannot be soft-confirmed

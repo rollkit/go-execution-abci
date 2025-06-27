@@ -27,7 +27,7 @@ require (
 	github.com/hashicorp/go-metrics v0.5.4
 	github.com/ipfs/go-datastore v0.8.2
 	github.com/libp2p/go-libp2p v0.41.1
-	github.com/libp2p/go-libp2p-pubsub v0.14.0
+	github.com/libp2p/go-libp2p-pubsub v0.14.1
 	github.com/multiformats/go-multiaddr v0.16.0
 	github.com/prometheus/client_golang v1.22.0
 	github.com/rollkit/rollkit v0.14.2-0.20250626144401-cca03fc1a32a

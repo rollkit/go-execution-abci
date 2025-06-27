@@ -14,18 +14,28 @@ import (
 
 // ToABCIBlock converts Rolkit block into block format defined by ABCI.
 func ToABCIBlock(header *rlktypes.SignedHeader, data *rlktypes.Data, lastCommit *cmttypes.Commit) (*cmttypes.Block, error) {
-	abciHeader, err := ToABCIHeader(&header.Header)
-	if err != nil {
-		return nil, err
-	}
-
 	// validate have one validator
 	if len(header.ProposerAddress) == 0 {
 		return nil, errors.New("proposer address is not set")
 	}
 
-	// set commit hash
-	abciHeader.LastCommitHash = lastCommit.Hash()
+	abciHeader := cmttypes.Header{
+		Version: cmprotoversion.Consensus{
+			Block: cmtversion.BlockProtocol,
+			App:   header.Version.App,
+		},
+		Height:          int64(header.Height()), //nolint:gosec
+		Time:            header.Time(),
+		LastBlockID:     lastCommit.BlockID,
+		LastCommitHash:  lastCommit.Hash(),
+		DataHash:        cmbytes.HexBytes(header.DataHash),
+		ConsensusHash:   cmbytes.HexBytes(header.ConsensusHash),
+		AppHash:         cmbytes.HexBytes(header.AppHash),
+		LastResultsHash: cmbytes.HexBytes(header.LastResultsHash),
+		EvidenceHash:    new(cmttypes.EvidenceData).Hash(),
+		ProposerAddress: header.ProposerAddress,
+		ChainID:         header.ChainID(),
+	}
 
 	// set validator hash
 	if header.Signer.Address != nil {
@@ -44,6 +54,7 @@ func ToABCIBlock(header *rlktypes.SignedHeader, data *rlktypes.Data, lastCommit 
 		},
 		LastCommit: lastCommit,
 	}
+
 	abciBlock.Txs = make([]cmttypes.Tx, len(data.Txs))
 	for i := range data.Txs {
 		abciBlock.Txs[i] = cmttypes.Tx(data.Txs[i])
@@ -66,34 +77,5 @@ func ToABCIBlockMeta(header *rlktypes.SignedHeader, data *rlktypes.Data, lastCom
 		BlockSize: cmblock.Size(),
 		Header:    cmblock.Header,
 		NumTxs:    len(cmblock.Txs),
-	}, nil
-}
-
-// ToABCIHeader converts Rollkit header to Header format defined in ABCI.
-func ToABCIHeader(header *rlktypes.Header) (cmttypes.Header, error) {
-	return cmttypes.Header{
-		Version: cmprotoversion.Consensus{
-			Block: cmtversion.BlockProtocol,
-			App:   header.Version.App,
-		},
-		Height: int64(header.Height()), //nolint:gosec
-		Time:   header.Time(),
-		LastBlockID: cmttypes.BlockID{
-			Hash: cmbytes.HexBytes(header.LastHeaderHash),
-			PartSetHeader: cmttypes.PartSetHeader{
-				Total: 0,
-				Hash:  nil,
-			},
-		},
-		LastCommitHash:  cmbytes.HexBytes(header.LastCommitHash),
-		DataHash:        cmbytes.HexBytes(header.DataHash),
-		ConsensusHash:   cmbytes.HexBytes(header.ConsensusHash),
-		AppHash:         cmbytes.HexBytes(header.AppHash),
-		LastResultsHash: cmbytes.HexBytes(header.LastResultsHash),
-		EvidenceHash:    new(cmttypes.EvidenceData).Hash(),
-		ProposerAddress: header.ProposerAddress,
-		ChainID:         header.ChainID(),
-		// validator hash and next validator hash are not set here
-		// they are set later (in ToABCIBlock)
 	}, nil
 }

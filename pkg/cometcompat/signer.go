@@ -9,22 +9,16 @@ import (
 
 func PayloadProvider() types.SignaturePayloadProvider {
 	return func(header *types.Header) ([]byte, error) {
-		abciHeaderForSigning, err := ToABCIHeader(header)
-		if err != nil {
-			return nil, err
-		}
 		vote := cmtproto.Vote{
-			Type:   cmtproto.PrecommitType,
-			Height: int64(header.Height()), //nolint:gosec
-			Round:  0,
-			BlockID: cmtproto.BlockID{
-				Hash:          abciHeaderForSigning.Hash(),
-				PartSetHeader: cmtproto.PartSetHeader{},
-			},
+			Type:             cmtproto.PrecommitType,
+			Height:           int64(header.Height()), //nolint:gosec
+			Round:            0,
+			BlockID:          cmtproto.BlockID{},
 			Timestamp:        header.Time(),
 			ValidatorAddress: header.ProposerAddress,
 			ValidatorIndex:   0,
 		}
+
 		chainID := header.ChainID()
 		consensusVoteBytes := cmttypes.VoteSignBytes(chainID, &vote)
 

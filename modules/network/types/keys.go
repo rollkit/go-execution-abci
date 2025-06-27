@@ -28,7 +28,7 @@ var (
 	AttestationBitmapPrefix     = collections.NewPrefix("attestation_bitmap")
 	EpochBitmapPrefix           = collections.NewPrefix("epoch_bitmap")
 	AttesterSetPrefix           = collections.NewPrefix("attester_set")
-	CommitPrefix                = collections.NewPrefix("commits")
+	SignaturePrefix             = collections.NewPrefix("signature")
 	StoredAttestationInfoPrefix = collections.NewPrefix("stored_attestation_info")
 	ParamsKey                   = collections.NewPrefix("params")
 )
@@ -56,7 +56,7 @@ func GetAttestationKey(height int64) []byte {
 func GetSignatureKey(height int64, addr string) []byte {
 	bz := make([]byte, 8)
 	binary.BigEndian.PutUint64(bz, uint64(height))
-	return append(append(CommitPrefix, bz...), []byte(addr)...)
+	return append(append(SignaturePrefix, bz...), []byte(addr)...)
 }
 
 // GetEpochBitmapKey returns the key for epoch participation bitmap

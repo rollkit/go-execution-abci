@@ -2,8 +2,10 @@ package keeper
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"cosmossdk.io/collections"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -42,7 +44,10 @@ func (q *queryServer) AttestationBitmap(c context.Context, req *types.QueryAttes
 
 	ctx := sdk.UnwrapSDKContext(c)
 
-	bitmapBytes, _ := q.keeper.GetAttestationBitmap(ctx, req.Height)
+	bitmapBytes, err := q.keeper.GetAttestationBitmap(ctx, req.Height)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return nil, fmt.Errorf("get attestation bitmap: %w", err)
+	}
 	if bitmapBytes == nil {
 		return nil, status.Error(codes.NotFound, "attestation bitmap not found for height")
 	}
@@ -163,8 +168,8 @@ func (q *queryServer) SoftConfirmationStatus(c context.Context, req *types.Query
 		return nil, err
 	}
 	bitmap, err := q.keeper.GetAttestationBitmap(ctx, req.Height)
-	if err != nil {
-		return nil, err
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return nil, fmt.Errorf("get attestation bitmap: %w", err)
 	}
 	totalPower, err := q.keeper.GetTotalPower(ctx)
 	if err != nil {

@@ -1,16 +1,13 @@
 package keeper
 
 import (
+	"errors"
 	"fmt"
-	"time"
 
 	"cosmossdk.io/collections"
 	"cosmossdk.io/core/store"
 	"cosmossdk.io/log"
 	"cosmossdk.io/math"
-	cmbytes "github.com/cometbft/cometbft/libs/bytes"
-	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
-	cmttypes "github.com/cometbft/cometbft/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
@@ -25,20 +22,17 @@ type Keeper struct {
 	bankKeeper    types.BankKeeper
 	authority     string
 	bitmapHelper  *BitmapHelper
-	blockSource   types.BlockSource
 
 	// Collections for state management
-	ValidatorIndex collections.Map[string, uint16]
-	ValidatorPower collections.Map[uint16, uint64]
-
-	//AttestationBitmap tracks attestations for a block
-	AttestationBitmap collections.Map[int64, []byte]
-	// EpochBitmap track tracks participation over a range of epochs
+	ValidatorIndex        collections.Map[string, uint16]
+	ValidatorPower        collections.Map[uint16, uint64]
+	AttestationBitmap     collections.Map[int64, []byte]
 	EpochBitmap           collections.Map[uint64, []byte]
 	AttesterSet           collections.KeySet[string]
-	CommitSignatures      collections.Map[collections.Pair[int64, string], cmtproto.CommitSig]
+	Signatures            collections.Map[collections.Pair[int64, string], []byte]
 	StoredAttestationInfo collections.Map[int64, types.AttestationBitmap]
 	Params                collections.Item[types.Params]
+	Schema                collections.Schema
 }
 
 // NewKeeper creates a new network Keeper instance
@@ -48,7 +42,6 @@ func NewKeeper(
 	sk types.StakingKeeper,
 	ak types.AccountKeeper,
 	bk types.BankKeeper,
-	blockSource types.BlockSource,
 	authority string,
 ) Keeper {
 
@@ -60,25 +53,22 @@ func NewKeeper(
 		bankKeeper:    bk,
 		authority:     authority,
 		bitmapHelper:  NewBitmapHelper(),
-		blockSource:   blockSource,
 
 		ValidatorIndex:        collections.NewMap(sb, types.ValidatorIndexPrefix, "validator_index", collections.StringKey, collections.Uint16Value),
 		ValidatorPower:        collections.NewMap(sb, types.ValidatorPowerPrefix, "validator_power", collections.Uint16Key, collections.Uint64Value),
 		AttestationBitmap:     collections.NewMap(sb, types.AttestationBitmapPrefix, "attestation_bitmap", collections.Int64Key, collections.BytesValue),
 		EpochBitmap:           collections.NewMap(sb, types.EpochBitmapPrefix, "epoch_bitmap", collections.Uint64Key, collections.BytesValue),
 		AttesterSet:           collections.NewKeySet(sb, types.AttesterSetPrefix, "attester_set", collections.StringKey),
-		CommitSignatures:      collections.NewMap(sb, types.CommitPrefix, "commits", collections.PairKeyCodec(collections.Int64Key, collections.StringKey), codec.CollValue[cmtproto.CommitSig](cdc)),
+		Signatures:            collections.NewMap(sb, types.SignaturePrefix, "signatures", collections.PairKeyCodec(collections.Int64Key, collections.StringKey), collections.BytesValue),
 		StoredAttestationInfo: collections.NewMap(sb, types.StoredAttestationInfoPrefix, "stored_attestation_info", collections.Int64Key, codec.CollValue[types.AttestationBitmap](cdc)), // Initialize new collection
 		Params:                collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
 	}
 
-	// The schema is built implicitly when the first collection is created or can be explicitly built.
-	// schema, err := sb.Build()
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// keeper.schema = schema
-
+	schema, err := sb.Build()
+	if err != nil {
+		panic(err)
+	}
+	keeper.Schema = schema
 	return keeper
 }
 
@@ -94,8 +84,11 @@ func (k Keeper) Logger(ctx sdk.Context) log.Logger {
 
 // GetParams get all parameters as types.Params
 func (k Keeper) GetParams(ctx sdk.Context) types.Params {
-	p, _ := k.Params.Get(ctx)
-	return p
+	params, err := k.Params.Get(ctx)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		panic(err)
+	}
+	return params
 }
 
 // SetParams set the params
@@ -205,12 +198,9 @@ func (k Keeper) BuildValidatorIndexMap(ctx sdk.Context) error {
 
 // GetCurrentEpoch returns the current epoch number
 func (k Keeper) GetCurrentEpoch(ctx sdk.Context) uint64 {
-	return k.GetEpochForHeight(ctx, ctx.BlockHeight())
-}
-
-func (k Keeper) GetEpochForHeight(ctx sdk.Context, height int64) uint64 {
 	params := k.GetParams(ctx)
-	return uint64(height) / params.EpochLength
+	height := uint64(ctx.BlockHeight())
+	return height / params.EpochLength
 }
 
 // IsCheckpointHeight checks if a height is a checkpoint
@@ -264,8 +254,8 @@ func (k Keeper) CheckQuorum(ctx sdk.Context, votedPower, totalPower uint64) (boo
 // based on the attestation bitmap and quorum rules.
 func (k Keeper) IsSoftConfirmed(ctx sdk.Context, height int64) (bool, error) {
 	bitmap, err := k.GetAttestationBitmap(ctx, height)
-	if err != nil {
-		return false, err
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return false, fmt.Errorf("get attestation bitmap: %w", err)
 	}
 	if bitmap == nil {
 		return false, nil // No bitmap, so cannot be soft-confirmed
@@ -313,63 +303,23 @@ func (k Keeper) PruneOldBitmaps(ctx sdk.Context, currentEpoch uint64) error {
 	}
 
 	// TODO: Consider pruning signatures associated with pruned heights.
-	// This would involve iterating k.CommitsByHeight and removing entries where height < pruneHeight.
+	// This would involve iterating k.Signatures and removing entries where height < pruneHeight.
 
 	k.Logger(ctx).Info("Pruned old bitmaps and attestation info", "prunedBeforeEpoch", pruneBeforeEpoch, "prunedBeforeHeight", pruneHeight)
 	return nil
 }
 
 // SetSignature stores the vote signature for a given height and validator
-func (k Keeper) SetSignature(ctx sdk.Context, height int64, validatorAddr string, consAddr []byte, timestamp time.Time, signature []byte) error {
-	cmtSig := cmtproto.CommitSig{
-		BlockIdFlag:      cmtproto.BlockIDFlagCommit,
-		ValidatorAddress: consAddr,
-		Timestamp:        timestamp,
-		Signature:        signature,
-	}
-	return k.CommitSignatures.Set(ctx, collections.Join(height, validatorAddr), cmtSig)
+func (k Keeper) SetSignature(ctx sdk.Context, height int64, validatorAddr string, signature []byte) error {
+	return k.Signatures.Set(ctx, collections.Join(height, validatorAddr), signature)
 }
 
 // GetSignature retrieves the vote signature for a given height and validator
-func (k Keeper) GetSignature(ctx sdk.Context, height int64, validatorAddr string) (cmtproto.CommitSig, error) {
-	rsp, err := k.CommitSignatures.Get(ctx, collections.Join(height, validatorAddr))
-	return rsp, err
+func (k Keeper) GetSignature(ctx sdk.Context, height int64, validatorAddr string) ([]byte, error) {
+	return k.Signatures.Get(ctx, collections.Join(height, validatorAddr))
 }
 
 // HasSignature checks if a signature exists for a given height and validator
 func (k Keeper) HasSignature(ctx sdk.Context, height int64, validatorAddr string) (bool, error) {
-	return k.CommitSignatures.Has(ctx, collections.Join(height, validatorAddr))
-}
-
-func (k Keeper) GetCommits(ctx sdk.Context, height int64) (*cmttypes.Commit, error) {
-	header, data, err := k.blockSource.GetBlockData(ctx, uint64(height))
-	if err != nil {
-		return nil, fmt.Errorf("failed to get block at height %d: %w", height, err)
-	}
-	_ = data
-
-	commit := &cmttypes.Commit{
-		Height: height,
-		Round:  0,
-		BlockID: cmttypes.BlockID{
-			Hash:          cmbytes.HexBytes(header.LastHeaderHash),
-			PartSetHeader: cmttypes.PartSetHeader{Total: 0, Hash: nil},
-		},
-		Signatures: make([]cmttypes.CommitSig, 0),
-	}
-	// add the signatures (unordered) // todo (Alex): do we need them ordered?
-	rng := collections.NewPrefixedPairRange[int64, string](height)
-	err = k.CommitSignatures.Walk(ctx, rng, func(key collections.Pair[int64, string], value cmtproto.CommitSig) (bool, error) {
-		var sig cmttypes.CommitSig
-		if err := sig.FromProto(value); err != nil {
-			return true, err
-		}
-		commit.Signatures = append(commit.Signatures, sig)
-		return false, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return commit, nil
+	return k.Signatures.Has(ctx, collections.Join(height, validatorAddr))
 }

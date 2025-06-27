@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	// For error wrapping if needed
+	"cosmossdk.io/collections"
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
@@ -51,7 +51,10 @@ func (k Keeper) EndBlocker(ctx sdk.Context) error {
 
 // processCheckpoint handles checkpoint processing
 func (k Keeper) processCheckpoint(ctx sdk.Context, height int64) error {
-	bitmapBytes, _ := k.GetAttestationBitmap(ctx, height)
+	bitmapBytes, err := k.GetAttestationBitmap(ctx, height)
+	if err != nil && !errors.Is(err, collections.ErrNotFound) {
+		return fmt.Errorf("get attestation bitmap: %w", err)
+	}
 	if bitmapBytes == nil {
 		return nil
 	}

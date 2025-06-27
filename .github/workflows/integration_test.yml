@@ -143,8 +143,8 @@ jobs:
               exit 1
             fi
             
-            # count blocks in log
-            BLOCKS_FOUND=$(grep -c "block executed successfully" chain.log || true)
+            # query the node for the current block height
+            BLOCKS_FOUND=$(gmd query block --output json | tail -n +2 | jq -r '.header.height')
             echo "Found $BLOCKS_FOUND blocks so far (attempt $ATTEMPT/$MAX_ATTEMPTS)"
           done
 

@@ -22,7 +22,6 @@ var (
 	DefaultQuorumFraction   = math.LegacyNewDecWithPrec(667, 3) // 2/3
 	DefaultMinParticipation = math.LegacyNewDecWithPrec(5, 1)   // 1/2
 	DefaultPruneAfter       = uint64(7)
-	DefaultEmergencyMode    = false
 	DefaultSignMode         = SignMode_SIGN_MODE_CHECKPOINT
 )
 
@@ -32,7 +31,6 @@ func NewParams(
 	quorumFraction math.LegacyDec,
 	minParticipation math.LegacyDec,
 	pruneAfter uint64,
-	emergencyMode bool,
 	signMode SignMode,
 ) Params {
 	return Params{
@@ -40,7 +38,6 @@ func NewParams(
 		QuorumFraction:   quorumFraction.String(),
 		MinParticipation: minParticipation.String(),
 		PruneAfter:       pruneAfter,
-		EmergencyMode:    emergencyMode,
 		SignMode:         signMode,
 	}
 }
@@ -52,7 +49,6 @@ func DefaultParams() Params {
 		DefaultQuorumFraction,
 		DefaultMinParticipation,
 		DefaultPruneAfter,
-		DefaultEmergencyMode,
 		DefaultSignMode,
 	)
 }
@@ -64,7 +60,6 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 		paramtypes.NewParamSetPair(KeyQuorumFraction, &p.QuorumFraction, validateQuorumFraction),
 		paramtypes.NewParamSetPair(KeyMinParticipation, &p.MinParticipation, validateMinParticipation),
 		paramtypes.NewParamSetPair(KeyPruneAfter, &p.PruneAfter, validatePruneAfter),
-		paramtypes.NewParamSetPair(KeyEmergencyMode, &p.EmergencyMode, validateEmergencyMode),
 		paramtypes.NewParamSetPair(KeySignMode, &p.SignMode, validateSignMode),
 	}
 }
@@ -81,9 +76,6 @@ func (p Params) Validate() error {
 		return err
 	}
 	if err := validatePruneAfter(p.PruneAfter); err != nil {
-		return err
-	}
-	if err := validateEmergencyMode(p.EmergencyMode); err != nil {
 		return err
 	}
 	if err := validateSignMode(p.SignMode); err != nil {
@@ -154,15 +146,6 @@ func validatePruneAfter(i interface{}) error {
 	return nil
 }
 
-func validateEmergencyMode(i interface{}) error {
-	_, ok := i.(bool)
-	if !ok {
-		return fmt.Errorf("invalid parameter type: %T", i)
-	}
-
-	return nil
-}
-
 func validateSignMode(i interface{}) error {
 	v, ok := i.(SignMode)
 	if !ok {
@@ -173,7 +156,7 @@ func validateSignMode(i interface{}) error {
 		return fmt.Errorf("sign mode cannot be unspecified")
 	}
 
-	if v < SignMode_SIGN_MODE_CHECKPOINT || v > SignMode_SIGN_MODE_IBC_ONLY {
+	if v != SignMode_SIGN_MODE_CHECKPOINT {
 		return fmt.Errorf("invalid sign mode: %d", v)
 	}
 

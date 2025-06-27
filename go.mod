@@ -15,6 +15,7 @@ require (
 	cosmossdk.io/log v1.6.0
 	cosmossdk.io/math v1.5.3
 	cosmossdk.io/store v1.1.2
+	github.com/celestiaorg/go-header v0.6.6
 	github.com/cometbft/cometbft v0.38.17
 	github.com/cometbft/cometbft-db v0.14.1
 	github.com/cosmos/cosmos-proto v1.0.0-beta.5
@@ -29,10 +30,10 @@ require (
 	github.com/libp2p/go-libp2p-pubsub v0.14.0
 	github.com/multiformats/go-multiaddr v0.16.0
 	github.com/prometheus/client_golang v1.22.0
-	github.com/rollkit/rollkit v0.14.2-0.20250625130707-6ad581a97a16
-	github.com/rollkit/rollkit/core v0.0.0-20250625130707-6ad581a97a16
-	github.com/rollkit/rollkit/da v0.0.0-20250625130707-6ad581a97a16
-	github.com/rollkit/rollkit/sequencers/single v0.0.0-20250625130707-6ad581a97a16
+	github.com/rollkit/rollkit v0.14.2-0.20250626144401-cca03fc1a32a
+	github.com/rollkit/rollkit/core v0.0.0-20250626144401-cca03fc1a32a
+	github.com/rollkit/rollkit/da v0.0.0-20250626144401-cca03fc1a32a
+	github.com/rollkit/rollkit/sequencers/single v0.0.0-20250626144401-cca03fc1a32a
 	github.com/rs/cors v1.11.1
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
@@ -77,7 +78,6 @@ require (
 	github.com/bufbuild/protoplugin v0.0.0-20250218205857-750e09ce93e1 // indirect
 	github.com/bytedance/sonic v1.13.2 // indirect
 	github.com/bytedance/sonic/loader v0.2.4 // indirect
-	github.com/celestiaorg/go-header v0.6.6 // indirect
 	github.com/celestiaorg/go-libp2p-messenger v0.2.2 // indirect
 	github.com/celestiaorg/go-square/v2 v2.2.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect

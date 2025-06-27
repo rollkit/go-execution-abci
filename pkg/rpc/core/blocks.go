@@ -140,8 +140,6 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 		return nil, err
 	}
 
-	abciBlock.LastCommit.Signatures[0].Signature = header.Signature
-
 	return &ctypes.ResultBlock{
 		BlockID: cmttypes.BlockID{Hash: abciBlock.Hash()},
 		Block:   abciBlock,
@@ -208,20 +206,15 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 		}},
 	}
 
-	// First apply ToABCIBlock to get the final header with all transformations
 	abciBlock, err := cometcompat.ToABCIBlock(header, rollkitData, abciCommit)
 	if err != nil {
 		return nil, err
 	}
 
-	// Update the commit's BlockID to match the final ABCI block hash
-	abciBlock.LastCommit.BlockID.Hash = abciBlock.Header.Hash()
-	abciBlock.LastCommit.Signatures[0].Signature = header.Signature
-
 	return &ctypes.ResultCommit{
 		SignedHeader: cmttypes.SignedHeader{
 			Header: &abciBlock.Header,
-			Commit: abciBlock.LastCommit,
+			Commit: abciCommit,
 		},
 		CanonicalCommit: true,
 	}, nil

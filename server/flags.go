@@ -6,12 +6,17 @@ import (
 	"github.com/rollkit/rollkit/pkg/config"
 )
 
+const FlagNetworkSoftConfirmation = "rollkit.network.soft-confirmation"
+
 // AddFlags adds Rollkit specific configuration options to cobra Command.
 func AddFlags(cmd *cobra.Command) {
 	def := config.DefaultConfig
 
 	// Add CI flag for testing
 	cmd.Flags().Bool("ci", false, "run node for ci testing")
+
+	// Add network flags
+	cmd.Flags().Bool(FlagNetworkSoftConfirmation, false, "enable soft confirmation by the validator network")
 
 	// Add base flags
 	cmd.Flags().String(config.FlagDBPath, def.DBPath, "path for the node database")

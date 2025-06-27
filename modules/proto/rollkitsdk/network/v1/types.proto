@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package rollkitsdk.network.v1;
+
+option go_package = "github.com/rollkit/go-execution-abci/modules/network/types";
+
+import "gogoproto/gogo.proto";
+import "cosmos_proto/cosmos.proto";
+import "google/protobuf/duration.proto";
+
+// Params defines the parameters for the network module.
+message Params {
+  // epoch_length is the number of blocks per attestation window
+  uint64 epoch_length = 1;
+  
+  // quorum_fraction is the voting power needed for soft-finality (e.g., "2/3")
+  string quorum_fraction = 2 [(cosmos_proto.scalar) = "cosmos.Dec"];
+  
+  // min_participation is the ejection threshold inside an epoch (e.g., "1/2")
+  string min_participation = 3 [(cosmos_proto.scalar) = "cosmos.Dec"];
+  
+  // prune_after is the number of epochs to retain attestation bitmaps
+  uint64 prune_after = 4;
+  
+  // sign_mode determines when validators must sign
+  SignMode sign_mode = 5;
+}
+
+// SignMode defines when validators must sign
+enum SignMode {
+  // SIGN_MODE_UNSPECIFIED is invalid
+  SIGN_MODE_UNSPECIFIED = 0;
+  
+  // SIGN_MODE_CHECKPOINT means validators sign only at checkpoint heights
+  SIGN_MODE_CHECKPOINT = 1;
+}
+
+// AttestationBitmap stores the bitmap and metadata for a checkpoint
+message AttestationBitmap {
+  // height is the checkpoint height
+  int64 height = 1;
+  
+  // bitmap is the validator participation bitmap
+  bytes bitmap = 2;
+  
+  // voted_power is the total voting power that attested
+  uint64 voted_power = 3;
+  
+  // total_power is the total voting power at this height
+  uint64 total_power = 4;
+  
+  // soft_confirmed indicates if quorum was reached
+  bool soft_confirmed = 5;
+}
+
+// ValidatorIndex maps a validator address to its bitmap index
+message ValidatorIndex {
+  // address is the validator operator address
+  string address = 1 [(cosmos_proto.scalar) = "cosmos.AddressString"];
+  
+  // index is the position in the bitmap
+  uint32 index = 2;
+  
+  // power is the cached voting power
+  uint64 power = 3;
+}

@@ -22,6 +22,7 @@ type Keeper struct {
 	bankKeeper    types.BankKeeper
 	authority     string
 	bitmapHelper  *BitmapHelper
+	blockSource   types.BlockSource
 
 	// Collections for state management
 	ValidatorIndex        collections.Map[string, uint16]
@@ -42,6 +43,7 @@ func NewKeeper(
 	sk types.StakingKeeper,
 	ak types.AccountKeeper,
 	bk types.BankKeeper,
+	blockSource types.BlockSource,
 	authority string,
 ) Keeper {
 
@@ -53,6 +55,7 @@ func NewKeeper(
 		bankKeeper:    bk,
 		authority:     authority,
 		bitmapHelper:  NewBitmapHelper(),
+		blockSource:   blockSource,
 
 		ValidatorIndex:        collections.NewMap(sb, types.ValidatorIndexPrefix, "validator_index", collections.StringKey, collections.Uint16Value),
 		ValidatorPower:        collections.NewMap(sb, types.ValidatorPowerPrefix, "validator_power", collections.Uint16Key, collections.Uint64Value),

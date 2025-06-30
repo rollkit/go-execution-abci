@@ -122,12 +122,10 @@ func TestJoinAttesterSet(t *testing.T) {
 func TestAttest(t *testing.T) {
 	const epochLength = 10
 	var (
-		myHash      = sha256.Sum256([]byte("app_hash"))
-		myAppHash   = myHash[:]
-		voteSigner  = ed25519.GenPrivKey()
-		valAddrStr  = sdk.ValAddress(voteSigner.PubKey().Address()).String()
-		validVote   = VoteFixture(myAppHash, voteSigner)
-		validVoteBz = must(proto.Marshal(validVote))
+		myHash     = sha256.Sum256([]byte("app_hash"))
+		myAppHash  = myHash[:]
+		voteSigner = ed25519.GenPrivKey()
+		valAddrStr = sdk.ValAddress(voteSigner.PubKey().Address()).String()
 	)
 
 	// Setup test environment with block store
@@ -145,28 +143,32 @@ func TestAttest(t *testing.T) {
 	var signature rollkittypes.Signature
 	require.NoError(t, env.BlockStore.SaveBlockData(env.Ctx, signedHeader, data, &signature))
 
+	var (
+		validVote   = VoteFixture(myAppHash, voteSigner)
+		validVoteBz = must(proto.Marshal(validVote))
+	)
 	parentCtx := env.Ctx
 
 	specs := map[string]struct {
-		setup  func(t *testing.T, env testEnv) testEnv
+		setup  func(t *testing.T, env testEnv) sdk.Context
 		msg    func(t *testing.T) *types.MsgAttest
 		expErr error
 	}{
 		"valid attestation": {
-			setup: func(t *testing.T, env testEnv) testEnv {
+			setup: func(t *testing.T, env testEnv) sdk.Context {
 				require.NoError(t, env.Keeper.SetAttesterSetMember(env.Ctx, valAddrStr))
 				require.NoError(t, env.Keeper.SetValidatorIndex(env.Ctx, valAddrStr, 0, 100))
-				return env
+				return env.Ctx
 			},
 			msg: func(t *testing.T) *types.MsgAttest {
 				return &types.MsgAttest{Validator: valAddrStr, Height: epochLength, Vote: validVoteBz}
 			},
 		},
 		"invalid vote content": {
-			setup: func(t *testing.T, env testEnv) testEnv {
+			setup: func(t *testing.T, env testEnv) sdk.Context {
 				require.NoError(t, env.Keeper.SetAttesterSetMember(env.Ctx, valAddrStr))
 				require.NoError(t, env.Keeper.SetValidatorIndex(env.Ctx, valAddrStr, 0, 100))
-				return env
+				return env.Ctx
 			},
 			msg: func(t *testing.T) *types.MsgAttest {
 				return &types.MsgAttest{Validator: valAddrStr, Height: epochLength, Vote: []byte("not a valid proto vote")}
@@ -174,9 +176,9 @@ func TestAttest(t *testing.T) {
 			expErr: sdkerrors.ErrInvalidRequest,
 		},
 		"validator not in attester set": {
-			setup: func(t *testing.T, env testEnv) testEnv {
+			setup: func(t *testing.T, env testEnv) sdk.Context {
 				require.NoError(t, env.Keeper.SetValidatorIndex(env.Ctx, valAddrStr, 0, 100))
-				return env
+				return env.Ctx
 			},
 			msg: func(t *testing.T) *types.MsgAttest {
 				return &types.MsgAttest{Validator: valAddrStr, Height: epochLength, Vote: validVoteBz}
@@ -184,10 +186,10 @@ func TestAttest(t *testing.T) {
 			expErr: sdkerrors.ErrUnauthorized,
 		},
 		"invalid signature": {
-			setup: func(t *testing.T, env testEnv) testEnv {
+			setup: func(t *testing.T, env testEnv) sdk.Context {
 				require.NoError(t, env.Keeper.SetAttesterSetMember(env.Ctx, valAddrStr))
 				require.NoError(t, env.Keeper.SetValidatorIndex(env.Ctx, valAddrStr, 0, 100))
-				return env
+				return env.Ctx
 			},
 			msg: func(t *testing.T) *types.MsgAttest {
 				invalidVote := VoteFixture(myAppHash, voteSigner, func(vote *cmtproto.Vote) {
@@ -198,10 +200,10 @@ func TestAttest(t *testing.T) {
 			expErr: sdkerrors.ErrInvalidRequest,
 		},
 		"not a checkpoint height": {
-			setup: func(t *testing.T, env testEnv) testEnv {
+			setup: func(t *testing.T, env testEnv) sdk.Context {
 				require.NoError(t, env.Keeper.SetAttesterSetMember(env.Ctx, valAddrStr))
 				require.NoError(t, env.Keeper.SetValidatorIndex(env.Ctx, valAddrStr, 0, 100))
-				return env
+				return env.Ctx
 			},
 			msg: func(t *testing.T) *types.MsgAttest {
 				return &types.MsgAttest{Validator: valAddrStr, Height: epochLength + 1, Vote: validVoteBz}
@@ -209,11 +211,10 @@ func TestAttest(t *testing.T) {
 			expErr: sdkerrors.ErrInvalidRequest,
 		},
 		"vote window expired": {
-			setup: func(t *testing.T, env testEnv) testEnv {
+			setup: func(t *testing.T, env testEnv) sdk.Context {
 				require.NoError(t, env.Keeper.SetAttesterSetMember(env.Ctx, valAddrStr))
 				require.NoError(t, env.Keeper.SetValidatorIndex(env.Ctx, valAddrStr, 0, 100))
-				env.Ctx = env.Ctx.WithBlockHeight(2*epochLength + 1)
-				return env
+				return env.Ctx.WithBlockHeight(2*epochLength + 1)
 			},
 			msg: func(t *testing.T) *types.MsgAttest {
 				return &types.MsgAttest{Validator: valAddrStr, Height: epochLength, Vote: validVoteBz}
@@ -221,11 +222,10 @@ func TestAttest(t *testing.T) {
 			expErr: sdkerrors.ErrInvalidRequest,
 		},
 		"voting for a future epoch": {
-			setup: func(t *testing.T, env testEnv) testEnv {
+			setup: func(t *testing.T, env testEnv) sdk.Context {
 				require.NoError(t, env.Keeper.SetAttesterSetMember(env.Ctx, valAddrStr))
 				require.NoError(t, env.Keeper.SetValidatorIndex(env.Ctx, valAddrStr, 0, 100))
-				env.Ctx = env.Ctx.WithBlockHeight(2 * epochLength)
-				return env
+				return env.Ctx.WithBlockHeight(2 * epochLength)
 			},
 			msg: func(t *testing.T) *types.MsgAttest {
 				return &types.MsgAttest{Validator: valAddrStr, Height: 3 * epochLength, Vote: validVoteBz}
@@ -238,18 +238,18 @@ func TestAttest(t *testing.T) {
 			// Create a new environment for each test case with a cached context
 			testEnv := env
 			testEnv.Ctx, _ = parentCtx.CacheContext()
-			testEnv = spec.setup(t, testEnv)
+			ctx := spec.setup(t, testEnv)
 
 			// when
 			srcMsg := spec.msg(t)
-			gotRsp, gotErr := testEnv.Server.Attest(testEnv.Ctx, srcMsg)
+			gotRsp, gotErr := testEnv.Server.Attest(ctx, srcMsg)
 
 			// then
 			if spec.expErr != nil {
 				require.Error(t, gotErr)
 				require.ErrorIs(t, gotErr, spec.expErr)
 				// and ensure the signature is not stored
-				_, err := testEnv.Keeper.GetSignature(testEnv.Ctx, srcMsg.Height, valAddrStr)
+				_, err := testEnv.Keeper.GetSignature(ctx, srcMsg.Height, valAddrStr)
 				assert.ErrorIs(t, err, collections.ErrNotFound)
 				return
 			}
@@ -258,13 +258,13 @@ func TestAttest(t *testing.T) {
 			require.NotNil(t, gotRsp)
 
 			// and attestation marked
-			bitmap, gotErr := testEnv.Keeper.GetAttestationBitmap(testEnv.Ctx, srcMsg.Height)
+			bitmap, gotErr := testEnv.Keeper.GetAttestationBitmap(ctx, srcMsg.Height)
 			require.NoError(t, gotErr)
 			require.NotEmpty(t, bitmap)
 			require.Equal(t, byte(1), bitmap[0])
 
 			// and the signature was stored properly
-			gotSig, err := testEnv.Keeper.GetSignature(testEnv.Ctx, srcMsg.Height, valAddrStr)
+			gotSig, err := testEnv.Keeper.GetSignature(ctx, srcMsg.Height, valAddrStr)
 			require.NoError(t, err)
 			var vote cmtproto.Vote
 			require.NoError(t, proto.Unmarshal(srcMsg.Vote, &vote))

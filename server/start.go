@@ -387,7 +387,7 @@ func setupNodeAndExecutor(
 	metrics := node.DefaultMetricsProvider(rollkitcfg.Instrumentation)
 
 	_, p2pMetrics := metrics(rollkitGenesis.ChainID)
-	p2pClient, err := p2p.NewClient(rollkitcfg, nodeKey, database, logger.With("module", "p2p"), p2pMetrics)
+	p2pClient, err := p2p.NewClient(rollkitcfg, nodeKey, database, NewLogAdapter(logger.With("module", "p2p")), p2pMetrics)
 	if err != nil {
 		return nil, nil, cleanupFn, err
 	}
@@ -429,7 +429,7 @@ func setupNodeAndExecutor(
 	executor.SetMempool(mempool)
 
 	// create the DA client
-	daClient, err := jsonrpc.NewClient(ctx, logger, rollkitcfg.DA.Address, rollkitcfg.DA.AuthToken, rollkitcfg.DA.Namespace)
+	daClient, err := jsonrpc.NewClient(ctx, NewLogAdapter(logger), rollkitcfg.DA.Address, rollkitcfg.DA.AuthToken, rollkitcfg.DA.Namespace)
 	if err != nil {
 		return nil, nil, cleanupFn, fmt.Errorf("failed to create DA client: %w", err)
 	}
@@ -448,7 +448,7 @@ func setupNodeAndExecutor(
 
 	sequencer, err := single.NewSequencer(
 		ctx,
-		logger,
+		NewLogAdapter(logger),
 		database,
 		&daClient.DA,
 		[]byte(rollkitGenesis.ChainID),
@@ -471,7 +471,7 @@ func setupNodeAndExecutor(
 		*rollkitGenesis,
 		database,
 		metrics,
-		logger,
+		NewLogAdapter(logger),
 		cometcompat.PayloadProvider(),
 	)
 	if err != nil {

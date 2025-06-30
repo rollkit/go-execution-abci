@@ -47,13 +47,13 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 		return nil, errors.Wrapf(sdkerrors.ErrNotFound, "validator index not found for %s", msg.Validator)
 	}
 
-	if err := k.updateAttestationBitmap(ctx, msg, valIndexPos); err != nil {
-		return nil, errors.Wrap(err, "update attestation bitmap")
-	}
-
 	vote, err := k.verifyVote(ctx, msg)
 	if err != nil {
 		return nil, err
+	}
+
+	if err := k.updateAttestationBitmap(ctx, msg, valIndexPos); err != nil {
+		return nil, errors.Wrap(err, "update attestation bitmap")
 	}
 
 	if err := k.SetSignature(ctx, msg.Height, msg.Validator, vote.Signature); err != nil {
@@ -156,6 +156,14 @@ func (k msgServer) verifyVote(ctx sdk.Context, msg *types.MsgAttest) (*cmtproto.
 	if msg.Height != vote.Height {
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "vote height does not match attestation height")
 	}
+	if senderAddr, err := sdk.ValAddressFromBech32(msg.Validator); err != nil {
+		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "invalid validator address: %s", err)
+	} else if !bytes.Equal(senderAddr, vote.ValidatorAddress) {
+		return nil, errors.Wrapf(sdkerrors.ErrUnauthorized, "vote validator address does not match attestation validator address")
+	}
+	if len(vote.Signature) == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("empty signature")
+	}
 	header, _, err := k.blockSource.GetBlockData(ctx, uint64(vote.Height))
 	if err != nil {
 		return nil, errors.Wrapf(err, "block data for height %d", vote.Height)
@@ -168,8 +176,8 @@ func (k msgServer) verifyVote(ctx sdk.Context, msg *types.MsgAttest) (*cmtproto.
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "vote block ID hash does not match app hash for height %d", vote.Height)
 	}
 
-	maxClockDrift := 5 * time.Second // todo (Alex): make this a parameter?
-	if drift := vote.Timestamp.Sub(header.Time()); drift < 0*time.Nanosecond || drift > maxClockDrift {
+	maxClockDrift := time.Duration(k.GetParams(ctx).MaxClockDrift)
+	if drift := vote.Timestamp.Sub(header.Time()); drift < 0 || drift > maxClockDrift {
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "vote timestamp drift exceeds limit: %s", drift)
 	}
 

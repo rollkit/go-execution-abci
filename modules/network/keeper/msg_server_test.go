@@ -275,10 +275,11 @@ func TestAttest(t *testing.T) {
 
 func TestVerifyVote(t *testing.T) {
 	var (
-		myHash           = sha256.Sum256([]byte("app_hash"))
-		myAppHash        = myHash[:]
-		validatorPrivKey = ed25519.GenPrivKey()
-		valAddrStr       = sdk.ValAddress(validatorPrivKey.PubKey().Address()).String()
+		myHash                = sha256.Sum256([]byte("app_hash"))
+		myAppHash             = myHash[:]
+		validatorPrivKey      = ed25519.GenPrivKey()
+		valAddrStr            = sdk.ValAddress(validatorPrivKey.PubKey().Address()).String()
+		otherValidatorPrivKey = ed25519.GenPrivKey()
 	)
 
 	// Setup test environment with block store
@@ -299,12 +300,14 @@ func TestVerifyVote(t *testing.T) {
 
 	testCases := map[string]struct {
 		voteFn func(t *testing.T) *cmtproto.Vote
+		sender string
 		expErr error
 	}{
 		"valid vote": {
 			voteFn: func(t *testing.T) *cmtproto.Vote {
 				return VoteFixture(myAppHash, validatorPrivKey)
 			},
+			sender: valAddrStr,
 		},
 		"timestamp drift": {
 			voteFn: func(t *testing.T) *cmtproto.Vote {
@@ -313,6 +316,7 @@ func TestVerifyVote(t *testing.T) {
 					vote.Signature = must(validatorPrivKey.Sign(cmttypes.VoteSignBytes("testing", vote)))
 				})
 			},
+			sender: valAddrStr,
 			expErr: sdkerrors.ErrInvalidRequest,
 		},
 		"block data not found": {
@@ -322,6 +326,7 @@ func TestVerifyVote(t *testing.T) {
 					vote.Signature = must(validatorPrivKey.Sign(cmttypes.VoteSignBytes("testing", vote)))
 				})
 			},
+			sender: valAddrStr,
 			expErr: sdkerrors.ErrInvalidRequest,
 		},
 		"vote and block hash mismatch": {
@@ -329,13 +334,15 @@ func TestVerifyVote(t *testing.T) {
 				hash := sha256.Sum256([]byte("wrong_hash"))
 				return VoteFixture(hash[:], validatorPrivKey)
 			},
+			sender: valAddrStr,
 			expErr: sdkerrors.ErrInvalidRequest,
 		},
 		"validator not found": {
 			voteFn: func(t *testing.T) *cmtproto.Vote {
 				return VoteFixture(myAppHash, ed25519.GenPrivKey())
 			},
-			expErr: sdkerrors.ErrNotFound,
+			expErr: sdkerrors.ErrUnauthorized,
+			sender: sdk.ValAddress(otherValidatorPrivKey.PubKey().Address()).String(),
 		},
 		"invalid vote signature": {
 			voteFn: func(t *testing.T) *cmtproto.Vote {
@@ -343,7 +350,15 @@ func TestVerifyVote(t *testing.T) {
 					vote.Signature = []byte("invalid signature")
 				})
 			},
+			sender: valAddrStr,
 			expErr: sdkerrors.ErrInvalidRequest,
+		},
+		"invalid sender": {
+			voteFn: func(t *testing.T) *cmtproto.Vote {
+				return VoteFixture(myAppHash, validatorPrivKey)
+			},
+			sender: sdk.ValAddress(otherValidatorPrivKey.PubKey().Address()).String(),
+			expErr: sdkerrors.ErrUnauthorized,
 		},
 	}
 	for name, spec := range testCases {
@@ -351,7 +366,11 @@ func TestVerifyVote(t *testing.T) {
 			ctx, _ := parentCtx.CacheContext()
 
 			// when
-			vote, err := env.Server.verifyVote(ctx, &types.MsgAttest{Height: 10, Vote: must(proto.Marshal(spec.voteFn(t)))})
+			vote, err := env.Server.verifyVote(ctx, &types.MsgAttest{
+				Height:    10,
+				Validator: spec.sender,
+				Vote:      must(proto.Marshal(spec.voteFn(t))),
+			})
 
 			// then
 			if spec.expErr != nil {

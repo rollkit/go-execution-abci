@@ -60,7 +60,7 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 		return nil, errors.Wrap(err, "store signature")
 	}
 
-	if err := k.updateEpochBitmap(ctx, k.GetEpochForHeight(ctx, msg.Height), valIndexPos); err != nil {
+	if err := k.updateEpochBitmap(ctx, uint64(msg.Height), valIndexPos); err != nil {
 		return nil, err
 	}
 

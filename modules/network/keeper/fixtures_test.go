@@ -21,7 +21,7 @@ import (
 	"github.com/rollkit/go-execution-abci/modules/network/types"
 )
 
-func HeaderFixture(signer *ed25519.PrivKey, myAppHash []byte, mutators ...func(*rollkittypes.SignedHeader)) *rollkittypes.SignedHeader {
+func HeaderFixture(signer *ed25519.PrivKey, appHash []byte, mutators ...func(*rollkittypes.SignedHeader)) *rollkittypes.SignedHeader {
 	header := rollkittypes.Header{
 		BaseHeader: rollkittypes.BaseHeader{
 			Height:  10,
@@ -30,14 +30,14 @@ func HeaderFixture(signer *ed25519.PrivKey, myAppHash []byte, mutators ...func(*
 		},
 		Version:         rollkittypes.Version{Block: 1, App: 1},
 		ProposerAddress: signer.PubKey().Address(),
-		AppHash:         myAppHash,
+		AppHash:         appHash,
 		DataHash:        []byte("data_hash"),
 		ConsensusHash:   []byte("consensus_hash"),
 		ValidatorHash:   []byte("validator_hash"),
 	}
 	signedHeader := &rollkittypes.SignedHeader{
 		Header:    header,
-		Signature: myAppHash,
+		Signature: appHash,
 		Signer:    rollkittypes.Signer{PubKey: must(crypto.UnmarshalEd25519PublicKey(signer.PubKey().Bytes()))},
 	}
 	for _, m := range mutators {

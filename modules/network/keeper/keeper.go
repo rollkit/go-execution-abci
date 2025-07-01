@@ -22,7 +22,6 @@ type Keeper struct {
 	bankKeeper    types.BankKeeper
 	authority     string
 	bitmapHelper  *BitmapHelper
-	blockSource   types.BlockSource
 
 	// Collections for state management
 	ValidatorIndex        collections.Map[string, uint16]
@@ -43,7 +42,6 @@ func NewKeeper(
 	sk types.StakingKeeper,
 	ak types.AccountKeeper,
 	bk types.BankKeeper,
-	blockSource types.BlockSource,
 	authority string,
 ) Keeper {
 
@@ -55,7 +53,6 @@ func NewKeeper(
 		bankKeeper:    bk,
 		authority:     authority,
 		bitmapHelper:  NewBitmapHelper(),
-		blockSource:   blockSource,
 
 		ValidatorIndex:        collections.NewMap(sb, types.ValidatorIndexPrefix, "validator_index", collections.StringKey, collections.Uint16Value),
 		ValidatorPower:        collections.NewMap(sb, types.ValidatorPowerPrefix, "validator_power", collections.Uint16Key, collections.Uint64Value),
@@ -219,7 +216,7 @@ func (k Keeper) IsCheckpointHeight(ctx sdk.Context, height int64) bool {
 // CalculateVotedPower calculates the total voted power from a bitmap
 func (k Keeper) CalculateVotedPower(ctx sdk.Context, bitmap []byte) (uint64, error) {
 	var votedPower uint64
-	for i := 0; i < len(bitmap)*8; i++ {
+	for i := range len(bitmap) * 8 {
 		if k.bitmapHelper.IsSet(bitmap, i) {
 			power, err := k.GetValidatorPower(ctx, uint16(i))
 			if err != nil {

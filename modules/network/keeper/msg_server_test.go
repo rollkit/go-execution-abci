@@ -408,7 +408,7 @@ func setupTestEnv(t *testing.T, height int64) testEnv {
 	bs := rstore.New(rollkitPrefixStore)
 
 	authority := authtypes.NewModuleAddress("gov")
-	keeper := NewKeeper(cdc, runtime.NewKVStoreService(keys[types.StoreKey]), &sk, nil, nil, bs, authority.String())
+	keeper := NewKeeper(cdc, runtime.NewKVStoreService(keys[types.StoreKey]), &sk, nil, nil, authority.String())
 
 	ctx := sdk.NewContext(cms, cmtproto.Header{
 		ChainID: "testing",

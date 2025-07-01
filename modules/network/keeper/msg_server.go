@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"time"
 
 	"cosmossdk.io/collections"
 	"cosmossdk.io/errors"
@@ -164,7 +163,12 @@ func (k msgServer) verifyVote(ctx sdk.Context, msg *types.MsgAttest) (*cmtproto.
 	if len(vote.Signature) == 0 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("empty signature")
 	}
-	header, _, err := k.blockSource.GetBlockData(ctx, uint64(vote.Height))
+
+	headerSource, err := HeaderSource(ctx)
+	if err != nil {
+		return nil, sdkerrors.ErrInvalidType.Wrap(err.Error())
+	}
+	header, _, err := headerSource.GetBlockData(ctx, uint64(vote.Height))
 	if err != nil {
 		return nil, errors.Wrapf(err, "block data for height %d", vote.Height)
 	}
@@ -176,7 +180,7 @@ func (k msgServer) verifyVote(ctx sdk.Context, msg *types.MsgAttest) (*cmtproto.
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "vote block ID hash does not match app hash for height %d", vote.Height)
 	}
 
-	maxClockDrift := time.Duration(k.GetParams(ctx).MaxClockDrift)
+	maxClockDrift := k.GetParams(ctx).MaxClockDrift
 	if drift := vote.Timestamp.Sub(header.Time()); drift < 0 || drift > maxClockDrift {
 		return nil, errors.Wrapf(sdkerrors.ErrInvalidRequest, "vote timestamp drift exceeds limit: %s", drift)
 	}

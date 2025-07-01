@@ -731,3 +731,7 @@ outerLoop:
 	a.Logger.Debug("remaining stack after soft consensus", "count", len(a.stackedEvents), "soft_consensus", softCommitHeight)
 	return nil
 }
+
+func (a *Adapter) GetExecutionMode() execution.ExecutionMode {
+	return execution.ExecutionModeDelayed
+}

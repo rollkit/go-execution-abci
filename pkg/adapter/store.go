@@ -11,6 +11,7 @@ import (
 	proto "github.com/cosmos/gogoproto/proto"
 	ds "github.com/ipfs/go-datastore"
 	kt "github.com/ipfs/go-datastore/keytransform"
+	rollkittypes "github.com/rollkit/rollkit/types"
 )
 
 const (
@@ -104,4 +105,23 @@ func (s *Store) GetBlockResponse(ctx context.Context, height uint64) (*abci.Resp
 	}
 
 	return resp, nil
+}
+
+func ValidatorHasher(store *Store) func() (rollkittypes.Hash, error) {
+	return func() (rollkittypes.Hash, error) {
+		s, err := store.LoadState(context.Background())
+
+		if err != nil {
+			return make(rollkittypes.Hash, 32), err
+		}
+
+		hash := s.Validators.Hash()
+
+		fmt.Printf("validator hash: %x\n", hash)
+
+		if hash == nil {
+			return make(rollkittypes.Hash, 32), nil
+		}
+		return hash, nil
+	}
 }

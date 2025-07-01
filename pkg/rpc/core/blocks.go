@@ -78,7 +78,7 @@ func BlockSearch(
 			return nil, fmt.Errorf("failed to get last commit for block %d: %w", results[i], err)
 		}
 
-		block, err := cometcompat.ToABCIBlock(header, data, lastCommit, nil)
+		block, err := cometcompat.ToABCIBlock(header, data, lastCommit)
 		if err != nil {
 			return nil, err
 		}
@@ -135,7 +135,7 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 		return nil, fmt.Errorf("failed to get last commit for block %d: %w", heightValue, err)
 	}
 
-	block, err := cometcompat.ToABCIBlock(header, data, lastCommit, nil)
+	block, err := cometcompat.ToABCIBlock(header, data, lastCommit)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +188,7 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 		return nil, fmt.Errorf("failed to get last commit for block %d: %w", header.Height(), err)
 	}
 
-	block, err := cometcompat.ToABCIBlock(header, data, lastCommit, nil)
+	block, err := cometcompat.ToABCIBlock(header, data, lastCommit)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +235,7 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 		}},
 	}
 
-	block, err := cometcompat.ToABCIBlock(header, rollkitData, abciCommit, nil)
+	block, err := cometcompat.ToABCIBlock(header, rollkitData, abciCommit)
 	if err != nil {
 		return nil, err
 	}
@@ -335,7 +335,7 @@ func HeaderByHash(ctx *rpctypes.Context, hash cmbytes.HexBytes) (*ctypes.ResultH
 		return nil, fmt.Errorf("failed to get last commit for block %d: %w", header.Height(), err)
 	}
 
-	blockMeta, err := cometcompat.ToABCIBlockMeta(header, data, lastCommit, nil)
+	blockMeta, err := cometcompat.ToABCIBlockMeta(header, data, lastCommit)
 	if err != nil {
 		return nil, err
 	}
@@ -378,7 +378,7 @@ func BlockchainInfo(ctx *rpctypes.Context, minHeight, maxHeight int64) (*ctypes.
 				return nil, fmt.Errorf("failed to get last commit for block %d: %w", block.header.Height(), err)
 			}
 
-			cmblockmeta, err := cometcompat.ToABCIBlockMeta(block.header, block.data, lastCommit, nil)
+			cmblockmeta, err := cometcompat.ToABCIBlockMeta(block.header, block.data, lastCommit)
 			if err != nil {
 				return nil, err
 			}

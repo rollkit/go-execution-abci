@@ -473,6 +473,7 @@ func setupNodeAndExecutor(
 		metrics,
 		logger,
 		cometcompat.PayloadProvider(),
+		adapter.ValidatorHasher(executor.Store),
 	)
 	if err != nil {
 		return nil, nil, cleanupFn, err

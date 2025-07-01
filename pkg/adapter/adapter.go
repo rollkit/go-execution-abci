@@ -327,7 +327,7 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("get last commit: %w", err)
 	}
 
-	emptyBlock, err := cometcompat.ToABCIBlock(header, &types.Data{}, lastCommit, nil) // todo (Alex): is an empty valset correct?
+	emptyBlock, err := cometcompat.ToABCIBlock(header, &types.Data{}, lastCommit) // todo (Alex): is an empty valset correct?
 	if err != nil {
 		return nil, 0, fmt.Errorf("compute header hash: %w", err)
 	}

@@ -309,30 +309,12 @@ func TestVerifyVote(t *testing.T) {
 			},
 			sender: valAddrStr,
 		},
-		"timestamp drift": {
-			voteFn: func(t *testing.T) *cmtproto.Vote {
-				return VoteFixture(myAppHash, validatorPrivKey, func(vote *cmtproto.Vote) {
-					vote.Timestamp = time.Now().Add(6 * time.Second)
-					vote.Signature = must(validatorPrivKey.Sign(cmttypes.VoteSignBytes("testing", vote)))
-				})
-			},
-			sender: valAddrStr,
-			expErr: sdkerrors.ErrInvalidRequest,
-		},
 		"block data not found": {
 			voteFn: func(t *testing.T) *cmtproto.Vote {
 				return VoteFixture(myAppHash, validatorPrivKey, func(vote *cmtproto.Vote) {
 					vote.Height++
 					vote.Signature = must(validatorPrivKey.Sign(cmttypes.VoteSignBytes("testing", vote)))
 				})
-			},
-			sender: valAddrStr,
-			expErr: sdkerrors.ErrInvalidRequest,
-		},
-		"vote and block hash mismatch": {
-			voteFn: func(t *testing.T) *cmtproto.Vote {
-				hash := sha256.Sum256([]byte("wrong_hash"))
-				return VoteFixture(hash[:], validatorPrivKey)
 			},
 			sender: valAddrStr,
 			expErr: sdkerrors.ErrInvalidRequest,

@@ -7,8 +7,6 @@ option go_package = "github.com/rollkit/go-execution-abci/modules/network/types"
 import "gogoproto/gogo.proto";
 import "cosmos_proto/cosmos.proto";
 import "google/protobuf/duration.proto";
-import "amino/amino.proto";
-
 
 // Params defines the parameters for the network module.
 message Params {
@@ -26,11 +24,6 @@ message Params {
   
   // sign_mode determines when validators must sign
   SignMode sign_mode = 5;
-
-  // max_clock_drift maximum a timestamp for a vote can drift
-  google.protobuf.Duration max_clock_drift = 6
-  [(gogoproto.stdduration) = true, (gogoproto.nullable) = false, (amino.dont_omitempty) = true];
-
 }
 
 // SignMode defines when validators must sign

@@ -2,7 +2,6 @@ package types
 
 import (
 	"fmt"
-	"time"
 
 	"cosmossdk.io/math"
 	paramtypes "github.com/cosmos/cosmos-sdk/x/params/types"
@@ -33,7 +32,6 @@ func NewParams(
 	minParticipation math.LegacyDec,
 	pruneAfter uint64,
 	signMode SignMode,
-	maxClockDrift time.Duration,
 ) Params {
 	return Params{
 		EpochLength:      epochLength,
@@ -41,7 +39,6 @@ func NewParams(
 		MinParticipation: minParticipation.String(),
 		PruneAfter:       pruneAfter,
 		SignMode:         signMode,
-		MaxClockDrift:    maxClockDrift,
 	}
 }
 
@@ -53,7 +50,6 @@ func DefaultParams() Params {
 		DefaultMinParticipation,
 		DefaultPruneAfter,
 		DefaultSignMode,
-		5*time.Second,
 	)
 }
 
@@ -84,9 +80,6 @@ func (p Params) Validate() error {
 	}
 	if err := validateSignMode(p.SignMode); err != nil {
 		return err
-	}
-	if p.MaxClockDrift < 0 {
-		return fmt.Errorf("max clock drift must be positive: %s", p.MaxClockDrift)
 	}
 	return nil
 }

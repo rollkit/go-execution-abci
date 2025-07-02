@@ -360,12 +360,32 @@ jobs:
           ROLLKIT_ADDR=$(./gmd/go/bin/gmd keys show carol -a --home ./gmd/.gm)
           CELESTIA_ADDR=$(celestia-appd keys show validator -a --keyring-backend test)
           celestia-appd tx ibc-transfer transfer transfer channel-0 $ROLLKIT_ADDR 100utia --from validator --node http://localhost:26654 --fees 400utia --keyring-backend test -y
-          sleep 15
-          BALANCE=$(./gmd/go/bin/gmd query bank balances $ROLLKIT_ADDR --output json --home ./gmd/.gm | jq '.balances')
-          echo "Gm balance after IBC transfer: $BALANCE"
-          # fail if no denom starts with ibc/
-          if ! echo "$BALANCE" | jq -e '.[] | select(.denom | startswith("ibc/"))' > /dev/null; then
-            echo "Error: No IBC denom found in balance after transfer!"
+          
+          # Wait for IBC transfer to complete with retry logic
+          echo "Waiting for IBC transfer to complete..."
+          MAX_ATTEMPTS=30
+          ATTEMPT=0
+          IBC_FOUND=false
+          
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ] && [ "$IBC_FOUND" = false ]; do
+            sleep 3
+            ATTEMPT=$((ATTEMPT+1))
+            
+            BALANCE=$(./gmd/go/bin/gmd query bank balances $ROLLKIT_ADDR --output json --home ./gmd/.gm | jq '.balances')
+            echo "Attempt $ATTEMPT/$MAX_ATTEMPTS - Gm balance: $BALANCE"
+
+            # Check if any denom starts with ibc/
+            if echo "$BALANCE" | jq -e '.[] | select(.denom | startswith("ibc/"))' > /dev/null; then
+              IBC_FOUND=true
+              echo "✅ IBC transfer successful! IBC denom found in balance."
+            else
+              echo "IBC denom not found yet, retrying in 3 seconds..."
+            fi
+          done
+          
+          if [ "$IBC_FOUND" = false ]; then
+            echo "Error: No IBC denom found in balance after transfer within $MAX_ATTEMPTS attempts!"
+            echo "Final balance: $BALANCE"
             exit 1
           fi
 

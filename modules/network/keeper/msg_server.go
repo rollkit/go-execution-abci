@@ -1,16 +1,19 @@
 package keeper
 
 import (
+	"bytes"
 	"context"
-	"errors"
 	"fmt"
 
 	"cosmossdk.io/collections"
 	sdkerr "cosmossdk.io/errors"
 	"cosmossdk.io/math"
+	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
+	cmttypes "github.com/cometbft/cometbft/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
+	"github.com/cosmos/gogoproto/proto"
 
 	"github.com/rollkit/go-execution-abci/modules/network/types"
 )
@@ -30,33 +33,97 @@ var _ types.MsgServer = msgServer{}
 func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.MsgAttestResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
-	if k.GetParams(ctx).SignMode == types.SignMode_SIGN_MODE_CHECKPOINT &&
-		!k.IsCheckpointHeight(ctx, msg.Height) {
-		return nil, sdkerr.Wrapf(sdkerrors.ErrInvalidRequest, "height %d is not a checkpoint", msg.Height)
+	if err := k.validateAttestation(ctx, msg); err != nil {
+		return nil, err
 	}
-	has, err := k.IsInAttesterSet(ctx, msg.Validator)
-	if err != nil {
-		return nil, sdkerr.Wrapf(err, "in attester set")
-	}
-	if !has {
-		return nil, sdkerr.Wrapf(sdkerrors.ErrUnauthorized, "validator %s not in attester set", msg.Validator)
+	// can vote only for the last epoch
+	if delta := ctx.BlockHeight() - msg.Height; delta < 0 || delta > int64(k.GetParams(ctx).EpochLength) {
+		return nil, sdkerr.Wrapf(sdkerrors.ErrInvalidRequest, "exceeded voting window: %d blocks", delta)
 	}
 
-	index, found := k.GetValidatorIndex(ctx, msg.Validator)
+	valIndexPos, found := k.GetValidatorIndex(ctx, msg.Validator)
 	if !found {
 		return nil, sdkerr.Wrapf(sdkerrors.ErrNotFound, "validator index not found for %s", msg.Validator)
 	}
 
-	// todo (Alex): we need to set a limit to not have validators attest old blocks. Also make sure that this relates with
-	// the retention period for pruning
-	bitmap, err := k.GetAttestationBitmap(ctx, msg.Height)
-	if err != nil && !errors.Is(err, collections.ErrNotFound) {
-		return nil, sdkerr.Wrap(err, "get attestation bitmap")
+	vote, err := k.verifyVote(ctx, msg)
+	if err != nil {
+		return nil, err
 	}
+
+	if err := k.updateAttestationBitmap(ctx, msg, valIndexPos); err != nil {
+		return nil, sdkerr.Wrap(err, "update attestation bitmap")
+	}
+
+	if err := k.SetSignature(ctx, msg.Height, msg.Validator, vote.Signature); err != nil {
+		return nil, sdkerr.Wrap(err, "store signature")
+	}
+
+	if err := k.updateEpochBitmap(ctx, uint64(msg.Height), valIndexPos); err != nil {
+		return nil, err
+	}
+
+	// Emit event
+	ctx.EventManager().EmitEvent(
+		sdk.NewEvent(
+			types.TypeMsgAttest,
+			sdk.NewAttribute("validator", msg.Validator),
+			sdk.NewAttribute("height", math.NewInt(msg.Height).String()),
+		),
+	)
+	return &types.MsgAttestResponse{}, nil
+}
+
+func (k msgServer) updateEpochBitmap(ctx sdk.Context, votedEpoch uint64, index uint16) error {
+	epochBitmap := k.GetEpochBitmap(ctx, votedEpoch)
+	if epochBitmap == nil {
+		validators, err := k.stakingKeeper.GetLastValidators(ctx)
+		if err != nil {
+			return err
+		}
+		numValidators := 0
+		for _, v := range validators {
+			if v.IsBonded() {
+				numValidators++
+			}
+		}
+		epochBitmap = k.bitmapHelper.NewBitmap(numValidators)
+	}
+	k.bitmapHelper.SetBit(epochBitmap, int(index))
+	if err := k.SetEpochBitmap(ctx, votedEpoch, epochBitmap); err != nil {
+		return sdkerr.Wrap(err, "set epoch bitmap")
+	}
+	return nil
+}
+
+// validateAttestation validates the attestation request
+func (k msgServer) validateAttestation(ctx sdk.Context, msg *types.MsgAttest) error {
+	if k.GetParams(ctx).SignMode == types.SignMode_SIGN_MODE_CHECKPOINT &&
+		!k.IsCheckpointHeight(ctx, msg.Height) {
+		return sdkerr.Wrapf(sdkerrors.ErrInvalidRequest, "height %d is not a checkpoint", msg.Height)
+	}
+
+	has, err := k.IsInAttesterSet(ctx, msg.Validator)
+	if err != nil {
+		return sdkerr.Wrapf(err, "in attester set")
+	}
+	if !has {
+		return sdkerr.Wrapf(sdkerrors.ErrUnauthorized, "validator %s not in attester set", msg.Validator)
+	}
+	return nil
+}
+
+// updateAttestationBitmap handles bitmap operations for attestation
+func (k msgServer) updateAttestationBitmap(ctx sdk.Context, msg *types.MsgAttest, index uint16) error {
+	bitmap, err := k.GetAttestationBitmap(ctx, msg.Height)
+	if err != nil && !sdkerr.IsOf(err, collections.ErrNotFound) {
+		return err
+	}
+
 	if bitmap == nil {
 		validators, err := k.stakingKeeper.GetLastValidators(ctx)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		numValidators := 0
 		for _, v := range validators {
@@ -68,52 +135,53 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 	}
 
 	if k.bitmapHelper.IsSet(bitmap, int(index)) {
-		return nil, sdkerr.Wrapf(sdkerrors.ErrInvalidRequest, "validator %s already attested for height %d", msg.Validator, msg.Height)
+		return sdkerr.Wrapf(sdkerrors.ErrInvalidRequest, "validator %s already attested for height %d", msg.Validator, msg.Height)
 	}
 
-	// TODO: Verify the vote signature here once we implement vote parsing
-
-	// Set the bit
 	k.bitmapHelper.SetBit(bitmap, int(index))
+
 	if err := k.SetAttestationBitmap(ctx, msg.Height, bitmap); err != nil {
-		return nil, sdkerr.Wrap(err, "set attestation bitmap")
+		return sdkerr.Wrap(err, "set attestation bitmap")
+	}
+	return nil
+}
+
+// verifyVote verifies the vote signature and block hash
+func (k msgServer) verifyVote(ctx sdk.Context, msg *types.MsgAttest) (*cmtproto.Vote, error) {
+	var vote cmtproto.Vote
+	if err := proto.Unmarshal(msg.Vote, &vote); err != nil {
+		return nil, sdkerr.Wrapf(sdkerrors.ErrInvalidRequest, "unmarshal vote: %s", err)
+	}
+	if msg.Height != vote.Height {
+		return nil, sdkerr.Wrapf(sdkerrors.ErrInvalidRequest, "vote height does not match attestation height")
+	}
+	if len(vote.Signature) == 0 {
+		return nil, sdkerrors.ErrInvalidRequest.Wrap("empty signature")
 	}
 
-	// Store signature using the new collection method
-	if err := k.SetSignature(ctx, msg.Height, msg.Validator, msg.Vote); err != nil {
-		return nil, sdkerr.Wrap(err, "store signature")
+	// todo (Alex): validate app hash match, vote clock drift
+
+	valAddress, err := sdk.ValAddressFromBech32(msg.Validator)
+	if err != nil {
+		return nil, sdkerr.Wrap(err, "invalid validator address")
+	}
+	validator, err := k.stakingKeeper.GetValidator(ctx, valAddress)
+	if err != nil {
+		return nil, sdkerr.Wrapf(err, "get validator")
+	}
+	pubKey, err := validator.ConsPubKey()
+	if err != nil {
+		return nil, sdkerr.Wrapf(err, "pubkey")
+	}
+	if !bytes.Equal(pubKey.Address().Bytes(), vote.ValidatorAddress) {
+		return nil, sdkerr.Wrapf(sdkerrors.ErrInvalidRequest, "pubkey address does not match validator address")
+	}
+	voteSignBytes := cmttypes.VoteSignBytes(ctx.ChainID(), &vote)
+	if !pubKey.VerifySignature(voteSignBytes, vote.Signature) {
+		return nil, sdkerr.Wrapf(sdkerrors.ErrInvalidRequest, "invalid vote signature")
 	}
 
-	epoch := k.GetCurrentEpoch(ctx)
-	epochBitmap := k.GetEpochBitmap(ctx, epoch)
-	if epochBitmap == nil {
-		validators, err := k.stakingKeeper.GetLastValidators(ctx)
-		if err != nil {
-			return nil, err
-		}
-		numValidators := 0
-		for _, v := range validators {
-			if v.IsBonded() {
-				numValidators++
-			}
-		}
-		epochBitmap = k.bitmapHelper.NewBitmap(numValidators)
-	}
-	k.bitmapHelper.SetBit(epochBitmap, int(index))
-	if err := k.SetEpochBitmap(ctx, epoch, epochBitmap); err != nil {
-		return nil, sdkerr.Wrap(err, "set epoch bitmap")
-	}
-
-	// Emit event
-	ctx.EventManager().EmitEvent(
-		sdk.NewEvent(
-			types.TypeMsgAttest,
-			sdk.NewAttribute("validator", msg.Validator),
-			sdk.NewAttribute("height", math.NewInt(msg.Height).String()),
-		),
-	)
-
-	return &types.MsgAttestResponse{}, nil
+	return &vote, nil
 }
 
 // JoinAttesterSet handles MsgJoinAttesterSet

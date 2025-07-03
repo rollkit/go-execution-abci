@@ -120,3 +120,18 @@ func TestSequencerInfo_Validation(t *testing.T) {
 	require.Contains(t, err.Error(), "found 2")
 	require.Contains(t, err.Error(), "Unable to determine sequencer from rollkitmngr state")
 }
+
+func TestMigrateToRollkitCmd_CommandSetup(t *testing.T) {
+	// Test that the command is properly configured
+	cmd := MigrateToRollkitCmd()
+	
+	require.NotNil(t, cmd)
+	require.Equal(t, "rollkit-migrate", cmd.Use)
+	require.Equal(t, "Migrate the data from the CometBFT chain to Rollkit", cmd.Short)
+	require.NotNil(t, cmd.RunE)
+	
+	// Check that the da-height flag is available
+	flag := cmd.Flags().Lookup("da-height")
+	require.NotNil(t, flag)
+	require.Equal(t, "1", flag.DefValue)
+}

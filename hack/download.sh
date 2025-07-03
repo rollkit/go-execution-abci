@@ -3,6 +3,7 @@
 
 HERMES_VERSION=${1:-"v1.13.1"}
 GAIAD_VERSION=${2:-"v24.0.0"}
+COSMOS_RELAYER_VERSION=${3:-"v2.6.0"}
 
 ARCH=$(uname -m)
 OS=$(uname -s)
@@ -35,6 +36,19 @@ esac
 
 HERMES_URL="https://github.com/informalsystems/hermes/releases/download/$HERMES_VERSION/hermes-$HERMES_VERSION-${ARCH_LABEL}-${OS_LABEL}.tar.gz"
 GAIAD_URL="https://github.com/cosmos/gaia/releases/download/$GAIAD_VERSION/gaiad-$GAIAD_VERSION-darwin-$ARCH"
+
+# For Cosmos Relayer, we need to map the architecture differently
+COSMOS_RELAYER_ARCH="amd64"
+if [ "$ARCH" == "arm64" ]; then
+  COSMOS_RELAYER_ARCH="arm64"
+fi
+
+COSMOS_RELAYER_OS="linux"
+if [ "$OS" == "Darwin" ]; then
+  COSMOS_RELAYER_OS="darwin"
+fi
+
+COSMOS_RELAYER_URL="https://github.com/cosmos/relayer/releases/download/$COSMOS_RELAYER_VERSION/Cosmos.Relayer_${COSMOS_RELAYER_VERSION#v}_${COSMOS_RELAYER_OS}_${COSMOS_RELAYER_ARCH}.tar.gz"
 
 if [ "$OS" == "Linux" ]; then
   GAIAD_URL="https://github.com/cosmos/gaia/releases/download/$GAIAD_VERSION/gaiad-$GAIAD_VERSION-linux-amd64"
@@ -76,4 +90,12 @@ download_file "$GAIAD_URL" "$GAIAD_BINARY"
 # Make gaiad binary executable
 chmod +x "$GAIAD_BINARY"
 
-echo "Hermes and Gaiad downloaded successfully to $DOWNLOAD_DIR"
+# Download Cosmos Relayer
+COSMOS_RELAYER_ARCHIVE="$DOWNLOAD_DIR/cosmos-relayer.tar.gz"
+download_file "$COSMOS_RELAYER_URL" "$COSMOS_RELAYER_ARCHIVE"
+
+# Extract Cosmos Relayer
+echo "Extracting: $COSMOS_RELAYER_ARCHIVE"
+tar -xzvf "$COSMOS_RELAYER_ARCHIVE" --strip-components=1 -C "$DOWNLOAD_DIR"
+
+echo "Hermes, Gaiad, and Cosmos Relayer downloaded successfully to $DOWNLOAD_DIR"

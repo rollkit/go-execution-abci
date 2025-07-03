@@ -732,6 +732,6 @@ outerLoop:
 	return nil
 }
 
-func (a *Adapter) GetExecutionMode() execution.ExecutionMode {
-	return execution.ExecutionModeDelayed
-}
+//func (a *Adapter) GetExecutionMode() execution.ExecutionMode {
+//	return execution.ExecutionModeDelayed
+//}

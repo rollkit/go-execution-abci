@@ -242,6 +242,18 @@ go-execution-abci/
 └── server/           # Server startup and configuration
 ```
 
+## Dependency Management
+
+This repository uses [Dependabot](https://docs.github.com/en/code-security/dependabot) to automatically keep dependencies up to date. Dependabot is configured to:
+
+- **Monitor Go modules**: Daily checks for updates to Go dependencies in `go.mod`
+- **Monitor GitHub Actions**: Daily checks for updates to GitHub Action versions in workflows
+- **Group updates**: Patch and minor updates are grouped into separate PRs to reduce noise
+- **Consistent commit messages**: Uses prefixes (`deps:` for Go modules, `ci:` for GitHub Actions)
+- **Scheduled timing**: Runs daily at 09:00 UTC
+
+The configuration can be found in [`.github/dependabot.yml`](.github/dependabot.yml).
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.

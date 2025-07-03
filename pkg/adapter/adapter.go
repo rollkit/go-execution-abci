@@ -277,10 +277,10 @@ func (a *Adapter) InitChain(ctx context.Context, genesisTime time.Time, initialH
 
 	nValSet := cmttypes.NewValidatorSet(vals)
 
-	if len(nValSet.Validators) != 1 {
-		err := fmt.Errorf("expected exactly one validator")
-		return nil, 0, err
-	}
+	//if n := len(nValSet.Validators); n != 1 {
+	//	err := fmt.Errorf("expected exactly one validator but got %d", n)
+	//	return nil, 0, err
+	//}
 
 	s.Validators = cmttypes.NewValidatorSet(nValSet.Validators)
 	s.NextValidators = cmttypes.NewValidatorSet(nValSet.Validators).CopyIncrementProposerPriority(1)

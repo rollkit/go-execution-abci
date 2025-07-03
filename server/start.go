@@ -681,6 +681,9 @@ func loadRollkitMigrationGenesis(rootDir string) (*rollkitMigrationGenesis, erro
 // This is used for normal startup scenarios where a full cometbft genesis document
 // is available and contains all the necessary information.
 func createRollkitGenesisFromCometBFT(cmtGenDoc *cmttypes.GenesisDoc) *genesis.Genesis {
+	if len(cmtGenDoc.Validators) == 0 {
+		panic("no .validators in genesis")
+	}
 	rollkitGenesis := genesis.NewGenesis(
 		cmtGenDoc.ChainID,
 		uint64(cmtGenDoc.InitialHeight),

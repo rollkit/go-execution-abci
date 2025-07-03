@@ -444,29 +444,56 @@ func getSequencerFromRollkitMngrState(rootDir string, cometBFTState state.State)
 	// Set up encoding config
 	encCfg := testutil.MakeTestEncodingConfig(rollkitmngr.AppModuleBasic{})
 	
-	// Try to read the sequencer directly from the database using the known key format
-	// In cosmos SDK apps, module state is typically stored with a prefix pattern
-	// We need to construct the full key path: [moduleStoreKey][collections prefix][item key]
+	// Try multiple key formats to find the sequencer data
+	// In cosmos SDK applications, module state can be stored with different key patterns
 	
-	// The sequencer is stored under the rollkitmngr module with the SequencerKey
-	// Based on cosmos collections implementation, the key format would be:
-	// [collections prefix for sequencer item] + SequencerKey
-	sequencerKey := append([]byte{0}, rollkitmngrTypes.SequencerKey...) // 0 is typical collections prefix
+	var sequencerBytes []byte
+	var keyFormat string
 	
-	sequencerBytes, err := appDB.Get(sequencerKey)
-	if err != nil || sequencerBytes == nil {
-		// Try alternative key format - sometimes the module prefix is included
-		moduleKey := append([]byte(rollkitmngrTypes.ModuleName), sequencerKey...)
-		sequencerBytes, err = appDB.Get(moduleKey)
-		if err != nil || sequencerBytes == nil {
-			return nil, fmt.Errorf("sequencer not found in rollkitmngr state")
+	// Try different key formats commonly used in cosmos SDK applications
+	keyFormats := []struct {
+		name string
+		key  []byte
+	}{
+		{
+			name: "collections prefix only",
+			key:  append([]byte{0}, rollkitmngrTypes.SequencerKey...),
+		},
+		{
+			name: "module name + collections prefix",
+			key:  append([]byte(rollkitmngrTypes.ModuleName), append([]byte{0}, rollkitmngrTypes.SequencerKey...)...),
+		},
+		{
+			name: "sequencer key only",
+			key:  rollkitmngrTypes.SequencerKey,
+		},
+		{
+			name: "module name + sequencer key",
+			key:  append([]byte(rollkitmngrTypes.ModuleName), rollkitmngrTypes.SequencerKey...),
+		},
+		{
+			name: "module store prefix + collections format",
+			key:  append([]byte("s/k:"+rollkitmngrTypes.ModuleName+"/"), append([]byte{0}, rollkitmngrTypes.SequencerKey...)...),
+		},
+	}
+	
+	for _, format := range keyFormats {
+		data, err := appDB.Get(format.key)
+		if err == nil && data != nil {
+			sequencerBytes = data
+			keyFormat = format.name
+			break
 		}
+	}
+	
+	if sequencerBytes == nil {
+		return nil, fmt.Errorf("sequencer not found in rollkitmngr state (tried %d key formats)", len(keyFormats))
 	}
 	
 	// Decode the sequencer data
 	var sequencer rollkitmngrTypes.Sequencer
 	if err := encCfg.Codec.Unmarshal(sequencerBytes, &sequencer); err != nil {
-		return nil, fmt.Errorf("failed to decode sequencer from rollkitmngr state: %w", err)
+		return nil, fmt.Errorf("failed to decode sequencer from rollkitmngr state (key format: %s): %w", keyFormat, err)
 	}
 	
 	// Extract the public key from the sequencer
@@ -478,11 +505,24 @@ func getSequencerFromRollkitMngrState(rootDir string, cometBFTState state.State)
 	// Get the cached value which should be a crypto.PubKey
 	pubKey, ok := pubKeyAny.GetCachedValue().(crypto.PubKey)
 	if !ok {
-		return nil, fmt.Errorf("failed to extract public key from sequencer")
+		return nil, fmt.Errorf("failed to extract public key from sequencer (key format: %s)", keyFormat)
 	}
 	
 	// Get the address from the public key
 	addr := pubKey.Address()
+	
+	// Validate that this sequencer is actually one of the validators
+	validatorFound := false
+	for _, validator := range cometBFTState.LastValidators.Validators {
+		if bytes.Equal(validator.Address.Bytes(), addr) {
+			validatorFound = true
+			break
+		}
+	}
+	
+	if !validatorFound {
+		return nil, fmt.Errorf("sequencer from rollkitmngr state (address: %x) is not found in the validator set", addr)
+	}
 	
 	return &sequencerInfo{
 		Address: addr,

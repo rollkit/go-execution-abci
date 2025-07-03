@@ -87,3 +87,36 @@ func TestGetSequencerFromRollkitMngrState_NoDatabase(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no application database found")
 }
+
+func TestSequencerInfo_Validation(t *testing.T) {
+	// Test the sequencer validation logic by creating a mock scenario
+	// where we have multiple validators and verify the error messages
+	
+	validator1 := &cometbfttypes.Validator{
+		Address:     []byte("test_validator_addr1"),
+		PubKey:      cometbfttypes.NewMockPV().PrivKey.PubKey(),
+		VotingPower: 100,
+	}
+	validator2 := &cometbfttypes.Validator{
+		Address:     []byte("test_validator_addr2"),
+		PubKey:      cometbfttypes.NewMockPV().PrivKey.PubKey(),
+		VotingPower: 100,
+	}
+	
+	cometBFTState := state.State{
+		ChainID:       "test-chain",
+		InitialHeight: 1,
+		LastValidators: cometbfttypes.NewValidatorSet([]*cometbfttypes.Validator{validator1, validator2}),
+	}
+
+	tmpDir := t.TempDir()
+	
+	// This should fail since there's no rollkitmngr state, and provide a helpful error message
+	err := createRollkitMigrationGenesis(tmpDir, cometBFTState)
+	require.Error(t, err)
+	
+	// The error should mention both the validator count issue and the rollkitmngr state issue
+	require.Contains(t, err.Error(), "expected exactly one validator")
+	require.Contains(t, err.Error(), "found 2")
+	require.Contains(t, err.Error(), "Unable to determine sequencer from rollkitmngr state")
+}

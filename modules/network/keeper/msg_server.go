@@ -155,18 +155,17 @@ func (k msgServer) verifyVote(ctx sdk.Context, msg *types.MsgAttest) (*cmtproto.
 	if msg.Height != vote.Height {
 		return nil, sdkerr.Wrapf(sdkerrors.ErrInvalidRequest, "vote height does not match attestation height")
 	}
-	if senderAddr, err := sdk.ValAddressFromBech32(msg.Validator); err != nil {
-		return nil, sdkerr.Wrapf(sdkerrors.ErrInvalidRequest, "invalid validator address: %s", err)
-	} else if !bytes.Equal(senderAddr, vote.ValidatorAddress) {
-		return nil, sdkerr.Wrapf(sdkerrors.ErrUnauthorized, "vote validator address does not match attestation validator address")
-	}
 	if len(vote.Signature) == 0 {
 		return nil, sdkerrors.ErrInvalidRequest.Wrap("empty signature")
 	}
 
 	// todo (Alex): validate app hash match, vote clock drift
 
-	validator, err := k.stakingKeeper.GetValidator(ctx, vote.ValidatorAddress)
+	valAddress, err := sdk.ValAddressFromBech32(msg.Validator)
+	if err != nil {
+		return nil, sdkerr.Wrap(err, "invalid validator address")
+	}
+	validator, err := k.stakingKeeper.GetValidator(ctx, valAddress)
 	if err != nil {
 		return nil, sdkerr.Wrapf(err, "get validator")
 	}
@@ -174,7 +173,7 @@ func (k msgServer) verifyVote(ctx sdk.Context, msg *types.MsgAttest) (*cmtproto.
 	if err != nil {
 		return nil, sdkerr.Wrapf(err, "pubkey")
 	}
-	if !bytes.Equal(pubKey.Address(), vote.ValidatorAddress) {
+	if !bytes.Equal(pubKey.Address().Bytes(), vote.ValidatorAddress) {
 		return nil, sdkerr.Wrapf(sdkerrors.ErrInvalidRequest, "pubkey address does not match validator address")
 	}
 	voteSignBytes := cmttypes.VoteSignBytes(ctx.ChainID(), &vote)

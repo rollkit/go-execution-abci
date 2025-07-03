@@ -20,11 +20,6 @@ import (
 	"github.com/cometbft/cometbft/state"
 	"github.com/cometbft/cometbft/store"
 	cometbfttypes "github.com/cometbft/cometbft/types"
-	"cosmossdk.io/collections"
-	storetypes "cosmossdk.io/store/types"
-	"github.com/cosmos/cosmos-sdk/codec"
-	"github.com/cosmos/cosmos-sdk/runtime"
-	"github.com/cosmos/cosmos-sdk/testutil"
 	moduletestutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
 	ds "github.com/ipfs/go-datastore"
 	ktds "github.com/ipfs/go-datastore/keytransform"
@@ -439,7 +434,7 @@ func getSequencerFromRollkitMngrState(rootDir string, cometBFTState state.State)
 		return nil, fmt.Errorf("no application database found in %v: %w", config.DBDir(), err)
 	}
 
-	// Open application database
+	// Open application database (read-only)
 	appDB, err := dbm.NewDB("application", dbType, config.DBDir())
 	if err != nil {
 		return nil, fmt.Errorf("failed to open application database: %w", err)
@@ -449,52 +444,21 @@ func getSequencerFromRollkitMngrState(rootDir string, cometBFTState state.State)
 	// Set up encoding config
 	encCfg := moduletestutil.MakeTestEncodingConfig(rollkitmngr.AppModuleBasic{})
 	
-	// Create a store key for the rollkitmngr module
-	storeKey := storetypes.NewKVStoreKey(rollkitmngrTypes.ModuleName)
-	
-	// Create a context with the store - use the simple approach from the tests
-	ctx := testutil.DefaultContext(storeKey, storetypes.NewTransientStoreKey("transient"))
-	
-	// Create store service for collections
-	storeService := runtime.NewKVStoreService(storeKey)
-	
-	// Set up collections exactly as defined in the keeper
-	sb := collections.NewSchemaBuilder(storeService)
-	sequencerCollection := collections.NewItem(
-		sb,
-		rollkitmngrTypes.SequencerKey,
-		"sequencer",
-		codec.CollValue[rollkitmngrTypes.Sequencer](encCfg.Codec),
-	)
-	
-	// Build the schema
-	_, err = sb.Build()
-	if err != nil {
-		return nil, fmt.Errorf("failed to build collections schema: %w", err)
-	}
-	
-	// We need to copy data from our database to the context's store
-	// Get the store from the context
-	store := ctx.MultiStore().GetKVStore(storeKey)
-	
-	// Copy the sequencer data from our database to the store
-	// First, determine the correct key that collections would use
-	sequencerKey := rollkitmngrTypes.SequencerKey
+	// Read sequencer data from the database using the collections key format
+	// Collections store data with a prefix byte (0x00) followed by the key
+	sequencerKey := append([]byte{0}, rollkitmngrTypes.SequencerKey...)
 	sequencerBytes, err := appDB.Get(sequencerKey)
-	if err != nil || sequencerBytes == nil {
+	if err != nil {
+		return nil, fmt.Errorf("failed to read sequencer from database: %w", err)
+	}
+	if sequencerBytes == nil {
 		return nil, fmt.Errorf("sequencer not found in rollkitmngr state")
 	}
 	
-	// Store it in the context's store so collections can find it
-	store.Set(sequencerKey, sequencerBytes)
-	
-	// Now query using collections
-	sequencer, err := sequencerCollection.Get(ctx)
-	if err != nil {
-		if errors.Is(err, collections.ErrNotFound) {
-			return nil, fmt.Errorf("sequencer not found in rollkitmngr state")
-		}
-		return nil, fmt.Errorf("failed to get sequencer from rollkitmngr state: %w", err)
+	// Decode the sequencer data
+	var sequencer rollkitmngrTypes.Sequencer
+	if err := encCfg.Codec.Unmarshal(sequencerBytes, &sequencer); err != nil {
+		return nil, fmt.Errorf("failed to decode sequencer from rollkitmngr state: %w", err)
 	}
 	
 	// Extract the public key from the sequencer

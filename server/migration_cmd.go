@@ -384,7 +384,10 @@ func createRollkitMigrationGenesis(rootDir string, cometBFTState state.State) er
 				sequencerAddr = cometBFTState.LastValidators.Validators[0].Address.Bytes()
 				sequencerPubKey = cometBFTState.LastValidators.Validators[0].PubKey
 			} else {
-				return fmt.Errorf("expected exactly one validator in the last validators, found %d. Unable to determine sequencer from rollkitmngr state: %v", len(cometBFTState.LastValidators.Validators), err)
+				return errors.Join(
+					fmt.Errorf("expected exactly one validator in the last validators, found %d", len(cometBFTState.LastValidators.Validators)),
+					fmt.Errorf("unable to determine sequencer from rollkitmngr state: %w", err),
+				)
 			}
 		}
 	} else {
@@ -430,8 +433,10 @@ func getSequencerFromRollkitMngrState(rootDir string, cometBFTState state.State)
 	
 	// Check if application database exists
 	appDBPath := filepath.Join(config.DBDir(), "application.db")
-	if ok, err := fileExists(appDBPath); !ok || err != nil {
-		return nil, fmt.Errorf("no application database found in %v: %w", config.DBDir(), err)
+	if ok, err := fileExists(appDBPath); err != nil {
+		return nil, fmt.Errorf("error checking application database in %v: %w", config.DBDir(), err)
+	} else if !ok {
+		return nil, fmt.Errorf("no application database found in %v", config.DBDir())
 	}
 
 	// Open application database (read-only)

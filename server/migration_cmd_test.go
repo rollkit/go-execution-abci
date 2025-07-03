@@ -118,7 +118,7 @@ func TestSequencerInfo_Validation(t *testing.T) {
 	// The error should mention both the validator count issue and the rollkitmngr state issue
 	require.Contains(t, err.Error(), "expected exactly one validator")
 	require.Contains(t, err.Error(), "found 2")
-	require.Contains(t, err.Error(), "Unable to determine sequencer from rollkitmngr state")
+	require.Contains(t, err.Error(), "unable to determine sequencer from rollkitmngr state")
 }
 
 func TestMigrateToRollkitCmd_CommandSetup(t *testing.T) {

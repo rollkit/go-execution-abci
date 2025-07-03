@@ -20,6 +20,7 @@ import (
 	"github.com/cometbft/cometbft/state"
 	"github.com/cometbft/cometbft/store"
 	cometbfttypes "github.com/cometbft/cometbft/types"
+	"github.com/cosmos/cosmos-sdk/types/module/testutil"
 	ds "github.com/ipfs/go-datastore"
 	ktds "github.com/ipfs/go-datastore/keytransform"
 	"github.com/spf13/cobra"
@@ -29,6 +30,8 @@ import (
 	rollkitstore "github.com/rollkit/rollkit/pkg/store"
 	rollkittypes "github.com/rollkit/rollkit/types"
 
+	"github.com/rollkit/go-execution-abci/modules/rollkitmngr"
+	rollkitmngrTypes "github.com/rollkit/go-execution-abci/modules/rollkitmngr/types"
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
 )
 
@@ -370,14 +373,22 @@ func createRollkitMigrationGenesis(rootDir string, cometBFTState state.State) er
 		sequencerPubKey crypto.PubKey
 	)
 
-	// use the first validator as sequencer (assuming single validator setup for migration)
-	if len(cometBFTState.LastValidators.Validators) == 1 {
-		sequencerAddr = cometBFTState.LastValidators.Validators[0].Address.Bytes()
-		sequencerPubKey = cometBFTState.LastValidators.Validators[0].PubKey
+	// If the cometbft validators are > 0, fetch the rollkitmngr state to get the sequencer
+	if len(cometBFTState.LastValidators.Validators) > 0 {
+		if sequencer, err := getSequencerFromRollkitMngrState(rootDir, cometBFTState); err == nil {
+			sequencerAddr = sequencer.Address
+			sequencerPubKey = sequencer.PubKey
+		} else {
+			// If rollkitmngr state is not available, fall back to single validator logic
+			if len(cometBFTState.LastValidators.Validators) == 1 {
+				sequencerAddr = cometBFTState.LastValidators.Validators[0].Address.Bytes()
+				sequencerPubKey = cometBFTState.LastValidators.Validators[0].PubKey
+			} else {
+				return fmt.Errorf("expected exactly one validator in the last validators, found %d. Unable to determine sequencer from rollkitmngr state: %v", len(cometBFTState.LastValidators.Validators), err)
+			}
+		}
 	} else {
-		// TODO(@julienrbrt): Allow to use rollkitmngr state to get the sequencer address
-		// ref: https://github.com/rollkit/go-execution-abci/issues/164
-		return fmt.Errorf("expected exactly one validator in the last validators, found %d", len(cometBFTState.LastValidators.Validators))
+		return fmt.Errorf("no validators found in the last validators")
 	}
 
 	migrationGenesis := rollkitMigrationGenesis{
@@ -394,12 +405,89 @@ func createRollkitMigrationGenesis(rootDir string, cometBFTState state.State) er
 		return fmt.Errorf("failed to marshal rollkit migration genesis: %w", err)
 	}
 
+	const rollkitGenesisFilename = "rollkit_genesis.json"
 	genesisPath := filepath.Join(rootDir, rollkitGenesisFilename)
 	if err := os.WriteFile(genesisPath, genesisBytes, 0o644); err != nil {
 		return fmt.Errorf("failed to write rollkit migration genesis to %s: %w", genesisPath, err)
 	}
 
 	return nil
+}
+
+// sequencerInfo holds the sequencer information extracted from rollkitmngr state
+type sequencerInfo struct {
+	Address []byte
+	PubKey  crypto.PubKey
+}
+
+// getSequencerFromRollkitMngrState attempts to load the sequencer information from the rollkitmngr module state
+func getSequencerFromRollkitMngrState(rootDir string, cometBFTState state.State) (*sequencerInfo, error) {
+	// Try to load the application database
+	config := cfg.DefaultConfig()
+	config.SetRoot(rootDir)
+	
+	dbType := dbm.BackendType(config.DBBackend)
+	
+	// Check if application database exists
+	appDBPath := filepath.Join(config.DBDir(), "application.db")
+	if ok, err := fileExists(appDBPath); !ok || err != nil {
+		return nil, fmt.Errorf("no application database found in %v: %w", config.DBDir(), err)
+	}
+
+	// Open application database
+	appDB, err := dbm.NewDB("application", dbType, config.DBDir())
+	if err != nil {
+		return nil, fmt.Errorf("failed to open application database: %w", err)
+	}
+	defer appDB.Close()
+
+	// Set up encoding config
+	encCfg := testutil.MakeTestEncodingConfig(rollkitmngr.AppModuleBasic{})
+	
+	// Try to read the sequencer directly from the database using the known key format
+	// In cosmos SDK apps, module state is typically stored with a prefix pattern
+	// We need to construct the full key path: [moduleStoreKey][collections prefix][item key]
+	
+	// The sequencer is stored under the rollkitmngr module with the SequencerKey
+	// Based on cosmos collections implementation, the key format would be:
+	// [collections prefix for sequencer item] + SequencerKey
+	sequencerKey := append([]byte{0}, rollkitmngrTypes.SequencerKey...) // 0 is typical collections prefix
+	
+	sequencerBytes, err := appDB.Get(sequencerKey)
+	if err != nil || sequencerBytes == nil {
+		// Try alternative key format - sometimes the module prefix is included
+		moduleKey := append([]byte(rollkitmngrTypes.ModuleName), sequencerKey...)
+		sequencerBytes, err = appDB.Get(moduleKey)
+		if err != nil || sequencerBytes == nil {
+			return nil, fmt.Errorf("sequencer not found in rollkitmngr state")
+		}
+	}
+	
+	// Decode the sequencer data
+	var sequencer rollkitmngrTypes.Sequencer
+	if err := encCfg.Codec.Unmarshal(sequencerBytes, &sequencer); err != nil {
+		return nil, fmt.Errorf("failed to decode sequencer from rollkitmngr state: %w", err)
+	}
+	
+	// Extract the public key from the sequencer
+	pubKeyAny := sequencer.ConsensusPubkey
+	if pubKeyAny == nil {
+		return nil, fmt.Errorf("sequencer consensus public key is nil")
+	}
+	
+	// Get the cached value which should be a crypto.PubKey
+	pubKey, ok := pubKeyAny.GetCachedValue().(crypto.PubKey)
+	if !ok {
+		return nil, fmt.Errorf("failed to extract public key from sequencer")
+	}
+	
+	// Get the address from the public key
+	addr := pubKey.Address()
+	
+	return &sequencerInfo{
+		Address: addr,
+		PubKey:  pubKey,
+	}, nil
 }
 
 // fileExists checks if a file/directory exists.

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -16,6 +17,8 @@ import (
 	storepkg "github.com/rollkit/rollkit/pkg/store"
 	rlktypes "github.com/rollkit/rollkit/types"
 
+	abci "github.com/cometbft/cometbft/abci/types"
+	networktypes "github.com/rollkit/go-execution-abci/modules/network/types"
 	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
 )
 
@@ -214,57 +217,30 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 		return nil, err
 	}
 
+	// Check if the block has soft confirmation first
+	isSoftConfirmed, softConfirmationData, err := checkSoftConfirmation(ctx.Context(), height)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check soft confirmation status: %w", err)
+	}
+
+	if !isSoftConfirmed {
+		return nil, fmt.Errorf("commit for height %d does not exist (block not soft confirmed)", height)
+	}
+
 	header, rollkitData, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), height)
 	if err != nil {
 		return nil, err
 	}
 
-	// Create a proper commit that will be used for ToABCIBlock
-	abciCommit := &cmttypes.Commit{
-		Height: int64(header.Height()), //nolint:gosec
-		Round:  0,
-		BlockID: cmttypes.BlockID{
-			Hash:          cmbytes.HexBytes(header.Hash()), // This will be updated after ToABCIBlock
-			PartSetHeader: cmttypes.PartSetHeader{},
-		},
-		Signatures: []cmttypes.CommitSig{{
-			BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-			Signature:        header.Signature, // This will be updated if we have a signer
-			ValidatorAddress: header.ProposerAddress,
-			Timestamp:        header.Time(),
-		}},
+	// Build commit with attestations from soft confirmation data
+	commit, err := buildCommitFromAttestations(ctx.Context(), header, softConfirmationData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build commit from attestations: %w", err)
 	}
 
-	block, err := cometcompat.ToABCIBlock(header, rollkitData, abciCommit)
+	block, err := cometcompat.ToABCIBlock(header, rollkitData, commit)
 	if err != nil {
 		return nil, err
-	}
-
-	// Then re-sign the final ABCI header if we have a signer
-	if env.Signer != nil {
-		// Create a vote for the final ABCI header
-		vote := cmtproto.Vote{
-			Type:   cmtproto.PrecommitType,
-			Height: int64(header.Height()), //nolint:gosec
-			Round:  0,
-			BlockID: cmtproto.BlockID{
-				Hash:          block.Header.Hash(),
-				PartSetHeader: cmtproto.PartSetHeader{},
-			},
-			Timestamp:        block.Time,
-			ValidatorAddress: header.ProposerAddress,
-			ValidatorIndex:   0,
-		}
-		chainID := header.ChainID()
-		finalSignBytes := cmttypes.VoteSignBytes(chainID, &vote)
-
-		newSignature, err := env.Signer.Sign(finalSignBytes)
-		if err != nil {
-			return nil, fmt.Errorf("failed to sign final ABCI header: %w", err)
-		}
-
-		// Update the commit with the new signature
-		block.LastCommit.Signatures[0].Signature = newSignature
 	}
 
 	// Update the commit's BlockID to match the final ABCI block hash
@@ -390,4 +366,174 @@ func BlockchainInfo(ctx *rpctypes.Context, minHeight, maxHeight int64) (*ctypes.
 		LastHeight: int64(height), //nolint:gosec
 		BlockMetas: blocks,
 	}, nil
+}
+
+// checkSoftConfirmation checks if a block has soft confirmation and returns the attestation data
+func checkSoftConfirmation(ctx context.Context, height uint64) (bool, *networktypes.QueryAttestationBitmapResponse, error) {
+	// Check soft confirmation status
+	softConfirmReq := &networktypes.QuerySoftConfirmationStatusRequest{
+		Height: int64(height),
+	}
+	reqData, err := softConfirmReq.Marshal()
+	if err != nil {
+		return false, nil, fmt.Errorf("failed to marshal soft confirmation request: %w", err)
+	}
+
+	// Query soft confirmation status
+	abciReq := &abci.RequestQuery{
+		Path: "/rollkitsdk.network.v1.Query/SoftConfirmationStatus",
+		Data: reqData,
+	}
+
+	abciRes, err := env.Adapter.App.Query(ctx, abciReq)
+	if err != nil || abciRes.Code != 0 {
+		var msg string
+		if abciRes != nil {
+			msg = abciRes.Log
+		}
+		env.Logger.Error("query soft confirmation status", "height", height, "error", err, "log", msg)
+		return false, nil, fmt.Errorf("failed to query soft confirmation status: %w", err)
+	}
+
+	softConfirmResp := &networktypes.QuerySoftConfirmationStatusResponse{}
+	if err := softConfirmResp.Unmarshal(abciRes.Value); err != nil {
+		return false, nil, fmt.Errorf("failed to unmarshal soft confirmation response: %w", err)
+	}
+
+	if !softConfirmResp.IsSoftConfirmed {
+		return false, nil, nil
+	}
+
+	// Get attestation bitmap data
+	attestationReq := &networktypes.QueryAttestationBitmapRequest{
+		Height: int64(height),
+	}
+	reqData, err = attestationReq.Marshal()
+	if err != nil {
+		return false, nil, fmt.Errorf("failed to marshal attestation bitmap request: %w", err)
+	}
+
+	abciReq = &abci.RequestQuery{
+		Path: "/rollkitsdk.network.v1.Query/AttestationBitmap",
+		Data: reqData,
+	}
+
+	abciRes, err = env.Adapter.App.Query(ctx, abciReq)
+	if err != nil || abciRes.Code != 0 {
+		var msg string
+		if abciRes != nil {
+			msg = abciRes.Log
+		}
+		env.Logger.Error("query attestation bitmap", "height", height, "error", err, "log", msg)
+		return false, nil, fmt.Errorf("failed to query attestation bitmap: %w", err)
+	}
+
+	attestationResp := &networktypes.QueryAttestationBitmapResponse{}
+	if err := attestationResp.Unmarshal(abciRes.Value); err != nil {
+		return false, nil, fmt.Errorf("failed to unmarshal attestation bitmap response: %w", err)
+	}
+
+	return true, attestationResp, nil
+}
+
+// buildCommitFromAttestations constructs a CometBFT commit using the attestations from the network module
+func buildCommitFromAttestations(ctx context.Context, header *rlktypes.SignedHeader, attestationData *networktypes.QueryAttestationBitmapResponse) (*cmttypes.Commit, error) {
+	if attestationData == nil || attestationData.Bitmap == nil {
+		return nil, fmt.Errorf("no attestation data available")
+	}
+
+	// Get validator set to build signatures
+	validators, err := getValidatorSet(ctx, header.Height())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get validator set: %w", err)
+	}
+
+	bitmap := attestationData.Bitmap.Bitmap
+	signatures := make([]cmttypes.CommitSig, len(validators))
+
+	// Build signatures from attestations
+	for i, validator := range validators {
+		// Check if validator attested (bit is set in bitmap)
+		byteIndex := i / 8
+		bitIndex := i % 8
+
+		if byteIndex >= len(bitmap) {
+			// Validator didn't attest - create absent signature
+			signatures[i] = cmttypes.CommitSig{
+				BlockIDFlag:      cmttypes.BlockIDFlagAbsent,
+				ValidatorAddress: validator.Address,
+				Timestamp:        header.Time(),
+				Signature:        nil,
+			}
+			continue
+		}
+
+		if (bitmap[byteIndex] & (1 << bitIndex)) != 0 {
+			// Validator attested - get their signature
+			signature, err := getValidatorSignature(ctx, int64(header.Height()), validator.Address.String())
+			if err != nil {
+				env.Logger.Error("failed to get validator signature", "height", header.Height(), "validator", validator.Address, "error", err)
+				// Create absent signature if we can't get the actual one
+				signatures[i] = cmttypes.CommitSig{
+					BlockIDFlag:      cmttypes.BlockIDFlagAbsent,
+					ValidatorAddress: validator.Address,
+					Timestamp:        header.Time(),
+					Signature:        nil,
+				}
+				continue
+			}
+
+			signatures[i] = cmttypes.CommitSig{
+				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+				ValidatorAddress: validator.Address,
+				Timestamp:        header.Time(),
+				Signature:        signature,
+			}
+		} else {
+			// Validator didn't attest
+			signatures[i] = cmttypes.CommitSig{
+				BlockIDFlag:      cmttypes.BlockIDFlagAbsent,
+				ValidatorAddress: validator.Address,
+				Timestamp:        header.Time(),
+				Signature:        nil,
+			}
+		}
+	}
+
+	return &cmttypes.Commit{
+		Height: int64(header.Height()),
+		Round:  0,
+		BlockID: cmttypes.BlockID{
+			Hash:          cmbytes.HexBytes(header.Hash()),
+			PartSetHeader: cmttypes.PartSetHeader{},
+		},
+		Signatures: signatures,
+	}, nil
+}
+
+// getValidatorSet retrieves the validator set for a given height
+func getValidatorSet(ctx context.Context, height uint64) ([]*cmttypes.Validator, error) {
+	// For now, we'll use the genesis validator set as a simple implementation
+	// In a full implementation, this should get the actual validator set at the given height
+	genesisValidators := env.Adapter.AppGenesis.Consensus.Validators
+	validators := make([]*cmttypes.Validator, len(genesisValidators))
+
+	for i, gval := range genesisValidators {
+		validators[i] = &cmttypes.Validator{
+			Address:     gval.Address,
+			PubKey:      gval.PubKey,
+			VotingPower: gval.Power,
+		}
+	}
+
+	return validators, nil
+}
+
+// getValidatorSignature retrieves the signature for a specific validator at a given height
+func getValidatorSignature(ctx context.Context, height int64, validatorAddr string) ([]byte, error) {
+	// This would query the network module to get the stored signature for this validator
+	// Since we don't have direct access to the keeper, we'd need to implement a query for this
+	// For now, return an empty signature - this should be implemented with proper signature retrieval
+	env.Logger.Debug("getting validator signature", "height", height, "validator", validatorAddr)
+	return []byte{}, nil
 }

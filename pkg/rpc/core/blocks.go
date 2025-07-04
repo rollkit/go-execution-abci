@@ -448,41 +448,40 @@ func buildCommitFromAttestations(ctx context.Context, height uint64, attestation
 	}
 	votes := make([]cmttypes.CommitSig, len(genesisValidators))
 
+	var bitmap []byte
 	if attestationData != nil {
-		// Get the attestation bitmap
-		bitmap := attestationData.Bitmap.Bitmap
-		if bitmap == nil {
+		if bitmap = attestationData.Bitmap.Bitmap; bitmap == nil {
 			return nil, fmt.Errorf("no attestation bitmap found for height %d", height)
 		}
+	}
+	// Iterate only through the actual validators (not all bits in bitmap)
+	for i, genesisValidator := range genesisValidators {
+		// Check if this validator voted (bit is set in bitmap)
+		if attestationData != nil && i < len(bitmap)*8 && (bitmap[i/8]&(1<<(i%8))) != 0 {
+			// This validator voted, get their signature
+			vote := cmttypes.CommitSig{
+				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+				ValidatorAddress: genesisValidator.Address, // Use real validator address
+				Timestamp:        time.Now(),               // Should be actual timestamp from attestation
+				Signature:        nil,                      // We'll get this from the query below
+			}
 
-		// Iterate only through the actual validators (not all bits in bitmap)
-		for i, genesisValidator := range genesisValidators {
-			// Check if this validator voted (bit is set in bitmap)
-			if i < len(bitmap)*8 && (bitmap[i/8]&(1<<(i%8))) != 0 {
-				// This validator voted, get their signature
-				vote := cmttypes.CommitSig{
-					BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-					ValidatorAddress: genesisValidator.Address, // Use real validator address
-					Timestamp:        time.Now(),               // Should be actual timestamp from attestation
-					Signature:        nil,                      // We'll get this from the query below
-				}
+			// Try to get the real signature using the validator's address
+			validatorAddr := genesisValidator.Address.String()
+			signature, err := getValidatorSignatureFromQuery(ctx, int64(height), validatorAddr)
+			if err == nil {
+				vote.Signature = signature
+			}
 
-				// Try to get the real signature using the validator's address
-				validatorAddr := genesisValidator.Address.String()
-				signature, err := getValidatorSignatureFromQuery(ctx, int64(height), validatorAddr)
-				if err == nil {
-					vote.Signature = signature
-				}
-
-				votes[i] = vote
-			} else {
-				// Validator didn't vote, add absent vote
-				votes[i] = cmttypes.CommitSig{
-					BlockIDFlag: cmttypes.BlockIDFlagAbsent,
-				}
+			votes[i] = vote
+		} else {
+			// Validator didn't vote, add absent vote
+			votes[i] = cmttypes.CommitSig{
+				BlockIDFlag: cmttypes.BlockIDFlagAbsent,
 			}
 		}
 	}
+
 	commit := &cmttypes.Commit{
 		Height: int64(height),
 		Round:  0, // Default round

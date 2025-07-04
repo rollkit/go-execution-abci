@@ -521,8 +521,8 @@ func buildCommitFromAttestations(ctx context.Context, height uint64, attestation
 // getValidatorSignatureFromQuery queries the signature for a specific validator
 func getValidatorSignatureFromQuery(ctx context.Context, height int64, validatorAddr string) ([]byte, error) {
 	sigReq := &networktypes.QueryValidatorSignatureRequest{
-		Height:    height,
-		Validator: validatorAddr,
+		BlockHeight: height,
+		Validator:   validatorAddr,
 	}
 
 	reqData, err := sigReq.Marshal()

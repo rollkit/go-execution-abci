@@ -278,15 +278,15 @@ func request_Query_ValidatorSignature_0(ctx context.Context, marshaler runtime.M
 		_   = err
 	)
 
-	val, ok = pathParams["height"]
+	val, ok = pathParams["block_height"]
 	if !ok {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "height")
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "block_height")
 	}
 
-	protoReq.Height, err = runtime.Int64(val)
+	protoReq.BlockHeight, err = runtime.Int64(val)
 
 	if err != nil {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "height", err)
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "block_height", err)
 	}
 
 	val, ok = pathParams["validator"]
@@ -316,15 +316,15 @@ func local_request_Query_ValidatorSignature_0(ctx context.Context, marshaler run
 		_   = err
 	)
 
-	val, ok = pathParams["height"]
+	val, ok = pathParams["block_height"]
 	if !ok {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "height")
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "missing parameter %s", "block_height")
 	}
 
-	protoReq.Height, err = runtime.Int64(val)
+	protoReq.BlockHeight, err = runtime.Int64(val)
 
 	if err != nil {
-		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "height", err)
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "type mismatch, parameter: %s, error: %v", "block_height", err)
 	}
 
 	val, ok = pathParams["validator"]
@@ -662,7 +662,7 @@ var (
 
 	pattern_Query_SoftConfirmationStatus_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3, 1, 0, 4, 1, 5, 4}, []string{"rollkit", "network", "v1", "soft-confirmation", "height"}, "", runtime.AssumeColonVerbOpt(false)))
 
-	pattern_Query_ValidatorSignature_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3, 1, 0, 4, 1, 5, 4, 1, 0, 4, 1, 5, 5}, []string{"rollkit", "network", "v1", "signature", "height", "validator"}, "", runtime.AssumeColonVerbOpt(false)))
+	pattern_Query_ValidatorSignature_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2, 2, 3, 1, 0, 4, 1, 5, 4, 1, 0, 4, 1, 5, 5}, []string{"rollkit", "network", "v1", "signature", "block_height", "validator"}, "", runtime.AssumeColonVerbOpt(false)))
 )
 
 var (

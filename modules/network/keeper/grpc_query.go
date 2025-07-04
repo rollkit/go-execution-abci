@@ -199,7 +199,7 @@ func (q *queryServer) ValidatorSignature(c context.Context, req *types.QueryVali
 
 	ctx := sdk.UnwrapSDKContext(c)
 
-	signature, err := q.keeper.GetSignature(ctx, req.Height, req.Validator)
+	signature, err := q.keeper.GetSignature(ctx, req.BlockHeight, req.Validator)
 	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
 			return &types.QueryValidatorSignatureResponse{

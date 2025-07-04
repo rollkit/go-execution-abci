@@ -2,12 +2,12 @@ syntax = "proto3";
 
 package rollkitsdk.network.v1;
 
-option go_package = "github.com/rollkit/go-execution-abci/modules/network/types";
-
+import "cosmos/base/query/v1beta1/pagination.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
-import "cosmos/base/query/v1beta1/pagination.proto";
 import "rollkitsdk/network/v1/types.proto";
+
+option go_package = "github.com/rollkit/go-execution-abci/modules/network/types";
 
 // Query defines the gRPC querier service for the network module.
 service Query {
@@ -15,25 +15,30 @@ service Query {
   rpc Params(QueryParamsRequest) returns (QueryParamsResponse) {
     option (google.api.http).get = "/rollkit/network/v1/params";
   }
-  
+
   // AttestationBitmap queries the attestation bitmap for a specific height
   rpc AttestationBitmap(QueryAttestationBitmapRequest) returns (QueryAttestationBitmapResponse) {
     option (google.api.http).get = "/rollkit/network/v1/attestation/{height}";
   }
-  
+
   // EpochInfo queries information about a specific epoch
   rpc EpochInfo(QueryEpochInfoRequest) returns (QueryEpochInfoResponse) {
     option (google.api.http).get = "/rollkit/network/v1/epoch/{epoch}";
   }
-  
+
   // ValidatorIndex queries the bitmap index for a validator
   rpc ValidatorIndex(QueryValidatorIndexRequest) returns (QueryValidatorIndexResponse) {
     option (google.api.http).get = "/rollkit/network/v1/validator/{address}";
   }
-  
+
   // SoftConfirmationStatus queries if a height is soft-confirmed
   rpc SoftConfirmationStatus(QuerySoftConfirmationStatusRequest) returns (QuerySoftConfirmationStatusResponse) {
     option (google.api.http).get = "/rollkit/network/v1/soft-confirmation/{height}";
+  }
+
+  // ValidatorSignature queries the signature of a validator for a specific height
+  rpc ValidatorSignature(QueryValidatorSignatureRequest) returns (QueryValidatorSignatureResponse) {
+    option (google.api.http).get = "/rollkit/network/v1/signature/{height}/{validator}";
   }
 }
 
@@ -92,4 +97,16 @@ message QuerySoftConfirmationStatusResponse {
   uint64 voted_power = 2;
   uint64 total_power = 3;
   string quorum_fraction = 4;
+}
+
+// QueryValidatorSignatureRequest is the request type for the Query/ValidatorSignature RPC method.
+message QueryValidatorSignatureRequest {
+  int64 height = 1;
+  string validator = 2;
+}
+
+// QueryValidatorSignatureResponse is the response type for the Query/ValidatorSignature RPC method.
+message QueryValidatorSignatureResponse {
+  bytes signature = 1;
+  bool found = 2;
 }

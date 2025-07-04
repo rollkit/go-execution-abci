@@ -190,3 +190,28 @@ func (q *queryServer) SoftConfirmationStatus(c context.Context, req *types.Query
 		QuorumFraction:  q.keeper.GetParams(ctx).QuorumFraction,
 	}, nil
 }
+
+// ValidatorSignature queries the signature of a validator for a specific height
+func (q *queryServer) ValidatorSignature(c context.Context, req *types.QueryValidatorSignatureRequest) (*types.QueryValidatorSignatureResponse, error) {
+	if req == nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid request")
+	}
+
+	ctx := sdk.UnwrapSDKContext(c)
+
+	signature, err := q.keeper.GetSignature(ctx, req.Height, req.Validator)
+	if err != nil {
+		if errors.Is(err, collections.ErrNotFound) {
+			return &types.QueryValidatorSignatureResponse{
+				Signature: nil,
+				Found:     false,
+			}, nil
+		}
+		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to get signature: %v", err))
+	}
+
+	return &types.QueryValidatorSignatureResponse{
+		Signature: signature,
+		Found:     true,
+	}, nil
+}

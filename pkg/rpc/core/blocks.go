@@ -445,60 +445,39 @@ func buildCommitFromAttestations(ctx context.Context, height uint64, attestation
 		return nil, fmt.Errorf("no attestation bitmap found for height %d", height)
 	}
 
-	// Query all validators to get their addresses
-	queryReq := &abci.RequestQuery{
-		Path: "/cosmos.staking.v1beta1.Query/Validators",
-		Data: []byte{}, // Empty request to get all validators
+	// Get validators from genesis (since we know there's exactly one validator)
+	genesisValidators := env.Adapter.AppGenesis.Consensus.Validators
+	if len(genesisValidators) == 0 {
+		return nil, fmt.Errorf("no validators found in genesis")
 	}
 
-	valQueryRes, err := env.Adapter.App.Query(ctx, queryReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query validators: %w", err)
-	}
-	if valQueryRes.Code != 0 {
-		return nil, fmt.Errorf("failed to query validators: %s", valQueryRes.Log)
-	}
+	votes := make([]cmttypes.CommitSig, len(genesisValidators))
 
-	// For now, we'll construct a basic commit structure with the available data
-	// In a real implementation, you'd need to decode the validator response properly
-
-	votes := make([]cmttypes.CommitSig, 0)
-
-	// We need to iterate through the bitmap and for each set bit, get the validator signature
-	for i := 0; i < len(bitmap)*8; i++ {
-		// Check if validator at index i voted (bit is set)
-		if (bitmap[i/8] & (1 << (i % 8))) != 0 {
-			// This validator voted, let's try to get their signature
-			// For this we need the validator address corresponding to index i
-			// This would require a proper validator index mapping
-
-			// For now, we'll create a placeholder vote with empty signature
-			// In a real implementation, you'd:
-			// 1. Get validator address from index i
-			// 2. Query the signature using ValidatorSignature query
-			// 3. Construct the proper CommitSig
-
+	// Iterate only through the actual validators (not all bits in bitmap)
+	for i, genesisValidator := range genesisValidators {
+		// Check if this validator voted (bit is set in bitmap)
+		if i < len(bitmap)*8 && (bitmap[i/8]&(1<<(i%8))) != 0 {
+			// This validator voted, get their signature
 			vote := cmttypes.CommitSig{
 				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-				ValidatorAddress: make([]byte, 20), // Placeholder validator address
-				Timestamp:        time.Now(),       // Should be actual timestamp
-				Signature:        nil,              // We'll get this from the query below
+				ValidatorAddress: genesisValidator.Address, // Use real validator address
+				Timestamp:        time.Now(),               // Should be actual timestamp from attestation
+				Signature:        nil,                      // We'll get this from the query below
 			}
 
-			// Try to get the real signature (this is a simplified approach)
-			// In practice, you'd need to map the bitmap index to validator address
-			validatorAddr := fmt.Sprintf("validator_%d", i) // Placeholder
+			// Try to get the real signature using the validator's address
+			validatorAddr := genesisValidator.Address.String()
 			signature, err := getValidatorSignatureFromQuery(ctx, int64(height), validatorAddr)
 			if err == nil {
 				vote.Signature = signature
 			}
 
-			votes = append(votes, vote)
+			votes[i] = vote
 		} else {
-			// Validator didn't vote, add nil vote
-			votes = append(votes, cmttypes.CommitSig{
+			// Validator didn't vote, add absent vote
+			votes[i] = cmttypes.CommitSig{
 				BlockIDFlag: cmttypes.BlockIDFlagAbsent,
-			})
+			}
 		}
 	}
 

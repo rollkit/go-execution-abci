@@ -224,9 +224,10 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 		return nil, fmt.Errorf("failed to check soft confirmation status: %w", err)
 	}
 
-	if !isSoftConfirmed {
-		return nil, fmt.Errorf("commit for height %d does not exist (block not soft confirmed)", height)
-	}
+	//if !isSoftConfirmed {
+	//	return nil, fmt.Errorf("commit for height %d does not exist (block not soft confirmed)", height)
+	//}
+	_ = isSoftConfirmed
 
 	header, rollkitData, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), height)
 	if err != nil {
@@ -246,6 +247,7 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 
 	// Update the commit's BlockID to match the final ABCI block hash
 	block.LastCommit.BlockID.Hash = block.Header.Hash()
+	block.LastCommit.BlockID.PartSetHeader.Hash = block.LastCommit.BlockID.Hash
 
 	return &ctypes.ResultCommit{
 		SignedHeader: cmttypes.SignedHeader{
@@ -439,48 +441,48 @@ func checkSoftConfirmation(ctx context.Context, height uint64) (bool, *networkty
 
 // buildCommitFromAttestations constructs a commit with real signatures from attestations
 func buildCommitFromAttestations(ctx context.Context, height uint64, attestationData *networktypes.QueryAttestationBitmapResponse) (*cmttypes.Commit, error) {
-	// Get the attestation bitmap
-	bitmap := attestationData.Bitmap.Bitmap
-	if bitmap == nil {
-		return nil, fmt.Errorf("no attestation bitmap found for height %d", height)
-	}
-
 	// Get validators from genesis (since we know there's exactly one validator)
 	genesisValidators := env.Adapter.AppGenesis.Consensus.Validators
 	if len(genesisValidators) == 0 {
 		return nil, fmt.Errorf("no validators found in genesis")
 	}
-
 	votes := make([]cmttypes.CommitSig, len(genesisValidators))
 
-	// Iterate only through the actual validators (not all bits in bitmap)
-	for i, genesisValidator := range genesisValidators {
-		// Check if this validator voted (bit is set in bitmap)
-		if i < len(bitmap)*8 && (bitmap[i/8]&(1<<(i%8))) != 0 {
-			// This validator voted, get their signature
-			vote := cmttypes.CommitSig{
-				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-				ValidatorAddress: genesisValidator.Address, // Use real validator address
-				Timestamp:        time.Now(),               // Should be actual timestamp from attestation
-				Signature:        nil,                      // We'll get this from the query below
-			}
+	if attestationData != nil {
+		// Get the attestation bitmap
+		bitmap := attestationData.Bitmap.Bitmap
+		if bitmap == nil {
+			return nil, fmt.Errorf("no attestation bitmap found for height %d", height)
+		}
 
-			// Try to get the real signature using the validator's address
-			validatorAddr := genesisValidator.Address.String()
-			signature, err := getValidatorSignatureFromQuery(ctx, int64(height), validatorAddr)
-			if err == nil {
-				vote.Signature = signature
-			}
+		// Iterate only through the actual validators (not all bits in bitmap)
+		for i, genesisValidator := range genesisValidators {
+			// Check if this validator voted (bit is set in bitmap)
+			if i < len(bitmap)*8 && (bitmap[i/8]&(1<<(i%8))) != 0 {
+				// This validator voted, get their signature
+				vote := cmttypes.CommitSig{
+					BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+					ValidatorAddress: genesisValidator.Address, // Use real validator address
+					Timestamp:        time.Now(),               // Should be actual timestamp from attestation
+					Signature:        nil,                      // We'll get this from the query below
+				}
 
-			votes[i] = vote
-		} else {
-			// Validator didn't vote, add absent vote
-			votes[i] = cmttypes.CommitSig{
-				BlockIDFlag: cmttypes.BlockIDFlagAbsent,
+				// Try to get the real signature using the validator's address
+				validatorAddr := genesisValidator.Address.String()
+				signature, err := getValidatorSignatureFromQuery(ctx, int64(height), validatorAddr)
+				if err == nil {
+					vote.Signature = signature
+				}
+
+				votes[i] = vote
+			} else {
+				// Validator didn't vote, add absent vote
+				votes[i] = cmttypes.CommitSig{
+					BlockIDFlag: cmttypes.BlockIDFlagAbsent,
+				}
 			}
 		}
 	}
-
 	commit := &cmttypes.Commit{
 		Height: int64(height),
 		Round:  0, // Default round

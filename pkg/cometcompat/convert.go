@@ -2,8 +2,6 @@ package cometcompat
 
 import (
 	"errors"
-	"fmt"
-
 	cmbytes "github.com/cometbft/cometbft/libs/bytes"
 	cmprotoversion "github.com/cometbft/cometbft/proto/tendermint/version"
 	cmttypes "github.com/cometbft/cometbft/types"
@@ -13,7 +11,11 @@ import (
 )
 
 // ToABCIBlock converts Rolkit block into block format defined by ABCI.
-func ToABCIBlock(header *rlktypes.SignedHeader, data *rlktypes.Data, lastCommit *cmttypes.Commit) (*cmttypes.Block, error) {
+func ToABCIBlock(
+	header *rlktypes.SignedHeader,
+	data *rlktypes.Data,
+	lastCommit *cmttypes.Commit,
+) (*cmttypes.Block, error) {
 	abciHeader, err := ToABCIHeader(&header.Header)
 	if err != nil {
 		return nil, err
@@ -27,15 +29,9 @@ func ToABCIBlock(header *rlktypes.SignedHeader, data *rlktypes.Data, lastCommit 
 	// set commit hash
 	abciHeader.LastCommitHash = lastCommit.Hash()
 
-	// set validator hash
-	if header.Signer.Address != nil {
-		validatorHash, err := validatorHasher(header.ProposerAddress, header.Signer.PubKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to compute validator hash: %w", err)
-		}
-		abciHeader.ValidatorsHash = cmbytes.HexBytes(validatorHash)
-		abciHeader.NextValidatorsHash = cmbytes.HexBytes(validatorHash)
-	}
+	validatorHash := header.ValidatorHash
+	abciHeader.ValidatorsHash = cmbytes.HexBytes(validatorHash)
+	abciHeader.NextValidatorsHash = cmbytes.HexBytes(validatorHash)
 
 	abciBlock := cmttypes.Block{
 		Header: abciHeader,
@@ -54,8 +50,13 @@ func ToABCIBlock(header *rlktypes.SignedHeader, data *rlktypes.Data, lastCommit 
 }
 
 // ToABCIBlockMeta converts Rollkit block into BlockMeta format defined by ABCI
-func ToABCIBlockMeta(header *rlktypes.SignedHeader, data *rlktypes.Data, lastCommit *cmttypes.Commit) (*cmttypes.BlockMeta, error) {
+func ToABCIBlockMeta(
+	header *rlktypes.SignedHeader,
+	data *rlktypes.Data,
+	lastCommit *cmttypes.Commit,
+) (*cmttypes.BlockMeta, error) {
 	cmblock, err := ToABCIBlock(header, data, lastCommit)
+
 	if err != nil {
 		return nil, err
 	}

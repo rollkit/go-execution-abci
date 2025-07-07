@@ -374,11 +374,13 @@ func createRollkitMigrationGenesis(rootDir string, cometBFTState state.State) er
 	)
 
 	// If the cometbft validators are > 0, fetch the rollkitmngr state to get the sequencer
+	var rollkitMngrErr error
 	if len(cometBFTState.LastValidators.Validators) > 0 {
 		if sequencer, err := getSequencerFromRollkitMngrState(rootDir, cometBFTState); err == nil {
 			sequencerAddr = sequencer.Address
 			sequencerPubKey = sequencer.PubKey
 		} else {
+			rollkitMngrErr = err
 			// If rollkitmngr state is not available, fall back to single validator logic
 			if len(cometBFTState.LastValidators.Validators) == 1 {
 				sequencerAddr = cometBFTState.LastValidators.Validators[0].Address.Bytes()
@@ -405,12 +407,24 @@ func createRollkitMigrationGenesis(rootDir string, cometBFTState state.State) er
 	// using cmtjson for marshalling to ensure compatibility with cometbft genesis format
 	genesisBytes, err := cmtjson.MarshalIndent(migrationGenesis, "", "  ")
 	if err != nil {
+		if rollkitMngrErr != nil {
+			return errors.Join(
+				fmt.Errorf("failed to marshal rollkit migration genesis: %w", err),
+				fmt.Errorf("rollkitmngr state query failed: %w", rollkitMngrErr),
+			)
+		}
 		return fmt.Errorf("failed to marshal rollkit migration genesis: %w", err)
 	}
 
 	const rollkitGenesisFilename = "rollkit_genesis.json"
 	genesisPath := filepath.Join(rootDir, rollkitGenesisFilename)
 	if err := os.WriteFile(genesisPath, genesisBytes, 0o644); err != nil {
+		if rollkitMngrErr != nil {
+			return errors.Join(
+				fmt.Errorf("failed to write rollkit migration genesis to %s: %w", genesisPath, err),
+				fmt.Errorf("rollkitmngr state query failed: %w", rollkitMngrErr),
+			)
+		}
 		return fmt.Errorf("failed to write rollkit migration genesis to %s: %w", genesisPath, err)
 	}
 

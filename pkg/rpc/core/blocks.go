@@ -134,9 +134,32 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 		return nil, err
 	}
 
-	lastCommit, err := getLastCommit(ctx.Context(), heightValue)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get last commit for block %d: %w", heightValue, err)
+	// Try to get attestation-based commit for the previous block first, fall back to getLastCommit if not available
+	var lastCommit *cmttypes.Commit
+	if heightValue > 0 {
+		previousHeight := heightValue - 1
+		isSoftConfirmed, softConfirmationData, err := checkSoftConfirmation(ctx.Context(), previousHeight)
+		if err == nil && isSoftConfirmed && softConfirmationData != nil {
+			// Build commit with real signatures from attestations for the previous block
+			lastCommit, err = buildCommitFromAttestations(ctx.Context(), previousHeight, softConfirmationData)
+			if err != nil {
+				// Fall back to regular lastCommit if attestation-based commit fails
+				env.Logger.Debug("failed to build commit from attestations, falling back to getLastCommit", "height", previousHeight, "error", err)
+				lastCommit, err = getLastCommit(ctx.Context(), heightValue)
+				if err != nil {
+					return nil, fmt.Errorf("failed to get last commit for block %d: %w", heightValue, err)
+				}
+			}
+		} else {
+			// Use regular lastCommit
+			lastCommit, err = getLastCommit(ctx.Context(), heightValue)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get last commit for block %d: %w", heightValue, err)
+			}
+		}
+	} else {
+		// For genesis block (height 0), there's no previous block, so no lastCommit
+		lastCommit = nil
 	}
 
 	block, err := cometcompat.ToABCIBlock(header, data, lastCommit)
@@ -187,9 +210,32 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 		return nil, err
 	}
 
-	lastCommit, err := getLastCommit(ctx.Context(), header.Height())
-	if err != nil {
-		return nil, fmt.Errorf("failed to get last commit for block %d: %w", header.Height(), err)
+	// Try to get attestation-based commit for the previous block first, fall back to getLastCommit if not available
+	var lastCommit *cmttypes.Commit
+	if header.Height() > 0 {
+		previousHeight := header.Height() - 1
+		isSoftConfirmed, softConfirmationData, err := checkSoftConfirmation(ctx.Context(), previousHeight)
+		if err == nil && isSoftConfirmed && softConfirmationData != nil {
+			// Build commit with real signatures from attestations for the previous block
+			lastCommit, err = buildCommitFromAttestations(ctx.Context(), previousHeight, softConfirmationData)
+			if err != nil {
+				// Fall back to regular lastCommit if attestation-based commit fails
+				env.Logger.Debug("failed to build commit from attestations, falling back to getLastCommit", "height", previousHeight, "error", err)
+				lastCommit, err = getLastCommit(ctx.Context(), header.Height())
+				if err != nil {
+					return nil, fmt.Errorf("failed to get last commit for block %d: %w", header.Height(), err)
+				}
+			}
+		} else {
+			// Use regular lastCommit
+			lastCommit, err = getLastCommit(ctx.Context(), header.Height())
+			if err != nil {
+				return nil, fmt.Errorf("failed to get last commit for block %d: %w", header.Height(), err)
+			}
+		}
+	} else {
+		// For genesis block (height 0), there's no previous block, so no lastCommit
+		lastCommit = nil
 	}
 
 	block, err := cometcompat.ToABCIBlock(header, data, lastCommit)

@@ -36,33 +36,41 @@ func (k msgServer) Attest(goCtx context.Context, msg *types.MsgAttest) (*types.M
 	if err := k.validateAttestation(ctx, msg); err != nil {
 		return nil, err
 	}
+	println("+++ 1")
 	// can vote only for the last epoch
-	if delta := ctx.BlockHeight() - msg.Height; delta < 0 || delta > int64(k.GetParams(ctx).EpochLength) {
+	if delta := ctx.BlockHeight() - msg.Height; delta < 0 || delta > int64(k.GetParams(ctx).EpochLength)*2 { // todo (Alex): does factor 2 make sense?
 		return nil, sdkerr.Wrapf(sdkerrors.ErrInvalidRequest, "exceeded voting window: %d blocks", delta)
 	}
 
+	println("+++ 2")
 	valIndexPos, found := k.GetValidatorIndex(ctx, msg.Validator)
 	if !found {
 		return nil, sdkerr.Wrapf(sdkerrors.ErrNotFound, "validator index not found for %s", msg.Validator)
 	}
 
+	println("+++ 3")
 	vote, err := k.verifyVote(ctx, msg)
 	if err != nil {
 		return nil, err
 	}
 
+	println("+++ 4")
 	if err := k.updateAttestationBitmap(ctx, msg, valIndexPos); err != nil {
 		return nil, sdkerr.Wrap(err, "update attestation bitmap")
 	}
 
-	if err := k.SetSignature(ctx, msg.Height, msg.Validator, vote.Signature); err != nil {
+	println("+++ 5")
+	if err := k.SetVote(ctx, msg.Height, vote.ValidatorAddress, *vote); err != nil {
+		println("+++ 5b")
 		return nil, sdkerr.Wrap(err, "store signature")
 	}
 
+	println("+++ 6")
 	if err := k.updateEpochBitmap(ctx, uint64(msg.Height), valIndexPos); err != nil {
 		return nil, err
 	}
 
+	println("+++ 7")
 	// Emit event
 	ctx.EventManager().EmitEvent(
 		sdk.NewEvent(

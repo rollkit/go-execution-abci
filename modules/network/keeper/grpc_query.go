@@ -193,13 +193,17 @@ func (q *queryServer) SoftConfirmationStatus(c context.Context, req *types.Query
 
 // ValidatorSignature queries the signature of a validator for a specific height
 func (q *queryServer) ValidatorSignature(c context.Context, req *types.QueryValidatorSignatureRequest) (*types.QueryValidatorSignatureResponse, error) {
+	// TODO (Alex): refactor to vote
+
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid request")
 	}
 
+	fmt.Printf("+++ enpoint ValidatorSignature addr: %X, height: %d\n", []byte(req.Validator), req.BlockHeight)
+
 	ctx := sdk.UnwrapSDKContext(c)
 
-	signature, err := q.keeper.GetSignature(ctx, req.BlockHeight, req.Validator)
+	signature, err := q.keeper.GetVote(ctx, req.BlockHeight, []byte(req.Validator))
 	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
 			return &types.QueryValidatorSignatureResponse{
@@ -210,8 +214,12 @@ func (q *queryServer) ValidatorSignature(c context.Context, req *types.QueryVali
 		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to get signature: %v", err))
 	}
 
+	voteBz, err := signature.Marshal()
+	if err != nil {
+		return nil, status.Error(codes.Internal, fmt.Sprintf("marshal vote: %v", err))
+	}
 	return &types.QueryValidatorSignatureResponse{
-		Signature: signature,
+		Signature: voteBz,
 		Found:     true,
 	}, nil
 }

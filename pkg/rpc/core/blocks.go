@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"time"
 
 	cmbytes "github.com/cometbft/cometbft/libs/bytes"
 	cmquery "github.com/cometbft/cometbft/libs/pubsub/query"
@@ -14,7 +13,7 @@ import (
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	cmttypes "github.com/cometbft/cometbft/types"
-
+	"github.com/cosmos/gogoproto/proto"
 	storepkg "github.com/rollkit/rollkit/pkg/store"
 	rlktypes "github.com/rollkit/rollkit/types"
 
@@ -129,73 +128,14 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 		}
 	}
 
-	header, data, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), heightValue)
+	block, err := xxxBlock(ctx, heightValue)
 	if err != nil {
 		return nil, err
 	}
 
-	// Try to get attestation-based commit for the previous block first, fall back to getLastCommit if not available
-	var lastCommit *cmttypes.Commit
-	if heightValue > 0 {
-		previousHeight := heightValue - 1
-		isSoftConfirmed, softConfirmationData, err := checkSoftConfirmation(ctx.Context(), previousHeight)
-		if err == nil && isSoftConfirmed && softConfirmationData != nil {
-			// Build commit with real signatures from attestations for the previous block
-			lastCommit, err = buildCommitFromAttestations(ctx.Context(), previousHeight, softConfirmationData)
-			if err != nil {
-				// Fall back to regular lastCommit if attestation-based commit fails
-				env.Logger.Debug("failed to build commit from attestations, falling back to getLastCommit", "height", previousHeight, "error", err)
-				lastCommit, err = getLastCommit(ctx.Context(), heightValue)
-				if err != nil {
-					return nil, fmt.Errorf("failed to get last commit for block %d: %w", heightValue, err)
-				}
-			}
-		} else {
-			// Use regular lastCommit
-			lastCommit, err = getLastCommit(ctx.Context(), heightValue)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get last commit for block %d: %w", heightValue, err)
-			}
-		}
-	} else {
-		// For genesis block (height 0), there's no previous block, so no lastCommit
-		lastCommit = nil
+	if len(block.LastCommit.Signatures) == 0 {
+		return nil, nil // not found
 	}
-
-	block, err := cometcompat.ToABCIBlock(header, data, lastCommit)
-	if err != nil {
-		return nil, err
-	}
-
-	// Then re-sign the final ABCI header if we have a signer
-	if env.Signer != nil {
-		// Create a vote for the final ABCI header
-		vote := cmtproto.Vote{
-			Type:   cmtproto.PrecommitType,
-			Height: int64(header.Height()), //nolint:gosec
-			Round:  0,
-			BlockID: cmtproto.BlockID{
-				Hash:          block.Header.Hash(),
-				PartSetHeader: cmtproto.PartSetHeader{},
-			},
-			Timestamp:        block.Time,
-			ValidatorAddress: header.ProposerAddress,
-			ValidatorIndex:   0,
-		}
-		chainID := header.ChainID()
-		finalSignBytes := cmttypes.VoteSignBytes(chainID, &vote)
-
-		newSignature, err := env.Signer.Sign(finalSignBytes)
-		if err != nil {
-			return nil, fmt.Errorf("failed to sign final ABCI header: %w", err)
-		}
-
-		// Update the signature in the block
-		if len(block.LastCommit.Signatures) > 0 {
-			block.LastCommit.Signatures[0].Signature = newSignature
-		}
-	}
-
 	return &ctypes.ResultBlock{
 		BlockID: cmttypes.BlockID{Hash: block.Hash()},
 		Block:   block,
@@ -210,32 +150,9 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 		return nil, err
 	}
 
-	// Try to get attestation-based commit for the previous block first, fall back to getLastCommit if not available
-	var lastCommit *cmttypes.Commit
-	if header.Height() > 0 {
-		previousHeight := header.Height() - 1
-		isSoftConfirmed, softConfirmationData, err := checkSoftConfirmation(ctx.Context(), previousHeight)
-		if err == nil && isSoftConfirmed && softConfirmationData != nil {
-			// Build commit with real signatures from attestations for the previous block
-			lastCommit, err = buildCommitFromAttestations(ctx.Context(), previousHeight, softConfirmationData)
-			if err != nil {
-				// Fall back to regular lastCommit if attestation-based commit fails
-				env.Logger.Debug("failed to build commit from attestations, falling back to getLastCommit", "height", previousHeight, "error", err)
-				lastCommit, err = getLastCommit(ctx.Context(), header.Height())
-				if err != nil {
-					return nil, fmt.Errorf("failed to get last commit for block %d: %w", header.Height(), err)
-				}
-			}
-		} else {
-			// Use regular lastCommit
-			lastCommit, err = getLastCommit(ctx.Context(), header.Height())
-			if err != nil {
-				return nil, fmt.Errorf("failed to get last commit for block %d: %w", header.Height(), err)
-			}
-		}
-	} else {
-		// For genesis block (height 0), there's no previous block, so no lastCommit
-		lastCommit = nil
+	lastCommit, err := getLastCommit(ctx.Context(), header.Height())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get last commit for block %d: %w", header.Height(), err)
 	}
 
 	block, err := cometcompat.ToABCIBlock(header, data, lastCommit)
@@ -264,10 +181,26 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 		return nil, err
 	}
 
+	block, err := xxxBlock(ctx, height)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ctypes.ResultCommit{
+		SignedHeader: cmttypes.SignedHeader{
+			Header: &block.Header,
+			Commit: block.LastCommit,
+		},
+		CanonicalCommit: true,
+	}, nil
+}
+
+func xxxBlock(ctx *rpctypes.Context, height uint64) (*cmttypes.Block, error) {
+	fmt.Printf("+++ height: %d\n", height)
 	// Check if the block has soft confirmation first
 	isSoftConfirmed, softConfirmationData, err := checkSoftConfirmation(ctx.Context(), height)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check soft confirmation status: %w", err)
+		return nil, fmt.Errorf("check soft confirmation status: %w", err)
 	}
 
 	//if !isSoftConfirmed {
@@ -283,7 +216,7 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 	// Build commit with attestations from soft confirmation data
 	commit, err := buildCommitFromAttestations(ctx.Context(), height, softConfirmationData)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build commit from attestations: %w", err)
+		return nil, fmt.Errorf("build commit from attestations: %w", err)
 	}
 
 	block, err := cometcompat.ToABCIBlock(header, rollkitData, commit)
@@ -294,14 +227,7 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 	// Update the commit's BlockID to match the final ABCI block hash
 	block.LastCommit.BlockID.Hash = block.Header.Hash()
 	block.LastCommit.BlockID.PartSetHeader.Hash = block.LastCommit.BlockID.Hash
-
-	return &ctypes.ResultCommit{
-		SignedHeader: cmttypes.SignedHeader{
-			Header: &block.Header,
-			Commit: block.LastCommit,
-		},
-		CanonicalCommit: true,
-	}, nil
+	return block, nil
 }
 
 // BlockResults gets block results at a given height.
@@ -477,12 +403,12 @@ func checkSoftConfirmation(ctx context.Context, height uint64) (bool, *networkty
 		return false, nil, fmt.Errorf("failed to query attestation bitmap: %w", err)
 	}
 
-	attestationResp := &networktypes.QueryAttestationBitmapResponse{}
+	var attestationResp networktypes.QueryAttestationBitmapResponse
 	if err := attestationResp.Unmarshal(abciRes.Value); err != nil {
 		return false, nil, fmt.Errorf("failed to unmarshal attestation bitmap response: %w", err)
 	}
 
-	return true, attestationResp, nil
+	return true, &attestationResp, nil
 }
 
 // buildCommitFromAttestations constructs a commit with real signatures from attestations
@@ -504,22 +430,20 @@ func buildCommitFromAttestations(ctx context.Context, height uint64, attestation
 	for i, genesisValidator := range genesisValidators {
 		// Check if this validator voted (bit is set in bitmap)
 		if attestationData != nil && i < len(bitmap)*8 && (bitmap[i/8]&(1<<(i%8))) != 0 {
-			// This validator voted, get their signature
-			vote := cmttypes.CommitSig{
-				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-				ValidatorAddress: genesisValidator.Address, // Use real validator address
-				Timestamp:        time.Now(),               // Should be actual timestamp from attestation
-				Signature:        nil,                      // We'll get this from the query below
-			}
-
 			// Try to get the real signature using the validator's address
-			validatorAddr := genesisValidator.Address.String()
-			signature, err := getValidatorSignatureFromQuery(ctx, int64(height), validatorAddr)
-			if err == nil {
-				vote.Signature = signature
+			validatorAddr := string(genesisValidator.Address.Bytes()) // todo (Alex): use proper format
+			vote, err := getValidatorSignatureFromQuery(ctx, int64(height), validatorAddr)
+			if err != nil {
+				return nil, fmt.Errorf("get validator signature for height %d: %w", height, err)
 			}
 
-			votes[i] = vote
+			votes[i] = cmttypes.CommitSig{
+				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+				ValidatorAddress: vote.ValidatorAddress,
+				Timestamp:        vote.Timestamp,
+				Signature:        vote.Signature,
+			}
+
 		} else {
 			// Validator didn't vote, add absent vote
 			votes[i] = cmttypes.CommitSig{
@@ -545,7 +469,7 @@ func buildCommitFromAttestations(ctx context.Context, height uint64, attestation
 }
 
 // getValidatorSignatureFromQuery queries the signature for a specific validator
-func getValidatorSignatureFromQuery(ctx context.Context, height int64, validatorAddr string) ([]byte, error) {
+func getValidatorSignatureFromQuery(ctx context.Context, height int64, validatorAddr string) (*cmtproto.Vote, error) {
 	sigReq := &networktypes.QueryValidatorSignatureRequest{
 		BlockHeight: height,
 		Validator:   validatorAddr,
@@ -555,6 +479,8 @@ func getValidatorSignatureFromQuery(ctx context.Context, height int64, validator
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal signature request: %w", err)
 	}
+
+	fmt.Printf("+++ getValidatorSignatureFromQuery addr: %X, height: %d\n", []byte(validatorAddr), height)
 
 	abciReq := &abci.RequestQuery{
 		Path: "/rollkitsdk.network.v1.Query/ValidatorSignature",
@@ -573,6 +499,12 @@ func getValidatorSignatureFromQuery(ctx context.Context, height int64, validator
 	if err := sigResp.Unmarshal(res.Value); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal signature response: %w", err)
 	}
-
-	return sigResp.Signature, nil
+	if !sigResp.Found {
+		return nil, fmt.Errorf("vote not found")
+	}
+	var vote cmtproto.Vote
+	if err := proto.Unmarshal(sigResp.Signature, &vote); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal signature payload: %w", err)
+	}
+	return &vote, nil
 }

@@ -18,7 +18,7 @@ var (
 
 // Default parameter values
 var (
-	DefaultEpochLength      = uint64(10)                        // todo (Alex): what is a good default?
+	DefaultEpochLength      = uint64(1)                         // todo (Alex): what is a good default?
 	DefaultQuorumFraction   = math.LegacyNewDecWithPrec(667, 3) // 2/3
 	DefaultMinParticipation = math.LegacyNewDecWithPrec(5, 1)   // 1/2
 	DefaultPruneAfter       = uint64(7)

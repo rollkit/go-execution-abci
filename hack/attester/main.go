@@ -335,6 +335,8 @@ func containsSpace(s string) bool {
 	return false
 }
 
+var accSeq uint64 = 0
+
 // broadcastTx executes a command to broadcast a transaction using the Cosmos SDK
 func broadcastTx(ctx context.Context, chainID, nodeAddr string, msg proto.Message, privKey *secp256k1.PrivKey, verbose bool) (string, error) {
 	// Get validator address from private key
@@ -375,7 +377,10 @@ func broadcastTx(ctx context.Context, chainID, nodeAddr string, msg proto.Messag
 	}
 	fmt.Printf("+++ chainid: %s, GetAccountNumber: %d\n", chainID, account.GetAccountNumber())
 	// Sign transaction using account sequence
-	accSeq := account.GetSequence()
+	if accSeq == 0 {
+		accSeq = account.GetSequence()
+	}
+
 	signerData := authsigning.SignerData{
 		Address:       addr.String(),
 		ChainID:       chainID,
@@ -448,7 +453,7 @@ func broadcastTx(ctx context.Context, chainID, nodeAddr string, msg proto.Messag
 	if err != nil {
 		return "", fmt.Errorf("broadcasting transaction: %w", err)
 	}
-
+	accSeq++
 	// Check if the transaction was successful
 	if resp.Code != 0 {
 		return "", fmt.Errorf("transaction failed with code %d: %s", resp.Code, resp.RawLog)

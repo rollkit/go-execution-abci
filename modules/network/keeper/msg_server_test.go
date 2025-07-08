@@ -249,7 +249,7 @@ func TestAttest(t *testing.T) {
 				require.Error(t, gotErr)
 				require.ErrorIs(t, gotErr, spec.expErr)
 				// and ensure the signature is not stored
-				_, err := testEnv.Keeper.GetSignature(ctx, srcMsg.Height, valAddrStr)
+				_, err := testEnv.Keeper.GetVote(ctx, srcMsg.Height, valAddrStr)
 				assert.ErrorIs(t, err, collections.ErrNotFound)
 				return
 			}
@@ -264,7 +264,7 @@ func TestAttest(t *testing.T) {
 			require.Equal(t, byte(1), bitmap[0])
 
 			// and the signature was stored properly
-			gotSig, err := testEnv.Keeper.GetSignature(ctx, srcMsg.Height, valAddrStr)
+			gotSig, err := testEnv.Keeper.GetVote(ctx, srcMsg.Height, valAddrStr)
 			require.NoError(t, err)
 			var vote cmtproto.Vote
 			require.NoError(t, proto.Unmarshal(srcMsg.Vote, &vote))

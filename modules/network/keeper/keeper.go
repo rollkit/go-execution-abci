@@ -3,6 +3,7 @@ package keeper
 import (
 	"errors"
 	"fmt"
+	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 
 	"cosmossdk.io/collections"
 	"cosmossdk.io/core/store"
@@ -29,7 +30,7 @@ type Keeper struct {
 	AttestationBitmap     collections.Map[int64, []byte]
 	EpochBitmap           collections.Map[uint64, []byte]
 	AttesterSet           collections.KeySet[string]
-	Signatures            collections.Map[collections.Pair[int64, string], []byte]
+	Votes                 collections.Map[collections.Pair[int64, []byte], cmtproto.Vote]
 	StoredAttestationInfo collections.Map[int64, types.AttestationBitmap]
 	Params                collections.Item[types.Params]
 	Schema                collections.Schema
@@ -59,7 +60,7 @@ func NewKeeper(
 		AttestationBitmap:     collections.NewMap(sb, types.AttestationBitmapPrefix, "attestation_bitmap", collections.Int64Key, collections.BytesValue),
 		EpochBitmap:           collections.NewMap(sb, types.EpochBitmapPrefix, "epoch_bitmap", collections.Uint64Key, collections.BytesValue),
 		AttesterSet:           collections.NewKeySet(sb, types.AttesterSetPrefix, "attester_set", collections.StringKey),
-		Signatures:            collections.NewMap(sb, types.SignaturePrefix, "signatures", collections.PairKeyCodec(collections.Int64Key, collections.StringKey), collections.BytesValue),
+		Votes:                 collections.NewMap(sb, types.SignaturePrefix, "votes", collections.PairKeyCodec(collections.Int64Key, collections.BytesKey), codec.CollValue[cmtproto.Vote](cdc)),
 		StoredAttestationInfo: collections.NewMap(sb, types.StoredAttestationInfoPrefix, "stored_attestation_info", collections.Int64Key, codec.CollValue[types.AttestationBitmap](cdc)), // Initialize new collection
 		Params:                collections.NewItem(sb, types.ParamsKey, "params", codec.CollValue[types.Params](cdc)),
 	}
@@ -309,17 +310,14 @@ func (k Keeper) PruneOldBitmaps(ctx sdk.Context, currentEpoch uint64) error {
 	return nil
 }
 
-// SetSignature stores the vote signature for a given height and validator
-func (k Keeper) SetSignature(ctx sdk.Context, height int64, validatorAddr string, signature []byte) error {
-	return k.Signatures.Set(ctx, collections.Join(height, validatorAddr), signature)
+// SetVote stores the vote signature for a given height and validator
+func (k Keeper) SetVote(ctx sdk.Context, height int64, validatorAddr []byte, signature cmtproto.Vote) error {
+	fmt.Printf("+++ SetVote addr: %X, height: %d\n", validatorAddr, height)
+
+	return k.Votes.Set(ctx, collections.Join(height, validatorAddr), signature)
 }
 
-// GetSignature retrieves the vote signature for a given height and validator
-func (k Keeper) GetSignature(ctx sdk.Context, height int64, validatorAddr string) ([]byte, error) {
-	return k.Signatures.Get(ctx, collections.Join(height, validatorAddr))
-}
-
-// HasSignature checks if a signature exists for a given height and validator
-func (k Keeper) HasSignature(ctx sdk.Context, height int64, validatorAddr string) (bool, error) {
-	return k.Signatures.Has(ctx, collections.Join(height, validatorAddr))
+// GetVote retrieves the vote signature for a given height and validator
+func (k Keeper) GetVote(ctx sdk.Context, height int64, validatorAddr []byte) (cmtproto.Vote, error) {
+	return k.Votes.Get(ctx, collections.Join(height, validatorAddr))
 }

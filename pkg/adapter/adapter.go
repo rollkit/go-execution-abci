@@ -103,7 +103,6 @@ func NewABCIExecutor(
 	appGenesis *genutiltypes.AppGenesis,
 	opts ...Option,
 ) *Adapter {
-
 	rollkitPrefixStore := kt.Wrap(store, &kt.PrefixTransform{
 		Prefix: ds.NewKey(rollnode.RollkitPrefix),
 	})
@@ -730,8 +729,4 @@ outerLoop:
 	a.stackedEvents = a.stackedEvents[maxPosReleased+1:]
 	a.Logger.Debug("remaining stack after soft consensus", "count", len(a.stackedEvents), "soft_consensus", softCommitHeight)
 	return nil
-}
-
-func (a *Adapter) GetExecutionMode() execution.ExecutionMode {
-	return execution.ExecutionModeDelayed
 }

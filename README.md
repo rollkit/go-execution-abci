@@ -46,11 +46,17 @@ graph TD
 
 ## Features
 
-- **ABCI Compatibility**: Run any ABCI-compatible application with Rollkit
-- **Transaction Management**: Handles transaction receipt, validation, and execution
-- **State Management**: Manages blockchain state including validators and consensus parameters
-- **P2P Communication**: Implements transaction gossip across the network
-- **RPC Endpoints**: Provides compatible API endpoints for clients to interact with
+- **ABCI Compatibility**: Run any ABCI-compatible application with Rollkit.
+- **Transaction Management**: Handles transaction receipt, validation, and execution.
+- **State Management**: Manages blockchain state including validators and consensus parameters.
+- **P2P Communication**: Implements transaction gossip across the network.
+- **RPC Endpoints**: Provides compatible API endpoints for clients to interact with.
+
+## ABCI Compatibility
+
+This adapter achieves compatibility with ABCI by calling the appropriate methods on the ABCI application during the execution lifecycle. It implements the necessary interfaces to ensure that transactions are processed correctly, blocks are finalized, and state is committed.
+
+Note, that because of the nature of Rollkit (single proposer), **Vote Extensions are not supported**. The adapter will not call the `VoteExtensions` methods on the ABCI application, and any logic related to vote extensions should be handled separately or not used at all.
 
 ## Installation
 
@@ -69,36 +75,61 @@ The project relies on several key dependencies:
 
 ## Usage
 
-The adapter can be used to create a Rollkit node with an ABCI application:
+The adapter can be used to create a Rollkit node with an ABCI application, such as a Cosmos SDK chain.
 
-```go
-import (
-    "github.com/rollkit/go-execution-abci/adapter"
-    "github.com/rollkit/rollkit/pkg/store"
-    rollkitp2p "github.com/rollkit/rollkit/pkg/p2p"
-    // ... other imports
-)
-
-// Create a new ABCI executor with your ABCI application
-executor := adapter.NewABCIExecutor(
-    app,               // Your ABCI application
-    store.New(db),     // Rollkit store
-    p2pClient,         // Rollkit P2P client
-    logger,            // Logger
-    config,            // CometBFT config
-    appGenesis,        // Application genesis
-    nil,               // Metrics (optional)
-    // Optional: custom block publisher, metrics,...
-)
-
-// Set up mempool for transaction handling
-executor.SetMempool(mempool)
-
-// Start the executor
-err := executor.Start(context.Background())
-if err != nil {
-    // Handle error
-}
+```diff
+diff --git a/cmd/gmd/cmd/commands.go b/cmd/gmd/cmd/commands.go
+index 310b195..19abe36 100644
+--- a/cmd/gmd/cmd/commands.go
++++ b/cmd/gmd/cmd/commands.go
+@@ -2,6 +2,7 @@ package cmd
+ 
+ import (
+ 	"errors"
++	"gm/app"
+ 	"io"
+ 
+ 	"github.com/spf13/cobra"
+@@ -24,7 +25,8 @@ import (
+ 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+ 	genutilcli "github.com/cosmos/cosmos-sdk/x/genutil/client/cli"
+ 
+-	"gm/app"
++	abciserver "github.com/rollkit/go-execution-abci/server"
++	rollconf "github.com/rollkit/rollkit/pkg/config"
+ )
+ 
+ func initRootCmd(
+@@ -32,8 +34,18 @@ func initRootCmd(
+ 	txConfig client.TxConfig,
+ 	basicManager module.BasicManager,
+ ) {
++	genesisCmd := genutilcli.InitCmd(basicManager, app.DefaultNodeHome)
++	rollconf.AddFlags(genesisCmd)
++	genesisCmdRunE := genesisCmd.RunE
++	genesisCmd.RunE = func(cmd *cobra.Command, args []string) error {
++		if err := genesisCmdRunE(cmd, args); err != nil {
++			return err
++		}
++		return abciserver.InitRunE(cmd, args)
++	}
++
+ 	rootCmd.AddCommand(
+-		genutilcli.InitCmd(basicManager, app.DefaultNodeHome),
++		genesisCmd,
+ 		NewInPlaceTestnetCmd(),
+ 		NewTestnetMultiNodeCmd(basicManager, banktypes.GenesisBalancesIterator{}),
+ 		debug.Cmd(),
+@@ -43,7 +55,10 @@ func initRootCmd(
+ 	)
+ 
+ 	server.AddCommandsWithStartCmdOptions(rootCmd, app.DefaultNodeHome, newApp, appExport, server.StartCmdOptions{
+-		AddFlags: addModuleInitFlags,
++		AddFlags: func(cmd *cobra.Command) {
++			abciserver.AddFlags(cmd)
++		},
++		StartCommandHandler: abciserver.StartHandler(),
+ 	})
 ```
 
 ## Transaction Flow
@@ -245,7 +276,3 @@ go-execution-abci/
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-Apache License 2.0

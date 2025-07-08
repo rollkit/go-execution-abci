@@ -11,12 +11,10 @@ import (
 
 	goheaderstore "github.com/celestiaorg/go-header/store"
 	dbm "github.com/cometbft/cometbft-db"
-	abci "github.com/cometbft/cometbft/abci/types"
 	cometbftcmd "github.com/cometbft/cometbft/cmd/cometbft/commands"
 	cfg "github.com/cometbft/cometbft/config"
 	"github.com/cometbft/cometbft/crypto"
 	cmtjson "github.com/cometbft/cometbft/libs/json"
-	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	"github.com/cometbft/cometbft/state"
 	"github.com/cometbft/cometbft/store"
 	cometbfttypes "github.com/cometbft/cometbft/types"
@@ -165,35 +163,9 @@ After migration, start the node normally - it will automatically detect and use 
 
 				// Only save extended commit info if vote extensions are enabled
 				if enabled := cometBFTstate.ConsensusParams.ABCI.VoteExtensionsEnabled(block.Height); enabled {
-					extendedCommit := cometBlockStore.LoadBlockExtendedCommit(lastBlockHeight)
-
-					extendedCommitInfo := abci.ExtendedCommitInfo{
-						Round: extendedCommit.Round,
-					}
-
-					for _, vote := range extendedCommit.ToExtendedVoteSet("", cometBFTstate.LastValidators).List() {
-						power := int64(0)
-						for _, v := range cometBFTstate.LastValidators.Validators {
-							if bytes.Equal(v.Address.Bytes(), vote.ValidatorAddress) {
-								power = v.VotingPower
-								break
-							}
-						}
-
-						extendedCommitInfo.Votes = append(extendedCommitInfo.Votes, abci.ExtendedVoteInfo{
-							Validator: abci.Validator{
-								Address: vote.ValidatorAddress,
-								Power:   power,
-							},
-							VoteExtension:      vote.Extension,
-							ExtensionSignature: vote.ExtensionSignature,
-							BlockIdFlag:        cmtproto.BlockIDFlag(vote.CommitSig().BlockIDFlag),
-						})
-					}
-
-					_ = extendedCommitInfo
-					// rollkitStore.SaveExtendedCommit(ctx, header.Height(), &extendedCommitInfo)
-					panic("Saving extended commit info is not implemented yet")
+					cmd.Printf("⚠️⚠️⚠️ Vote extensions were enabled at height %d ⚠️⚠️⚠️\n", block.Height)
+					cmd.Println("⚠️⚠️⚠️ Vote extensions have no effect when using Rollkit ⚠️⚠️⚠️")
+					cmd.Println("⚠️⚠️⚠️ Please consult the docs ⚠️⚠️⚠️")
 				}
 
 				cmd.Println("Block", height, "migrated")

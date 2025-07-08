@@ -28,21 +28,20 @@ func Validators(ctx *rpctypes.Context, heightPtr *int64, pagePtr, perPagePtr *in
 	}
 	// Since it's a centralized sequencer
 	// changed behavior to get this from genesis
-	genesisValidator := genesisValidators[0]
-	validator := cmttypes.Validator{
-		Address:          genesisValidator.Address,
-		PubKey:           genesisValidator.PubKey,
-		VotingPower:      int64(1),
-		ProposerPriority: int64(1),
+	valSet := make([]*cmttypes.Validator, len(genesisValidators))
+	for i, v := range genesisValidators {
+		valSet[i] = &cmttypes.Validator{
+			Address:          v.Address,
+			PubKey:           v.PubKey,
+			VotingPower:      v.Power,
+			ProposerPriority: int64(1),
+		}
 	}
-
 	return &coretypes.ResultValidators{
 		BlockHeight: int64(height), //nolint:gosec
-		Validators: []*cmttypes.Validator{
-			&validator,
-		},
-		Count: 1,
-		Total: 1,
+		Validators:  valSet,
+		Count:       len(valSet),
+		Total:       len(valSet),
 	}, nil
 }
 

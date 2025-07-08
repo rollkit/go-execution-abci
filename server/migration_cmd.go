@@ -164,7 +164,7 @@ After migration, start the node normally - it will automatically detect and use 
 				// Only save extended commit info if vote extensions are enabled
 				if enabled := cometBFTstate.ConsensusParams.ABCI.VoteExtensionsEnabled(block.Height); enabled {
 					cmd.Printf("⚠️⚠️⚠️ Vote extensions were enabled at height %d ⚠️⚠️⚠️\n", block.Height)
-					cmd.Println("⚠️⚠️⚠️ Vote extensions have no effects when using Rollkit ⚠️⚠️⚠️")
+					cmd.Println("⚠️⚠️⚠️ Vote extensions have no effect when using Rollkit ⚠️⚠️⚠️")
 					cmd.Println("⚠️⚠️⚠️ Please consult the docs ⚠️⚠️⚠️")
 				}
 

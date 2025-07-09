@@ -199,12 +199,12 @@ jobs:
 
       - name: Start Local DA for Rollkit
         run: |
-          # clone rollkit repository for local DA
-          git clone https://github.com/rollkit/rollkit --depth 1
-          cd rollkit/da/cmd/local-da
+          go install github.com/rollkit/rollkit/da/cmd/local-da@latest
           # start the local da in the background
-          go run . &
+          local-da &
+          # capture the background process PID
           echo "DA_PID=$!" >> $GITHUB_ENV
+          # give it a moment to start
           sleep 3
 
       - name: Start Rollkit Chain After Migration

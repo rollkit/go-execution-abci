@@ -32,8 +32,8 @@ require (
 	github.com/multiformats/go-multiaddr v0.16.0
 	github.com/prometheus/client_golang v1.22.0
 	github.com/rollkit/rollkit v0.14.2-0.20250630141726-fa03f78d8121
-	github.com/rollkit/rollkit/core v0.0.0-20250630141726-fa03f78d8121
-	github.com/rollkit/rollkit/da v0.0.0-20250630141726-fa03f78d8121
+	github.com/rollkit/rollkit/core v1.0.0-beta.1
+	github.com/rollkit/rollkit/da v1.0.0-beta.1
 	github.com/rollkit/rollkit/sequencers/single v0.0.0-20250630141726-fa03f78d8121
 	github.com/rs/cors v1.11.1
 	github.com/spf13/cobra v1.9.1

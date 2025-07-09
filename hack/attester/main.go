@@ -16,6 +16,11 @@ import (
 	"syscall"
 	"time"
 
+	dbm "github.com/cometbft/cometbft-db"
+	cmtlight "github.com/cometbft/cometbft/light"
+	cmtprovider "github.com/cometbft/cometbft/light/provider"
+	cmthttp "github.com/cometbft/cometbft/light/provider/http"
+	cmtstore "github.com/cometbft/cometbft/light/store/db"
 	pvm "github.com/cometbft/cometbft/privval"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	"github.com/cosmos/cosmos-sdk/client"
@@ -240,45 +245,56 @@ func pullBlocksAndAttest(
 	}
 
 	var lastAttested int64 = 0
+	var lastAppHash []byte
 
+	// Initialize light client
+	if verbose {
+		fmt.Println("Initializing light client...")
+	}
+
+	// Create a database for the light client
+	lightClientDB, err := dbm.NewGoLevelDB("light-client", filepath.Join(home, "data"))
+	if err != nil {
+		return fmt.Errorf("failed to create light client database: %w", err)
+	}
+	defer lightClientDB.Close()
+
+	// Create a store for the light client
+	lightClientStore := cmtstore.New(lightClientDB, "light-client")
+
+	// Create a primary provider for the light client
+	primaryProvider, err := cmthttp.New(chainID, fmt.Sprintf("http://%s", parsed.Host))
+	if err != nil {
+		return fmt.Errorf("failed to create primary provider: %w", err)
+	}
+
+	// Create a witness provider for the light client (using the same node for simplicity)
+	witnessProvider, err := cmthttp.New(chainID, fmt.Sprintf("http://%s", parsed.Host))
+	if err != nil {
+		return fmt.Errorf("failed to create witness provider: %w", err)
+	}
+
+	latestHeight, _, err := queryBlock(httpClient, parsed.Host, true)
+	if err != nil {
+		return fmt.Errorf("failed to query block: %w", err)
+	}
+	fmt.Printf("Latest block height: %d\n", latestHeight)
+	var nextHeight = max(latestHeight-int64(epochLength), 1)
 	// Poll for new blocks
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		default:
-			// Query latest block
-			resp, err := httpClient.Get(fmt.Sprintf("http://%s/block", parsed.Host))
+			// Query next block
+			height, appHash, err := queryBlock(httpClient, parsed.Host, true, nextHeight)
 			if err != nil {
 				fmt.Printf("Error querying block: %v\n", err)
 				time.Sleep(time.Second / 10)
 				continue
 			}
-
-			var blockResponse struct {
-				Result struct {
-					Block struct {
-						Header struct {
-							Height  string `json:"height"`
-							AppHash string `json:"app_hash"`
-						} `json:"header"`
-					} `json:"block"`
-				} `json:"result"`
-			}
-
-			var buf bytes.Buffer
-			if err := json.NewDecoder(io.TeeReader(resp.Body, &buf)).Decode(&blockResponse); err != nil {
-				fmt.Printf("Error parsing response: %v: %s\n", err, buf.String())
-				_ = resp.Body.Close()
-				time.Sleep(time.Second / 10)
-				continue
-			}
-			_ = resp.Body.Close()
-
-			// Extract block height
-			height, err := strconv.ParseInt(blockResponse.Result.Block.Header.Height, 10, 64)
-			if err != nil {
-				fmt.Printf("Error parsing height: %v\n", err)
+			if height == 0 {
+				fmt.Printf("block not found: %d\n", nextHeight)
 				time.Sleep(time.Second / 10)
 				continue
 			}
@@ -287,25 +303,105 @@ func pullBlocksAndAttest(
 
 			// Check if this is the end of an epoch and we haven't attested to it yet
 			if height > 1 && height%int64(epochLength) == 0 && height > lastAttested {
-				fmt.Printf("End of epoch at height %d, submitting attestation\n", height)
-
+				fmt.Printf("submitting attestation for height: %d\n", height)
 				// Submit attestation with the block's app hash
-				appHash, err := hex.DecodeString(blockResponse.Result.Block.Header.AppHash)
-				if err != nil {
-					return fmt.Errorf("decoding app hash: %w", err)
-				}
 				err = submitAttestation(ctx, chainID, node, home, height, appHash, valAddr, verbose, senderKey, pv)
 				if err != nil {
 					return fmt.Errorf("submitting attestation: %w", err)
 				}
 
-				lastAttested = height
-			}
+				if lastAttested != 0 {
+					fmt.Printf("End of epoch, verifying with light client %d\n", lastAttested)
 
+					// Create trust options for the light client
+					trustOptions := cmtlight.TrustOptions{
+						Period: 24 * time.Hour, // Trusting period
+						Height: lastAttested,
+						Hash:   lastAppHash,
+					}
+					if err := trustOptions.ValidateBasic(); err != nil {
+						return fmt.Errorf("validate trust options: %w", err)
+					}
+					// Create the light client
+					lightClient, err := cmtlight.NewClient(
+						ctx,
+						chainID,
+						trustOptions,
+						primaryProvider,
+						[]cmtprovider.Provider{witnessProvider},
+						lightClientStore,
+					)
+					if err != nil {
+						return fmt.Errorf("failed to create light client: %w", err)
+					}
+
+					if verbose {
+						fmt.Println("Light client initialized successfully")
+					}
+
+					// Verify the previous epoch block with the light client.
+					_, err = lightClient.VerifyLightBlockAtHeight(ctx, height-int64(epochLength), time.Now())
+					if err != nil {
+						fmt.Printf("Error verifying block at height %d: %v\n", height, err)
+						time.Sleep(time.Second / 10)
+						continue
+					}
+					fmt.Printf("Block at height %d verified successfully\n", height)
+				}
+				lastAttested = height
+				lastAppHash = appHash
+			}
+			nextHeight++
 			// Wait before next poll
 			time.Sleep(time.Second / 10)
 		}
 	}
+}
+
+func queryBlock(httpClient *http.Client, host string, uncommitted bool, optHeight ...int64) (int64, []byte, error) {
+	blockUrl := fmt.Sprintf("http://%s/block", host)
+	if uncommitted {
+		blockUrl += "_fake_attester"
+	}
+	if len(optHeight) != 0 {
+		blockUrl += "?height=" + strconv.FormatInt(optHeight[0], 10)
+	}
+	resp, err := httpClient.Get(blockUrl)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	var blockResponse struct {
+		Result struct {
+			Block struct {
+				Header struct {
+					Height  string `json:"height"`
+					AppHash string `json:"app_hash"`
+				} `json:"header"`
+			} `json:"block"`
+		} `json:"result"`
+	}
+	var buf bytes.Buffer
+	if err := json.NewDecoder(io.TeeReader(resp.Body, &buf)).Decode(&blockResponse); err != nil {
+		fmt.Printf("Error parsing response: %v: %s\n", err, buf.String())
+		_ = resp.Body.Close()
+		if resp.StatusCode == 404 {
+			return 0, nil, nil
+		}
+		return 0, nil, fmt.Errorf("error parsing response: %v: %s", err, buf.String())
+	}
+	_ = resp.Body.Close()
+
+	// Extract block height
+	height, err := strconv.ParseInt(blockResponse.Result.Block.Header.Height, 10, 64)
+	if err != nil {
+		return 0, nil, err
+	}
+	appHash, err := hex.DecodeString(blockResponse.Result.Block.Header.AppHash)
+	if err != nil {
+		return 0, nil, fmt.Errorf("decoding app hash: %w", err)
+	}
+	return height, appHash, nil
 }
 
 // formatCommandArgs formats command arguments for verbose output
@@ -547,3 +643,17 @@ func submitAttestation(
 	fmt.Printf("Attestation submitted with hash: %s\n", txHash)
 	return nil
 }
+
+// verify valset hash
+// verify header version
+// signed header
+//
+//	err = light.Verify(
+//		&signedHeader,
+//		tmTrustedValidators, tmSignedHeader, tmValidatorSet,
+//		cs.TrustingPeriod, currentTimestamp, cs.MaxClockDrift, cs.TrustLevel.ToTendermint(),
+//	)
+//	if err != nil {
+//		return errorsmod.Wrap(err, "failed to verify header")
+//	}
+//

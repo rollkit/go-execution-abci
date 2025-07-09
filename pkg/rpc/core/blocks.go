@@ -130,12 +130,48 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 
 	block, err := xxxBlock(ctx, heightValue)
 	if err != nil {
+		return nil, fmt.Errorf("get block: %w", err)
+	}
+
+	return &ctypes.ResultBlock{
+		BlockID: cmttypes.BlockID{Hash: block.Hash()},
+		Block:   block,
+	}, nil
+}
+
+func UnsignedBlock(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error) {
+	var (
+		heightValue uint64
+		err         error
+	)
+
+	switch {
+	case heightPtr != nil && *heightPtr == -1:
+		rawVal, err := env.Adapter.RollkitStore.GetMetadata(
+			ctx.Context(),
+			storepkg.DAIncludedHeightKey,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get DA included height: %w", err)
+		}
+
+		if len(rawVal) != 8 {
+			return nil, fmt.Errorf("invalid finalized height data length: %d", len(rawVal))
+		}
+
+		heightValue = binary.LittleEndian.Uint64(rawVal)
+	default:
+		heightValue, err = normalizeHeight(ctx.Context(), heightPtr)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	block, err := xxxBlock(ctx, heightValue)
+	if err != nil && !errors.Is(err, ErrUnsignedBlock) {
 		return nil, err
 	}
 
-	if len(block.LastCommit.Signatures) == 0 {
-		return nil, nil // not found
-	}
 	return &ctypes.ResultBlock{
 		BlockID: cmttypes.BlockID{Hash: block.Hash()},
 		Block:   block,
@@ -153,7 +189,7 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 
 	block, err := xxxBlock(ctx, header.Height())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get block by hash: %w", err)
 	}
 	if len(block.LastCommit.Signatures) == 0 {
 		return nil, nil // not found
@@ -175,7 +211,7 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 
 	block, err := xxxBlock(ctx, height)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("commit: %w", err)
 	}
 
 	return &ctypes.ResultCommit{
@@ -187,6 +223,8 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 	}, nil
 }
 
+var ErrUnsignedBlock = errors.New("unsigned commit")
+
 func xxxBlock(ctx *rpctypes.Context, height uint64) (*cmttypes.Block, error) {
 	fmt.Printf("+++ height: %d\n", height)
 	// Check if the block has soft confirmation first
@@ -194,11 +232,6 @@ func xxxBlock(ctx *rpctypes.Context, height uint64) (*cmttypes.Block, error) {
 	if err != nil {
 		return nil, fmt.Errorf("check soft confirmation status: %w", err)
 	}
-
-	//if !isSoftConfirmed {
-	//	return nil, fmt.Errorf("commit for height %d does not exist (block not soft confirmed)", height)
-	//}
-	_ = isSoftConfirmed
 
 	header, rollkitData, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), height)
 	if err != nil {
@@ -220,8 +253,9 @@ func xxxBlock(ctx *rpctypes.Context, height uint64) (*cmttypes.Block, error) {
 	block.LastCommit.BlockID.Hash = block.Header.Hash()
 	block.LastCommit.BlockID.PartSetHeader.Hash = block.LastCommit.BlockID.Hash
 	if !isSoftConfirmed {
-		return nil, fmt.Errorf("commit for height %d does not exist (block not soft confirmed)", height)
+		return block, ErrUnsignedBlock
 	}
+
 	return block, nil
 }
 
@@ -260,7 +294,7 @@ func Header(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultHeader, erro
 	// todo (Alex): quick hack to get a consistent block header
 	block, err := xxxBlock(ctx, height)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get header: %w", err)
 	}
 	return &ctypes.ResultHeader{Header: &block.Header}, nil
 }
@@ -276,7 +310,7 @@ func HeaderByHash(ctx *rpctypes.Context, hash cmbytes.HexBytes) (*ctypes.ResultH
 
 	res, err := BlockByHash(ctx, hash.Bytes())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get header by hash: %w", err)
 	}
 	if res == nil {
 		return nil, fmt.Errorf("block not found")

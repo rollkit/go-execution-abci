@@ -141,7 +141,7 @@ else
 fi
 
 log "35" "🚀" "Starting ROLLKIT node..."
-"$ROLLKIT_BIN" start  --home "$ROLLKIT_HOME" --rollkit.node.aggregator --minimum-gas-prices "0stake"  --rollkit.node.lazy_block_interval=150ms --rollkit.node.block_time=100ms  --rollkit.da.block_time=500ms   --pruning=nothing --rollkit.network.soft-confirmation --log_level=debug &
+"$ROLLKIT_BIN" start  --home "$ROLLKIT_HOME" --rollkit.node.aggregator --minimum-gas-prices "0stake"  --rollkit.node.lazy_block_interval=1000ms --rollkit.node.block_time=1000ms  --rollkit.da.block_time=500ms   --pruning=nothing --rollkit.network.soft-confirmation --log_level=debug &
 ROLLKIT_PID=$!
 log "36" "✅" "ROLLKIT chain running successfully!"
 wait $ROLLKIT_PID

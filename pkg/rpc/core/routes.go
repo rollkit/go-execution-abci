@@ -45,4 +45,7 @@ var Routes = map[string]*server.RPCFunc{
 
 	// // evidence API
 	"broadcast_evidence": server.NewRPCFunc(BroadcastEvidence, "evidence"),
+
+	// todo (Alex): hack to return all blocks
+	"block_fake_attester": server.NewRPCFunc(UnsignedBlock, "unsignedBlock"),
 }

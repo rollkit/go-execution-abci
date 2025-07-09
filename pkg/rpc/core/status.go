@@ -30,14 +30,19 @@ func Status(ctx *rpctypes.Context) (*ctypes.ResultStatus, error) {
 		return nil, fmt.Errorf("failed to get latest height: %w", err)
 	}
 
-	if latestHeight != 0 {
-		header, _, err := env.Adapter.RollkitStore.GetBlockData(unwrappedCtx, latestHeight)
+	if latestHeight > 10 {
+		latestHeight -= 10 //todo: quick hack to reduce sync diff for relayer
+		block, err := xxxBlock(ctx, latestHeight)
 		if err != nil {
-			return nil, fmt.Errorf("failed to find latest block: %w", err)
+			return nil, err
 		}
-		latestBlockHash = cmbytes.HexBytes(header.DataHash)
-		latestAppHash = cmbytes.HexBytes(header.AppHash)
-		latestBlockTime = header.Time()
+		//header, _, err := env.Adapter.RollkitStore.GetBlockData(unwrappedCtx, latestHeight)
+		//if err != nil {
+		//	return nil, fmt.Errorf("failed to find latest block: %w", err)
+		//}
+		latestBlockHash = block.Hash()
+		latestAppHash = block.AppHash
+		latestBlockTime = block.Time
 	}
 
 	initialHeader, _, err := env.Adapter.RollkitStore.GetBlockData(unwrappedCtx, uint64(env.Adapter.AppGenesis.InitialHeight))
@@ -55,7 +60,7 @@ func Status(ctx *rpctypes.Context) (*ctypes.ResultStatus, error) {
 	validator := cmttypes.Validator{
 		Address:     genesisValidator.Address,
 		PubKey:      genesisValidator.PubKey,
-		VotingPower: int64(1),
+		VotingPower: genesisValidator.Power,
 	}
 
 	state, err := env.Adapter.RollkitStore.GetState(unwrappedCtx)

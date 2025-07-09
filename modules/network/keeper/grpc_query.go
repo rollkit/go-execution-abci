@@ -203,7 +203,7 @@ func (q *queryServer) ValidatorSignature(c context.Context, req *types.QueryVali
 
 	ctx := sdk.UnwrapSDKContext(c)
 
-	signature, err := q.keeper.GetVote(ctx, req.BlockHeight, []byte(req.Validator))
+	vote, err := q.keeper.GetVote(ctx, req.BlockHeight, []byte(req.Validator))
 	if err != nil {
 		if errors.Is(err, collections.ErrNotFound) {
 			return &types.QueryValidatorSignatureResponse{
@@ -214,7 +214,7 @@ func (q *queryServer) ValidatorSignature(c context.Context, req *types.QueryVali
 		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to get signature: %v", err))
 	}
 
-	voteBz, err := signature.Marshal()
+	voteBz, err := vote.Marshal()
 	if err != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("marshal vote: %v", err))
 	}

@@ -40,7 +40,7 @@ jobs:
 
       - name: Start Local DA
         run: |
-          go install github.com/rollkit/rollkit/da/cmd/local-da@ROLLKIT_VERSION
+          go install github.com/rollkit/rollkit/da/cmd/local-da@$ROLLKIT_VERSION
           # start the local da in the background
           local-da &
           # capture the background process PID
@@ -263,7 +263,7 @@ jobs:
 
       - name: Start Local DA
         run: |
-          go install github.com/rollkit/rollkit/da/cmd/local-da@ROLLKIT_VERSION
+          go install github.com/rollkit/rollkit/da/cmd/local-da@$ROLLKIT_VERSION
           # start the local da in the background
           local-da &
           # capture the background process PID

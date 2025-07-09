@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 45
     env:
       DO_NOT_TRACK: true
-
+      ROLLKIT_VERSION: "v1.0.0-beta.1"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -177,10 +177,8 @@ jobs:
           # add rollkit to the chain
           ignite rollkit add
 
-          # replace the github.com/rollkit/rollkit module with latest main
-          go get github.com/rollkit/rollkit@main
-          UPGRADED_ROLLKIT=$(go list -m -json github.com/rollkit/rollkit | jq -r .Version)
-          go mod edit -replace github.com/rollkit/rollkit=github.com/rollkit/rollkit@$UPGRADED_ROLLKIT
+          # replace the github.com/rollkit/rollkit module with tagged version
+          go mod edit -replace github.com/rollkit/rollkit=github.com/rollkit/rollkit@$ROLLKIT_VERSION
 
           # replace the github.com/rollkit/go-execution-abci module with the local version
           go mod edit -replace github.com/rollkit/go-execution-abci=$GO_EXECUTION_ABCI_DIR

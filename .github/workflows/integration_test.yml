@@ -18,6 +18,7 @@ jobs:
     timeout-minutes: 30
     env:
       DO_NOT_TRACK: true
+      ROLLKIT_VERSION: "v1.0.0-beta.1"
     outputs:
       carol_mnemonic: ${{ steps.save_mnemonic.outputs.carol_mnemonic }}
       gmd_home: ${{ steps.paths.outputs.GMD_HOME }}
@@ -70,11 +71,8 @@ jobs:
           # enter the gm directory
           cd gm
 
-          # replace the github.com/rollkit/rollkit module with latest main
-          # TODO(@julienrbrt) this should be replaced with a specific commit hash
-          go get github.com/rollkit/rollkit@main
-          UPGRADED_ROLLKIT=$(go list -m -json github.com/rollkit/rollkit | jq -r .Version)
-          go mod edit -replace github.com/rollkit/rollkit=github.com/rollkit/rollkit@$UPGRADED_ROLLKIT
+          # replace the github.com/rollkit/rollkit module with tagged version
+          go mod edit -replace github.com/rollkit/rollkit=github.com/rollkit/rollkit@$ROLLKIT_VERSION
 
           # replace the github.com/rollkit/go-execution-abci module with the local version
           go mod edit -replace github.com/rollkit/go-execution-abci=$GO_EXECUTION_ABCI_DIR
@@ -360,13 +358,13 @@ jobs:
           ROLLKIT_ADDR=$(./gmd/go/bin/gmd keys show carol -a --home ./gmd/.gm)
           CELESTIA_ADDR=$(celestia-appd keys show validator -a --keyring-backend test)
           celestia-appd tx ibc-transfer transfer transfer channel-0 $ROLLKIT_ADDR 100utia --from validator --node http://localhost:26654 --fees 400utia --keyring-backend test -y
-          
+
           # Wait for IBC transfer to complete with retry logic
           echo "Waiting for IBC transfer to complete..."
           MAX_ATTEMPTS=30
           ATTEMPT=0
           IBC_FOUND=false
-          
+
           while [ $ATTEMPT -lt $MAX_ATTEMPTS ] && [ "$IBC_FOUND" = false ]; do
             sleep 3
             ATTEMPT=$((ATTEMPT+1))
@@ -382,7 +380,7 @@ jobs:
               echo "IBC denom not found yet, retrying in 3 seconds..."
             fi
           done
-          
+
           if [ "$IBC_FOUND" = false ]; then
             echo "Error: No IBC denom found in balance after transfer within $MAX_ATTEMPTS attempts!"
             echo "Final balance: $BALANCE"

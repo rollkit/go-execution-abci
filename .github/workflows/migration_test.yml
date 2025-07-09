@@ -184,7 +184,7 @@ jobs:
           go mod edit -replace github.com/rollkit/go-execution-abci=$GO_EXECUTION_ABCI_DIR
 
           # download dependencies and update go.mod/go.sum
-          go mod tidy
+          rm go.sum && go mod tidy
 
           # rebuild the chain with rollkit
           ignite chain build --skip-proto

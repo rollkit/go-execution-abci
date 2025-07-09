@@ -36,7 +36,7 @@ jobs:
 
       - name: Install Ignite CLI
         run: |
-          curl -sSL https://get.ignite.com/cli@v28.10.0! | bash
+          curl -sSL https://get.ignite.com/cli@v28.11.0! | bash
 
       - name: Start Local DA
         run: |
@@ -76,7 +76,7 @@ jobs:
           go mod edit -replace github.com/rollkit/go-execution-abci=$GO_EXECUTION_ABCI_DIR
 
           # download dependencies and update go.mod/go.sum
-          rm go.sum && go mod tidy
+          go mod tidy
 
           # build the chain
           ignite chain build --skip-proto

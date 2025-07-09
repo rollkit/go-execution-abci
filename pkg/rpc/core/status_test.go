@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	rollkitmocks "github.com/rollkit/rollkit/test/mocks"
 	rlktypes "github.com/rollkit/rollkit/types"
 
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
@@ -50,7 +51,7 @@ func TestStatus(t *testing.T) {
 	}
 
 	// Create mocks for the main test setup
-	mockStore := new(MockRollkitStore)
+	mockStore := new(rollkitmocks.MockStore)
 	mockP2P := new(MockP2PClient)
 
 	adapterInstance := &adapter.Adapter{
@@ -94,7 +95,7 @@ func TestStatus(t *testing.T) {
 
 	t.Run("Error_Height", func(t *testing.T) {
 		// Need a specific mock store for this error
-		errorMockStore := new(MockRollkitStore)
+		errorMockStore := new(rollkitmocks.MockStore)
 		errorMockStore.On("Height", mock.Anything).Return(uint64(0), errors.New("height error")).Once()
 
 		// Temporarily replace the store in the adapter
@@ -110,7 +111,7 @@ func TestStatus(t *testing.T) {
 	})
 
 	t.Run("Error_GetBlockData_Latest", func(t *testing.T) {
-		errorMockStore := new(MockRollkitStore)
+		errorMockStore := new(rollkitmocks.MockStore)
 		errorMockStore.On("Height", mock.Anything).Return(latestHeight, nil).Once()
 		errorMockStore.On("GetBlockData", mock.Anything, latestHeight).Return(nil, nil, errors.New("block error")).Once()
 
@@ -126,7 +127,7 @@ func TestStatus(t *testing.T) {
 	})
 
 	t.Run("Error_GetBlockData_Initial", func(t *testing.T) {
-		errorMockStore := new(MockRollkitStore)
+		errorMockStore := new(rollkitmocks.MockStore)
 		errorMockStore.On("Height", mock.Anything).Return(latestHeight, nil).Once()
 		errorMockStore.On("GetBlockData", mock.Anything, latestHeight).Return(sampleSignedHeader, nil, nil).Once()
 		errorMockStore.On("GetBlockData", mock.Anything, uint64(initialHeight)).Return(nil, nil, errors.New("initial block error")).Once()
@@ -149,7 +150,7 @@ func TestStatus(t *testing.T) {
 		t.Cleanup(func() { adapterInstance.AppGenesis.Consensus.Validators = originalValidators })
 
 		// Need a mock store configured for the calls leading up to the validator check
-		validCallsMockStore := new(MockRollkitStore)
+		validCallsMockStore := new(rollkitmocks.MockStore)
 		validCallsMockStore.On("Height", mock.Anything).Return(latestHeight, nil).Once()
 		validCallsMockStore.On("GetBlockData", mock.Anything, latestHeight).Return(sampleSignedHeader, nil, nil).Once()
 		validCallsMockStore.On("GetBlockData", mock.Anything, uint64(initialHeight)).Return(sampleSignedHeader, nil, nil).Once()
@@ -166,7 +167,7 @@ func TestStatus(t *testing.T) {
 	})
 
 	t.Run("Error_GetState", func(t *testing.T) {
-		errorMockStore := new(MockRollkitStore)
+		errorMockStore := new(rollkitmocks.MockStore)
 		errorMockStore.On("Height", mock.Anything).Return(latestHeight, nil).Once()
 		errorMockStore.On("GetBlockData", mock.Anything, latestHeight).Return(sampleSignedHeader, nil, nil).Once()
 		errorMockStore.On("GetBlockData", mock.Anything, uint64(initialHeight)).Return(sampleSignedHeader, nil, nil).Once()
@@ -185,7 +186,7 @@ func TestStatus(t *testing.T) {
 
 	t.Run("Error_P2PInfo", func(t *testing.T) {
 		// Need mock store that succeeds until the P2P call
-		successStore := new(MockRollkitStore)
+		successStore := new(rollkitmocks.MockStore)
 		successStore.On("Height", mock.Anything).Return(latestHeight, nil).Once()
 		successStore.On("GetBlockData", mock.Anything, latestHeight).Return(sampleSignedHeader, nil, nil).Once()
 		successStore.On("GetBlockData", mock.Anything, uint64(initialHeight)).Return(sampleSignedHeader, nil, nil).Once()

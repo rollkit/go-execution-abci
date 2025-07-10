@@ -25,7 +25,7 @@ import (
 	cmtstore "github.com/cometbft/cometbft/store"
 	cmttypes "github.com/cometbft/cometbft/types"
 	dbm "github.com/cosmos/cosmos-db"
-	addresscodec "github.com/cosmos/cosmos-sdk/codec/address"
+	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/runtime"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	moduletestutil "github.com/cosmos/cosmos-sdk/types/module/testutil"
@@ -39,7 +39,6 @@ import (
 	rollkittypes "github.com/rollkit/rollkit/types"
 
 	"github.com/rollkit/go-execution-abci/modules/rollkitmngr"
-	rollkitmngrkeeper "github.com/rollkit/go-execution-abci/modules/rollkitmngr/keeper"
 	rollkitmngrtypes "github.com/rollkit/go-execution-abci/modules/rollkitmngr/types"
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
 )
@@ -424,31 +423,35 @@ func getSequencerFromRollkitMngrState(rootDir string, cometBFTState state.State)
 
 	storeKey := storetypes.NewKVStoreKey(rollkitmngrtypes.ModuleName)
 
+	encCfg := moduletestutil.MakeTestEncodingConfig(rollkitmngr.AppModuleBasic{})
+	sequencerCollection := collections.NewItem(
+		collections.NewSchemaBuilder(runtime.NewKVStoreService(storeKey)),
+		rollkitmngrtypes.SequencerKey,
+		"sequencer",
+		codec.CollValue[rollkitmngrtypes.Sequencer](encCfg.Codec),
+	)
+
+	// create context and commit multi-store
 	cms := store.NewCommitMultiStore(appDB, log.NewNopLogger(), metrics.NewNoOpMetrics())
 	cms.MountStoreWithDB(storeKey, storetypes.StoreTypeIAVL, appDB)
 	if err := cms.LoadLatestVersion(); err != nil {
 		return nil, fmt.Errorf("failed to load latest version of commit multi store: %w", err)
 	}
-
-	k := rollkitmngrkeeper.NewKeeper(
-		moduletestutil.MakeTestEncodingConfig(rollkitmngr.AppModuleBasic{}).Codec,
-		runtime.NewKVStoreService(storeKey),
-		addresscodec.NewBech32Codec("cosmos"),
-		nil,
-		nil,
-		"",
-	)
-
 	ctx := sdk.NewContext(cms, cmtproto.Header{
 		Height:  int64(cometBFTState.LastBlockHeight),
 		ChainID: cometBFTState.ChainID,
 		Time:    cometBFTState.LastBlockTime,
 	}, false, log.NewNopLogger())
-	sequencer, err := k.Sequencer.Get(ctx)
+
+	sequencer, err := sequencerCollection.Get(ctx)
 	if errors.Is(err, collections.ErrNotFound) {
 		return nil, fmt.Errorf("sequencer not found in rollkitmngr state, ensure the module is initialized and sequencer is set")
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to get sequencer from rollkitmngr state: %w", err)
+	}
+
+	if err := sequencer.UnpackInterfaces(encCfg.InterfaceRegistry); err != nil {
+		return nil, fmt.Errorf("failed to unpack sequencer interfaces: %w", err)
 	}
 
 	// Extract the public key from the sequencer

@@ -18,6 +18,8 @@ jobs:
     timeout-minutes: 30
     env:
       DO_NOT_TRACK: true
+      ROLLKIT_VERSION: "v1.0.0-beta.1"
+      IGNITE_VERSION: "v29.1.0"
     outputs:
       carol_mnemonic: ${{ steps.save_mnemonic.outputs.carol_mnemonic }}
       gmd_home: ${{ steps.paths.outputs.GMD_HOME }}
@@ -30,20 +32,18 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: ./go.mod
+          go-version: "stable"
           cache: true
 
       - name: Install Ignite CLI
         run: |
-          curl -sSL https://get.ignite.com/cli@v28.10.0! | bash
+          curl -sSL https://get.ignite.com/cli@$IGNITE_VERSION! | bash
 
       - name: Start Local DA
         run: |
-          # clone rollkit repository
-          git clone https://github.com/rollkit/rollkit --depth 1
-          cd rollkit/da/cmd/local-da
+          go install github.com/rollkit/rollkit/da/cmd/local-da@$ROLLKIT_VERSION
           # start the local da in the background
-          go run . &
+          local-da &
           # capture the background process PID
           echo "DA_PID=$!" >> $GITHUB_ENV
           # give it a moment to start
@@ -70,11 +70,8 @@ jobs:
           # enter the gm directory
           cd gm
 
-          # replace the github.com/rollkit/rollkit module with latest main
-          # TODO(@julienrbrt) this should be replaced with a specific commit hash
-          go get github.com/rollkit/rollkit@main
-          UPGRADED_ROLLKIT=$(go list -m -json github.com/rollkit/rollkit | jq -r .Version)
-          go mod edit -replace github.com/rollkit/rollkit=github.com/rollkit/rollkit@$UPGRADED_ROLLKIT
+          # replace the github.com/rollkit/rollkit module with tagged version
+          go mod edit -replace github.com/rollkit/rollkit=github.com/rollkit/rollkit@$ROLLKIT_VERSION
 
           # replace the github.com/rollkit/go-execution-abci module with the local version
           go mod edit -replace github.com/rollkit/go-execution-abci=$GO_EXECUTION_ABCI_DIR
@@ -227,6 +224,7 @@ jobs:
       GMD_HOME: ${{ needs.liveness.outputs.gmd_home }}
       HERMES_VERSION: "v1.13.1"
       CEL_VERSION: "v4.0.3-arabica"
+      ROLLKIT_VERSION: "v1.0.0-beta.1"
 
     steps:
       - name: Set up Go
@@ -267,10 +265,12 @@ jobs:
 
       - name: Start Local DA
         run: |
-          git clone https://github.com/rollkit/rollkit --depth 1
-          cd rollkit/da/cmd/local-da
-          go run . &
+          go install github.com/rollkit/rollkit/da/cmd/local-da@$ROLLKIT_VERSION
+          # start the local da in the background
+          local-da &
+          # capture the background process PID
           echo "DA_PID=$!" >> $GITHUB_ENV
+          # give it a moment to start
           sleep 3
 
       - name: Start Rollkit Chain
@@ -360,13 +360,13 @@ jobs:
           ROLLKIT_ADDR=$(./gmd/go/bin/gmd keys show carol -a --home ./gmd/.gm)
           CELESTIA_ADDR=$(celestia-appd keys show validator -a --keyring-backend test)
           celestia-appd tx ibc-transfer transfer transfer channel-0 $ROLLKIT_ADDR 100utia --from validator --node http://localhost:26654 --fees 400utia --keyring-backend test -y
-          
+
           # Wait for IBC transfer to complete with retry logic
           echo "Waiting for IBC transfer to complete..."
           MAX_ATTEMPTS=30
           ATTEMPT=0
           IBC_FOUND=false
-          
+
           while [ $ATTEMPT -lt $MAX_ATTEMPTS ] && [ "$IBC_FOUND" = false ]; do
             sleep 3
             ATTEMPT=$((ATTEMPT+1))
@@ -382,7 +382,7 @@ jobs:
               echo "IBC denom not found yet, retrying in 3 seconds..."
             fi
           done
-          
+
           if [ "$IBC_FOUND" = false ]; then
             echo "Error: No IBC denom found in balance after transfer within $MAX_ATTEMPTS attempts!"
             echo "Final balance: $BALANCE"

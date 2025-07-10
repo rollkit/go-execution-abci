@@ -18,6 +18,8 @@ import (
 	testifymock "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	rollkitmocks "github.com/rollkit/rollkit/test/mocks"
+
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
 )
 
@@ -87,10 +89,10 @@ func newValidState() cmtstate.State {
 }
 
 // setupTestValidatorsEnv helper for TestValidators
-func setupTestValidatorsEnv(t *testing.T, gvs []cmttypes.GenesisValidator, consensusParams *cmttypes.ConsensusParams) *MockRollkitStore {
+func setupTestValidatorsEnv(t *testing.T, gvs []cmttypes.GenesisValidator, consensusParams *cmttypes.ConsensusParams) *rollkitmocks.MockStore {
 	t.Helper()
 
-	mockStore := new(MockRollkitStore)
+	mockStore := new(rollkitmocks.MockStore)
 	adapterInstance := &adapter.Adapter{
 		RollkitStore: mockStore,
 		AppGenesis: &genutiltypes.AppGenesis{
@@ -106,10 +108,10 @@ func setupTestValidatorsEnv(t *testing.T, gvs []cmttypes.GenesisValidator, conse
 
 // setupTestConsensusParamsEnv helper for TestConsensusParams
 // Returns the mockRollkitStore (if created), the adapter instance, and the abciStore.
-func setupTestConsensusParamsEnv(t *testing.T, useMockRollkitStore bool, stateToSave *cmtstate.State) (*MockRollkitStore, *adapter.Store) {
-	var mockRollkitStore *MockRollkitStore
+func setupTestConsensusParamsEnv(t *testing.T, useMockRollkitStore bool, stateToSave *cmtstate.State) (*rollkitmocks.MockStore, *adapter.Store) {
+	var mockRollkitStore *rollkitmocks.MockStore
 	if useMockRollkitStore {
-		mockRollkitStore = new(MockRollkitStore)
+		mockRollkitStore = new(rollkitmocks.MockStore)
 	}
 
 	dsStore := ds.NewMapDatastore()

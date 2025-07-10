@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	rollkitmocks "github.com/rollkit/rollkit/test/mocks"
 	rktypes "github.com/rollkit/rollkit/types"
 
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
@@ -25,7 +26,7 @@ func TestTx(t *testing.T) {
 	ctx := &rpctypes.Context{}
 
 	mockTxIndexer := new(MockTxIndexer)
-	mockStore := new(MockRollkitStore)
+	mockStore := new(rollkitmocks.MockStore)
 
 	env = &Environment{
 		TxIndexer: mockTxIndexer,
@@ -127,7 +128,7 @@ func TestTxSearch(t *testing.T) {
 	ctx := &rpctypes.Context{}
 
 	mockTxIndexer := new(MockTxIndexer)
-	mockStore := new(MockRollkitStore)
+	mockStore := new(rollkitmocks.MockStore)
 	env = &Environment{
 		TxIndexer: mockTxIndexer,
 		Logger:    cmtlog.NewNopLogger(),

@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version-file: ./go.mod
+          go-version: "stable"
       - run: go mod tidy
       - name: check for diff
         run: git diff --exit-code
@@ -25,6 +25,6 @@ jobs:
       - name: set up go
         uses: actions/setup-go@v5
         with:
-          go-version-file: ./go.mod
+          go-version: "stable"
       - name: Run unit test
         run: make test

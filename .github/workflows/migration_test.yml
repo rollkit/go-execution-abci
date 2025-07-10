@@ -14,7 +14,8 @@ jobs:
     timeout-minutes: 45
     env:
       DO_NOT_TRACK: true
-
+      ROLLKIT_VERSION: "v1.0.0-beta.1"
+      IGNITE_VERSION: "v29.1.0"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,12 +24,12 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: ./go.mod
+          go-version: "stable"
           cache: true
 
       - name: Install Ignite CLI
         run: |
-          curl -sSL https://get.ignite.com/cli@v28.10.0! | bash
+          curl -sSL https://get.ignite.com/cli@$IGNITE_VERSION! | bash
 
       - name: Scaffold Standard Cosmos SDK Chain
         run: |
@@ -177,10 +178,8 @@ jobs:
           # add rollkit to the chain
           ignite rollkit add
 
-          # replace the github.com/rollkit/rollkit module with latest main
-          go get github.com/rollkit/rollkit@main
-          UPGRADED_ROLLKIT=$(go list -m -json github.com/rollkit/rollkit | jq -r .Version)
-          go mod edit -replace github.com/rollkit/rollkit=github.com/rollkit/rollkit@$UPGRADED_ROLLKIT
+          # replace the github.com/rollkit/rollkit module with tagged version
+          go mod edit -replace github.com/rollkit/rollkit=github.com/rollkit/rollkit@$ROLLKIT_VERSION
 
           # replace the github.com/rollkit/go-execution-abci module with the local version
           go mod edit -replace github.com/rollkit/go-execution-abci=$GO_EXECUTION_ABCI_DIR
@@ -201,12 +200,12 @@ jobs:
 
       - name: Start Local DA for Rollkit
         run: |
-          # clone rollkit repository for local DA
-          git clone https://github.com/rollkit/rollkit --depth 1
-          cd rollkit/da/cmd/local-da
+          go install github.com/rollkit/rollkit/da/cmd/local-da@$ROLLKIT_VERSION
           # start the local da in the background
-          go run . &
+          local-da &
+          # capture the background process PID
           echo "DA_PID=$!" >> $GITHUB_ENV
+          # give it a moment to start
           sleep 3
 
       - name: Start Rollkit Chain After Migration

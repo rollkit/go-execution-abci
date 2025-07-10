@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	rollkitmocks "github.com/rollkit/rollkit/test/mocks"
 	"github.com/rollkit/rollkit/types"
 
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
@@ -26,7 +27,7 @@ import (
 func TestBlockSearch_Success(t *testing.T) {
 	// Setup mocks
 	mockTxIndexer := new(MockTxIndexer)
-	mockRollkitStore := new(MockRollkitStore)
+	mockRollkitStore := new(rollkitmocks.MockStore)
 	mockApp := new(MockApp)
 	mockBlockIndexer := new(MockBlockIndexer)
 
@@ -181,7 +182,7 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 	}
 
 	var trustedHeader cmttypes.SignedHeader
-	var isFirstBlock = true
+	isFirstBlock := true
 
 	// Test multiple blocks
 	for i := 1; i <= 3; i++ {
@@ -284,7 +285,7 @@ func mockBlock(height uint64, header types.Header, data *types.Data, signature [
 		},
 	}
 
-	env.Adapter.RollkitStore.(*MockRollkitStore).On("GetBlockData", mock.Anything, height).Return(signedHeader, data, nil).Once()
+	env.Adapter.RollkitStore.(*rollkitmocks.MockStore).On("GetBlockData", mock.Anything, height).Return(signedHeader, data, nil).Once()
 }
 
 func callCommitRPC(t *testing.T, height uint64) *ctypes.ResultCommit {
@@ -352,7 +353,7 @@ func setupTestEnvironmentWithSigner(signer *MockSigner) *Environment {
 	mockTxIndexer := new(MockTxIndexer)
 	mockBlockIndexer := new(MockBlockIndexer)
 	mockApp := new(MockApp)
-	mockRollkitStore := new(MockRollkitStore)
+	mockRollkitStore := new(rollkitmocks.MockStore)
 
 	return &Environment{
 		Adapter: &adapter.Adapter{

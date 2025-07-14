@@ -276,7 +276,15 @@ func pullBlocksAndAttest(
 			_ = resp.Body.Close()
 
 			// Extract block height
-			height, err := strconv.ParseInt(blockResponse.Result.Block.Header.Height, 10, 64)
+			heightStr := blockResponse.Result.Block.Header.Height
+			if heightStr == "" {
+				if verbose {
+					fmt.Println("Height field is empty in response, retrying...")
+				}
+				time.Sleep(time.Second / 10)
+				continue
+			}
+			height, err := strconv.ParseInt(heightStr, 10, 64)
 			if err != nil {
 				fmt.Printf("Error parsing height: %v\n", err)
 				time.Sleep(time.Second / 10)

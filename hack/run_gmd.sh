@@ -29,7 +29,7 @@ log() {
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROLLKIT_BIN="gmd"
 ROLLKIT_HOME="${1:-"${CURRENT_DIR}/testnet/gm"}"
-LOCAL_DA_PATH="${2:-"../../rollkit/build/local-da"}"
+LOCAL_DA_PATH="${2:-"../rollkit/build/local-da"}"
 CHAIN_ID="${3:-"rollkitnet-1"}"
 
 # Clean previous configurations
@@ -141,7 +141,7 @@ else
 fi
 
 log "35" "🚀" "Starting ROLLKIT node..."
-"$ROLLKIT_BIN" start  --home "$ROLLKIT_HOME" --rollkit.node.aggregator --minimum-gas-prices "0stake"  --rollkit.node.lazy_block_interval=150ms --rollkit.node.block_time=100ms  --rollkit.da.block_time=500ms   --pruning=nothing --rollkit.network.soft-confirmation --log_level=debug &
+"$ROLLKIT_BIN" start  --home "$ROLLKIT_HOME" --rollkit.node.aggregator --minimum-gas-prices "0stake"  --rollkit.node.lazy_block_interval=150ms --rollkit.node.block_time=1s  --rollkit.da.block_time=500ms   --pruning=nothing --rollkit.network.soft-confirmation --log_level=debug &
 ROLLKIT_PID=$!
 log "36" "✅" "ROLLKIT chain running successfully!"
 wait $ROLLKIT_PID

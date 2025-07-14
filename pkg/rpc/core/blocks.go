@@ -132,10 +132,6 @@ func Block(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultBlock, error)
 	if err != nil {
 		return nil, err
 	}
-
-	if len(block.LastCommit.Signatures) == 0 {
-		return nil, nil // not found
-	}
 	return &ctypes.ResultBlock{
 		BlockID: cmttypes.BlockID{Hash: block.Hash()},
 		Block:   block,
@@ -154,9 +150,6 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 	block, err := xxxBlock(ctx, header.Height())
 	if err != nil {
 		return nil, err
-	}
-	if len(block.LastCommit.Signatures) == 0 {
-		return nil, nil // not found
 	}
 	return &ctypes.ResultBlock{
 		BlockID: cmttypes.BlockID{Hash: block.Hash()},
@@ -189,26 +182,46 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 
 func xxxBlock(ctx *rpctypes.Context, height uint64) (*cmttypes.Block, error) {
 	fmt.Printf("+++ height: %d\n", height)
-	// Check if the block has soft confirmation first
-	isSoftConfirmed, softConfirmationData, err := checkSoftConfirmation(ctx.Context(), height)
-	if err != nil {
-		return nil, fmt.Errorf("check soft confirmation status: %w", err)
-	}
-
-	//if !isSoftConfirmed {
-	//	return nil, fmt.Errorf("commit for height %d does not exist (block not soft confirmed)", height)
-	//}
-	_ = isSoftConfirmed
-
 	header, rollkitData, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), height)
 	if err != nil {
 		return nil, err
 	}
 
-	// Build commit with attestations from soft confirmation data
-	commit, err := buildCommitFromAttestations(ctx.Context(), height, softConfirmationData)
-	if err != nil {
-		return nil, fmt.Errorf("build commit from attestations: %w", err)
+	var commitHeight uint64
+	if height > 1 {
+		commitHeight = height - 1
+	} else {
+		commitHeight = 0
+	}
+
+	var commit *cmttypes.Commit
+	if commitHeight == 0 {
+		commit = &cmttypes.Commit{
+			Height:     0,
+			Round:      0,
+			BlockID:    cmttypes.BlockID{},
+			Signatures: []cmttypes.CommitSig{},
+		}
+	} else {
+		isSoftConfirmed, softConfirmationData, err := checkSoftConfirmation(ctx.Context(), commitHeight)
+		if err != nil {
+			return nil, fmt.Errorf("check soft confirmation status for commit height %d: %w", commitHeight, err)
+		}
+		if !isSoftConfirmed {
+			// Use dummy empty commit for non-confirmed blocks (reverted for compatibility)
+			commit = &cmttypes.Commit{
+				Height:     int64(commitHeight),
+				Round:      0,
+				BlockID:    cmttypes.BlockID{},
+				Signatures: []cmttypes.CommitSig{},
+			}
+			env.Logger.Info("Using dummy commit for non-confirmed block (compatibility mode)", "height", commitHeight)
+			// Proceed without error
+		}
+		commit, err = buildCommitFromAttestations(ctx.Context(), commitHeight, softConfirmationData)
+		if err != nil {
+			return nil, fmt.Errorf("build commit from attestations: %w", err)
+		}
 	}
 
 	block, err := cometcompat.ToABCIBlock(header, rollkitData, commit)
@@ -216,12 +229,9 @@ func xxxBlock(ctx *rpctypes.Context, height uint64) (*cmttypes.Block, error) {
 		return nil, err
 	}
 
-	// Update the commit's BlockID to match the final ABCI block hash
-	block.LastCommit.BlockID.Hash = block.Header.Hash()
-	block.LastCommit.BlockID.PartSetHeader.Hash = block.LastCommit.BlockID.Hash
-	if !isSoftConfirmed {
-		return nil, fmt.Errorf("commit for height %d does not exist (block not soft confirmed)", height)
-	}
+	// Update the commit's BlockID to match the PREVIOUS block hash
+	block.LastCommit.BlockID.Hash = commit.BlockID.Hash
+	block.LastCommit.BlockID.PartSetHeader.Hash = commit.BlockID.Hash
 	return block, nil
 }
 

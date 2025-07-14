@@ -27,23 +27,38 @@ func Status(ctx *rpctypes.Context) (*ctypes.ResultStatus, error) {
 
 	latestHeight, err := env.Adapter.RollkitStore.Height(ctx.Context())
 	if err != nil {
-		return nil, fmt.Errorf("failed to get latest height: %w", err)
+		return nil, fmt.Errorf("failed to get current height: %w", err)
 	}
 
-	if latestHeight > 10 {
-		latestHeight -= 10 //todo: quick hack to reduce sync diff for relayer
-		block, err := xxxBlock(ctx, latestHeight)
+	// Find the last soft-confirmed height by iterating backwards
+	var lastConfirmedHeight uint64
+	for h := latestHeight; h > 0; h-- {
+		isSoftConfirmed, _, err := checkSoftConfirmation(unwrappedCtx, h)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to check soft confirmation for height %d: %w", h, err)
 		}
-		//header, _, err := env.Adapter.RollkitStore.GetBlockData(unwrappedCtx, latestHeight)
-		//if err != nil {
-		//	return nil, fmt.Errorf("failed to find latest block: %w", err)
-		//}
-		latestBlockHash = block.Hash()
-		latestAppHash = block.AppHash
-		latestBlockTime = block.Time
+		if isSoftConfirmed {
+			lastConfirmedHeight = h
+			break
+		}
 	}
+
+	// If no confirmed height found (edge case), fallback to 0 or handle appropriately
+	if lastConfirmedHeight == 0 {
+		return nil, fmt.Errorf("no soft-confirmed height found")
+	}
+
+	// Use the confirmed height for block data
+	if lastConfirmedHeight > 10 { // Adjust the hack if needed
+		lastConfirmedHeight -= 10 // Quick hack to reduce sync diff for relayer
+	}
+	block, err := xxxBlock(ctx, lastConfirmedHeight)
+	if err != nil {
+		return nil, err
+	}
+	latestBlockHash = block.Hash()
+	latestAppHash = block.AppHash
+	latestBlockTime = block.Time
 
 	initialHeader, _, err := env.Adapter.RollkitStore.GetBlockData(unwrappedCtx, uint64(env.Adapter.AppGenesis.InitialHeight))
 	if err != nil {
@@ -101,7 +116,7 @@ func Status(ctx *rpctypes.Context) (*ctypes.ResultStatus, error) {
 		SyncInfo: ctypes.SyncInfo{
 			LatestBlockHash:     latestBlockHash,
 			LatestAppHash:       latestAppHash,
-			LatestBlockHeight:   int64(latestHeight),
+			LatestBlockHeight:   int64(lastConfirmedHeight),
 			LatestBlockTime:     latestBlockTime,
 			EarliestBlockHash:   cmbytes.HexBytes(initialHeader.DataHash),
 			EarliestAppHash:     cmbytes.HexBytes(initialHeader.AppHash),

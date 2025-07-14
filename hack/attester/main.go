@@ -293,7 +293,7 @@ func pullBlocksAndAttest(
 				time.Sleep(time.Second / 10)
 				continue
 			}
-			if height == 0 {
+			if height == 0 || len(appHash) == 0 {
 				fmt.Printf("block not found: %d\n", nextHeight)
 				time.Sleep(time.Second / 10)
 				continue
@@ -615,8 +615,9 @@ func submitAttestation(
 		ValidatorAddress: pv.GetAddress(),
 		Height:           height,
 		Round:            0,
-		BlockID:          cmtproto.BlockID{Hash: appHash, PartSetHeader: cmtproto.PartSetHeader{Total: 1, Hash: appHash}},
-		Timestamp:        time.Now(),
+		// todo blockid hash = last-header hash
+		BlockID:   cmtproto.BlockID{Hash: appHash, PartSetHeader: cmtproto.PartSetHeader{Total: 1, Hash: appHash}},
+		Timestamp: time.Now(),
 	}
 	var err error
 	err = pv.SignVote(chainID, vote)
@@ -634,7 +635,6 @@ func submitAttestation(
 		height,
 		voteBytes,
 	)
-
 	txHash, err := broadcastTx(ctx, chainID, node, msg, senderKey, verbose)
 	if err != nil {
 		return fmt.Errorf("broadcast attest tx: %w", err)

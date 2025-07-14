@@ -473,16 +473,17 @@ func buildCommitFromAttestations(ctx context.Context, height uint64, attestation
 		}
 	}
 
-	commit := &cmttypes.Commit{
-		Height: int64(height),
-		Round:  0, // Default round
-		BlockID: cmttypes.BlockID{
-			Hash: make([]byte, 32), // Should be actual block hash
-			PartSetHeader: cmttypes.PartSetHeader{
-				Total: 1,
-				Hash:  make([]byte, 32),
-			},
+	emptyBlockID := cmttypes.BlockID{
+		Hash: make([]byte, 32), // Should be actual block hash
+		PartSetHeader: cmttypes.PartSetHeader{
+			Total: 1,
+			Hash:  make([]byte, 32),
 		},
+	}
+	commit := &cmttypes.Commit{
+		Height:     int64(height),
+		Round:      0, // Default round
+		BlockID:    emptyBlockID,
 		Signatures: votes,
 	}
 

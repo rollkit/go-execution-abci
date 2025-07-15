@@ -122,10 +122,20 @@ func TestCommitAndBlock_test(t *testing.T) {
 		t.Logf("Block at height %d: %+v\n", h, blockResult.Block)
 	}
 
+	// Verify that the LastCommitHash of a block is the hash of the previous block's commit
+	block2Result, err := Block(&rpc.Context{}, &[]int64{2}[0])
+	require.NoError(t, err)
+	commit2Hash := block2Result.Block.LastCommit.Hash()
+
+	block3Result, err := Block(&rpc.Context{}, &[]int64{3}[0])
+	require.NoError(t, err)
+	assert.Equal(t, commit2Hash, block3Result.Block.Header.LastCommitHash)
+
 	// 5. Call Commit and Block and validate the results
 	rpcCtx := &rpc.Context{}
 
 	height := int64(1)
+
 	// Block
 	blockResult, err := Block(rpcCtx, &height)
 	require.NoError(t, err)

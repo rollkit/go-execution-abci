@@ -166,7 +166,32 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 		return nil, err
 	}
 
-	block, err := xxxBlock(ctx, height)
+	header, data, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), height)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get block data for height %d: %w", height, err)
+	}
+
+	var commit *cmttypes.Commit
+	if height > 0 {
+		isSoftConfirmed, softConfirmationData, err := checkSoftConfirmation(ctx.Context(), height)
+		if err != nil {
+			return nil, fmt.Errorf("check soft confirmation status for commit height %d: %w", height, err)
+		}
+		if !isSoftConfirmed {
+			env.Logger.Info("Block not soft-confirmed, generating commit with dummy signatures.", "height", height)
+		}
+		commit, err = buildCommitFromAttestations(ctx.Context(), height, softConfirmationData)
+		if err != nil {
+			return nil, fmt.Errorf("build commit from attestations: %w", err)
+		}
+	} else {
+		commit = &cmttypes.Commit{}
+	}
+
+	// Create a temporary block to get the ABCI header.
+	// The `lastCommit` parameter here is actually the commit for the *current* height,
+	// which is what we need for the response.
+	block, err := cometcompat.ToABCIBlock(header, data, commit)
 	if err != nil {
 		return nil, err
 	}
@@ -174,14 +199,13 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 	return &ctypes.ResultCommit{
 		SignedHeader: cmttypes.SignedHeader{
 			Header: &block.Header,
-			Commit: block.LastCommit,
+			Commit: commit,
 		},
 		CanonicalCommit: true,
 	}, nil
 }
 
 func xxxBlock(ctx *rpctypes.Context, height uint64) (*cmttypes.Block, error) {
-	fmt.Printf("+++ height: %d\n", height)
 	header, rollkitData, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), height)
 	if err != nil {
 		return nil, err
@@ -232,6 +256,7 @@ func xxxBlock(ctx *rpctypes.Context, height uint64) (*cmttypes.Block, error) {
 	// Update the commit's BlockID to match the PREVIOUS block hash
 	block.LastCommit.BlockID.Hash = commit.BlockID.Hash
 	block.LastCommit.BlockID.PartSetHeader.Hash = commit.BlockID.Hash
+
 	return block, nil
 }
 

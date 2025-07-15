@@ -166,12 +166,16 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 		return nil, err
 	}
 
-	header, data, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), height)
+	// Step 1: Get the header for the *requested* height H. This will be part of the response.
+	// To get the correct header, we need the commit from H-1.
+	// We can use xxxBlock for this, as it correctly constructs an ABCI block.
+	abciBlockForH, err := xxxBlock(ctx, height)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get block data for height %d: %w", height, err)
+		return nil, fmt.Errorf("failed to construct block for height %d: %w", height, err)
 	}
 
-	var commit *cmttypes.Commit
+	// Step 2: Build the commit for the *requested* height H.
+	var commitForH *cmttypes.Commit
 	if height > 0 {
 		isSoftConfirmed, softConfirmationData, err := checkSoftConfirmation(ctx.Context(), height)
 		if err != nil {
@@ -180,26 +184,30 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 		if !isSoftConfirmed {
 			env.Logger.Info("Block not soft-confirmed, generating commit with dummy signatures.", "height", height)
 		}
-		commit, err = buildCommitFromAttestations(ctx.Context(), height, softConfirmationData)
+		commitForH, err = buildCommitFromAttestations(ctx.Context(), height, softConfirmationData)
 		if err != nil {
-			return nil, fmt.Errorf("build commit from attestations: %w", err)
+			return nil, fmt.Errorf("build commit from attestations for height %d: %w", height, err)
 		}
 	} else {
-		commit = &cmttypes.Commit{}
+		// Genesis commit is empty.
+		commitForH = &cmttypes.Commit{}
 	}
 
-	// Create a temporary block to get the ABCI header.
-	// The `lastCommit` parameter here is actually the commit for the *current* height,
-	// which is what we need for the response.
-	block, err := cometcompat.ToABCIBlock(header, data, commit)
+	// Step 3: Crucial fix. The block hash in the commit must match the hash of the header we are returning.
+	// The BlockID in commitForH was calculated using the rollkit header hash. We need to replace it.
+	partSet, err := abciBlockForH.MakePartSet(cmttypes.BlockPartSizeBytes)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to make part set for block %d: %w", height, err)
+	}
+	commitForH.BlockID = cmttypes.BlockID{
+		Hash:          abciBlockForH.Header.Hash(),
+		PartSetHeader: partSet.Header(),
 	}
 
 	return &ctypes.ResultCommit{
 		SignedHeader: cmttypes.SignedHeader{
-			Header: &block.Header,
-			Commit: commit,
+			Header: &abciBlockForH.Header,
+			Commit: commitForH,
 		},
 		CanonicalCommit: true,
 	}, nil
@@ -452,9 +460,21 @@ func buildCommitFromAttestations(ctx context.Context, height uint64, attestation
 	}
 
 	// Recursively get commit for previous height (LastCommit for this block)
-	lastCommit, err := buildCommitFromAttestations(ctx, height-1, nil) // nil attestation for recursive call
-	if err != nil {
-		return nil, fmt.Errorf("failed to get commit for previous height %d: %w", height-1, err)
+	var lastCommit *cmttypes.Commit
+	if height > 1 {
+		_, lastAttestationData, err := checkSoftConfirmation(ctx, height-1)
+		if err != nil {
+			return nil, fmt.Errorf("failed to check soft confirmation for height %d: %w", height-1, err)
+		}
+
+		// Recurse with potentially nil attestation data, the function handles it.
+		lastCommit, err = buildCommitFromAttestations(ctx, height-1, lastAttestationData)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get commit for previous height %d: %w", height-1, err)
+		}
+	} else {
+		// Base case for height 0 or 1
+		lastCommit = &cmttypes.Commit{Height: int64(height - 1)}
 	}
 
 	// Convert to ABCI block using real LastCommit to compute accurate hash
@@ -462,7 +482,15 @@ func buildCommitFromAttestations(ctx context.Context, height uint64, attestation
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert to ABCI block: %w", err)
 	}
-	blockHash := abciBlock.Hash()
+
+	partSet, err := abciBlock.MakePartSet(cmttypes.BlockPartSizeBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make part set for block %d: %w", height, err)
+	}
+	blockID := cmttypes.BlockID{
+		Hash:          abciBlock.Hash(),
+		PartSetHeader: partSet.Header(),
+	}
 
 	// Now build the real commit for this height using the computed hash
 	// Get validators from genesis
@@ -505,15 +533,9 @@ func buildCommitFromAttestations(ctx context.Context, height uint64, attestation
 	}
 
 	commit := &cmttypes.Commit{
-		Height: int64(height),
-		Round:  0,
-		BlockID: cmttypes.BlockID{
-			Hash: blockHash,
-			PartSetHeader: cmttypes.PartSetHeader{
-				Total: 1,
-				Hash:  blockHash,
-			},
-		},
+		Height:     int64(height),
+		Round:      0,
+		BlockID:    blockID,
 		Signatures: votes,
 	}
 

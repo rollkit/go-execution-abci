@@ -410,7 +410,37 @@ func checkSoftConfirmation(ctx context.Context, height uint64) (bool, *networkty
 
 // buildCommitFromAttestations constructs a commit with real signatures from attestations
 func buildCommitFromAttestations(ctx context.Context, height uint64, attestationData *networktypes.QueryAttestationBitmapResponse) (*cmttypes.Commit, error) {
-	// Get validators from genesis (since we know there's exactly one validator)
+	// Base case for height 1 or 0: empty commit
+	if height <= 1 {
+		return &cmttypes.Commit{
+			Height:     int64(height),
+			Round:      0,
+			BlockID:    cmttypes.BlockID{},
+			Signatures: []cmttypes.CommitSig{},
+		}, nil
+	}
+
+	// Get header and data for current height
+	header, data, err := env.Adapter.RollkitStore.GetBlockData(ctx, height)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get block data for height %d: %w", height, err)
+	}
+
+	// Recursively get commit for previous height (LastCommit for this block)
+	lastCommit, err := buildCommitFromAttestations(ctx, height-1, nil) // nil attestation for recursive call
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commit for previous height %d: %w", height-1, err)
+	}
+
+	// Convert to ABCI block using real LastCommit to compute accurate hash
+	abciBlock, err := cometcompat.ToABCIBlock(header, data, lastCommit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert to ABCI block: %w", err)
+	}
+	blockHash := abciBlock.Hash()
+
+	// Now build the real commit for this height using the computed hash
+	// Get validators from genesis
 	genesisValidators := env.Adapter.AppGenesis.Consensus.Validators
 	if len(genesisValidators) == 0 {
 		return nil, fmt.Errorf("no validators found in genesis")
@@ -451,12 +481,12 @@ func buildCommitFromAttestations(ctx context.Context, height uint64, attestation
 
 	commit := &cmttypes.Commit{
 		Height: int64(height),
-		Round:  0, // Default round
+		Round:  0,
 		BlockID: cmttypes.BlockID{
-			Hash: make([]byte, 32), // Should be actual block hash
+			Hash: blockHash,
 			PartSetHeader: cmttypes.PartSetHeader{
 				Total: 1,
-				Hash:  make([]byte, 32),
+				Hash:  blockHash,
 			},
 		},
 		Signatures: votes,

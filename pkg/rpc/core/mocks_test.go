@@ -2,10 +2,14 @@ package core
 
 import (
 	"context"
+	"testing"
+	"time"
 
+	dbm "github.com/cometbft/cometbft-db"
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 	cmquery "github.com/cometbft/cometbft/libs/pubsub/query"
+	cmstate "github.com/cometbft/cometbft/state"
 	"github.com/cometbft/cometbft/state/indexer"
 	"github.com/cometbft/cometbft/state/txindex"
 	cmttypes "github.com/cometbft/cometbft/types"
@@ -14,6 +18,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	rlkp2p "github.com/rollkit/rollkit/pkg/p2p"
 	rstore "github.com/rollkit/rollkit/pkg/store"
@@ -202,6 +207,14 @@ func (m *MockRollkitStore) UpdateState(ctx context.Context, state types.State) e
 	return args.Error(0)
 }
 
+func (m *MockRollkitStore) GetHeader(ctx context.Context, height uint64) (*types.SignedHeader, error) {
+	args := m.Called(ctx, height)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*types.SignedHeader), args.Error(1)
+}
+
 // MockApp is a mock of the ABCI application.
 // It implements servertypes.ABCI.
 type MockApp struct {
@@ -342,6 +355,48 @@ func (m *MockApp) ApplySnapshotChunk(req *abci.RequestApplySnapshotChunk) (*abci
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*abci.ResponseApplySnapshotChunk), args.Error(1)
+}
+
+// newTestStateWithValidatorsAndPrivs allocates a new TestState with the given number of validators.
+// It returns the state, the db, and the private validators.
+func newTestStateWithValidatorsAndPrivs(ctx context.Context, t *testing.T, numValidators int) (cmstate.State, dbm.DB, []cmttypes.PrivValidator) {
+	t.Helper()
+	stateDB := dbm.NewMemDB()
+	stateStore := cmstate.NewStore(stateDB, cmstate.StoreOptions{
+		DiscardABCIResponses: false,
+	})
+	state, err := cmstate.MakeGenesisState(
+		&cmttypes.GenesisDoc{
+			ChainID:     "test-chain",
+			GenesisTime: time.Now(),
+			Validators:  []cmttypes.GenesisValidator{},
+			ConsensusParams: &cmttypes.ConsensusParams{
+				Block:     cmttypes.DefaultBlockParams(),
+				Evidence:  cmttypes.DefaultEvidenceParams(),
+				Validator: cmttypes.DefaultValidatorParams(),
+				Version:   cmttypes.DefaultVersionParams(),
+				ABCI:      cmttypes.DefaultABCIParams(),
+			},
+		},
+	)
+	require.NoError(t, err)
+	require.NoError(t, stateStore.Save(state))
+
+	privValidators := make([]cmttypes.PrivValidator, numValidators)
+	validators := make([]*cmttypes.Validator, numValidators)
+	for i := 0; i < numValidators; i++ {
+		privValidators[i] = cmttypes.NewMockPV()
+		pubKey, err := privValidators[i].GetPubKey()
+		require.NoError(t, err)
+		validators[i] = cmttypes.NewValidator(pubKey, 10)
+	}
+
+	state.Validators = cmttypes.NewValidatorSet(validators)
+	state.NextValidators = state.Validators.Copy()
+
+	require.NoError(t, stateStore.Save(state))
+
+	return state, stateDB, privValidators
 }
 
 // MockP2PClient is a mock for adapter.P2PClientInfo

@@ -19,7 +19,7 @@ jobs:
     env:
       DO_NOT_TRACK: true
       ROLLKIT_VERSION: "v1.0.0-beta.1"
-      IGNITE_VERSION: "v29.1.0"
+      IGNITE_VERSION: "v29.2.0"
     outputs:
       carol_mnemonic: ${{ steps.save_mnemonic.outputs.carol_mnemonic }}
       gmd_home: ${{ steps.paths.outputs.GMD_HOME }}

@@ -2,7 +2,10 @@ module github.com/rollkit/go-execution-abci
 
 go 1.24.1
 
-replace github.com/btcsuite/btcd => github.com/btcsuite/btcd v0.22.0-beta
+replace (
+	github.com/btcsuite/btcd => github.com/btcsuite/btcd v0.22.0-beta
+	github.com/cosmos/cosmos-sdk => github.com/cosmos/cosmos-sdk v0.50.14
+)
 
 exclude github.com/btcsuite/btcd/chaincfg/chainhash v1.0.2
 

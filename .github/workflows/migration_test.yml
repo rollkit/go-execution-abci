@@ -43,13 +43,63 @@ jobs:
           # initialize the chain
           ignite chain init
 
+          # add additional validators for multi-validator setup
+          gmd keys add validator2 --output json > validator2.json
+          gmd keys add validator3 --output json > validator3.json
+
+          # get validator addresses  
+          VALIDATOR2_ADDR=$(gmd keys show validator2 -a)
+          VALIDATOR3_ADDR=$(gmd keys show validator3 -a)
+
+          # add validators to genesis with stake
+          gmd genesis add-genesis-account $VALIDATOR2_ADDR 1000000000000stake
+          gmd genesis add-genesis-account $VALIDATOR3_ADDR 1000000000000stake
+
+          # create gentx for additional validators
+          gmd genesis gentx validator2 500000000000stake --chain-id gm --keyring-backend test
+          gmd genesis gentx validator3 500000000000stake --chain-id gm --keyring-backend test
+
+          # collect all gentx
+          gmd genesis collect-gentxs
+
       - name: Start Cosmos SDK Chain and Generate Blocks
         run: |
           cd gm
-          # start the standard cosmos sdk chain
-          gmd start --log_format=json > cosmos-chain.log 2>&1 &
-          COSMOS_PID=$!
-          echo "COSMOS_PID=$COSMOS_PID" >> $GITHUB_ENV
+
+          # verify multi-validator setup before starting
+          echo "Checking validator setup..."
+          VALIDATOR_COUNT=$(gmd query staking validators --output json | jq '.validators | length')
+          echo "Number of validators: $VALIDATOR_COUNT"
+          if [ "$VALIDATOR_COUNT" -lt 3 ]; then
+            echo "Error: Expected at least 3 validators, found $VALIDATOR_COUNT"
+            exit 1
+          fi
+
+          # start validator 1 (main node)
+          gmd start --log_format=json > validator1.log 2>&1 &
+          VALIDATOR1_PID=$!
+          echo "VALIDATOR1_PID=$VALIDATOR1_PID" >> $GITHUB_ENV
+
+          # start validator 2 with offset ports
+          gmd start \
+            --rpc.laddr tcp://0.0.0.0:26658 \
+            --grpc.address 0.0.0.0:9091 \
+            --p2p.laddr tcp://0.0.0.0:26659 \
+            --log_format=json > validator2.log 2>&1 &
+          VALIDATOR2_PID=$!
+          echo "VALIDATOR2_PID=$VALIDATOR2_PID" >> $GITHUB_ENV
+
+          # start validator 3 with offset ports
+          gmd start \
+            --rpc.laddr tcp://0.0.0.0:26660 \
+            --grpc.address 0.0.0.0:9092 \
+            --p2p.laddr tcp://0.0.0.0:26661 \
+            --log_format=json > validator3.log 2>&1 &
+          VALIDATOR3_PID=$!
+          echo "VALIDATOR3_PID=$VALIDATOR3_PID" >> $GITHUB_ENV
+
+          # give validators time to start
+          sleep 10
 
           echo "Waiting for Cosmos SDK chain to produce blocks..."
 
@@ -62,10 +112,20 @@ jobs:
             sleep 2
             ATTEMPT=$((ATTEMPT+1))
             
-            # check if the chain is still running
-            if ! ps -p $COSMOS_PID > /dev/null; then
-              echo "Chain process died unexpectedly"
-              cat cosmos-chain.log
+            # check if all validators are still running
+            if ! ps -p $VALIDATOR1_PID > /dev/null; then
+              echo "Validator 1 process died unexpectedly"
+              cat validator1.log
+              exit 1
+            fi
+            if ! ps -p $VALIDATOR2_PID > /dev/null; then
+              echo "Validator 2 process died unexpectedly"
+              cat validator2.log
+              exit 1
+            fi
+            if ! ps -p $VALIDATOR3_PID > /dev/null; then
+              echo "Validator 3 process died unexpectedly"
+              cat validator3.log
               exit 1
             fi
             
@@ -76,11 +136,16 @@ jobs:
 
           if [ $BLOCKS_FOUND -lt 5 ]; then
             echo "Failed to find 5 blocks within time limit"
-            cat cosmos-chain.log
+            echo "--- Validator 1 logs ---"
+            cat validator1.log
+            echo "--- Validator 2 logs ---"
+            cat validator2.log
+            echo "--- Validator 3 logs ---"
+            cat validator3.log
             exit 1
           fi
 
-          echo "Success! Chain produced at least 5 blocks."
+          echo "Success! Cosmos SDK chain produced at least 5 blocks with 3 validators."
 
       - name: Send Transactions on Cosmos SDK Chain
         run: |
@@ -156,11 +221,21 @@ jobs:
 
       - name: Stop Cosmos SDK Chain
         run: |
-          echo "Stopping Cosmos SDK chain..."
-          if [[ -n "${COSMOS_PID}" ]]; then
-            kill -TERM $COSMOS_PID || true
-            sleep 5
-            kill -9 $COSMOS_PID || true
+          echo "Stopping Cosmos SDK chain validators..."
+          if [[ -n "${VALIDATOR1_PID}" ]]; then
+            kill -TERM $VALIDATOR1_PID || true
+            sleep 2
+            kill -9 $VALIDATOR1_PID || true
+          fi
+          if [[ -n "${VALIDATOR2_PID}" ]]; then
+            kill -TERM $VALIDATOR2_PID || true
+            sleep 2
+            kill -9 $VALIDATOR2_PID || true
+          fi
+          if [[ -n "${VALIDATOR3_PID}" ]]; then
+            kill -TERM $VALIDATOR3_PID || true
+            sleep 2
+            kill -9 $VALIDATOR3_PID || true
           fi
           echo "Cosmos SDK chain stopped"
 
@@ -187,7 +262,7 @@ jobs:
           # download dependencies and update go.mod/go.sum
           go mod tidy
 
-          # rebuild the chain with rollkit
+          # rebuild the chain with rollkit - this preserves the multi-validator genesis
           ignite chain build --skip-proto
 
       - name: Migrate Chain Data
@@ -213,10 +288,41 @@ jobs:
           cd gm
 
           echo "Starting Rollkit chain after migration..."
-          # start the rollkit chain
-          gmd start --rollkit.node.aggregator --log_format=json > rollkit-chain.log 2>&1 &
-          ROLLKIT_PID=$!
-          echo "ROLLKIT_PID=$ROLLKIT_PID" >> $GITHUB_ENV
+
+          # verify multi-validator setup is preserved after migration
+          echo "Checking validator setup after migration..."
+          VALIDATOR_COUNT=$(gmd query staking validators --output json | jq '.validators | length')
+          echo "Number of validators after migration: $VALIDATOR_COUNT"
+          if [ "$VALIDATOR_COUNT" -lt 3 ]; then
+            echo "Error: Expected at least 3 validators after migration, found $VALIDATOR_COUNT"
+            exit 1
+          fi
+
+          # start validator 1 (main node with aggregator)
+          gmd start --rollkit.node.aggregator --log_format=json > rollkit-validator1.log 2>&1 &
+          ROLLKIT_VALIDATOR1_PID=$!
+          echo "ROLLKIT_VALIDATOR1_PID=$ROLLKIT_VALIDATOR1_PID" >> $GITHUB_ENV
+
+          # start validator 2 with offset ports
+          gmd start --rollkit.node.aggregator=false \
+            --rpc.laddr tcp://0.0.0.0:26658 \
+            --grpc.address 0.0.0.0:9091 \
+            --p2p.laddr tcp://0.0.0.0:26659 \
+            --log_format=json > rollkit-validator2.log 2>&1 &
+          ROLLKIT_VALIDATOR2_PID=$!
+          echo "ROLLKIT_VALIDATOR2_PID=$ROLLKIT_VALIDATOR2_PID" >> $GITHUB_ENV
+
+          # start validator 3 with offset ports
+          gmd start --rollkit.node.aggregator=false \
+            --rpc.laddr tcp://0.0.0.0:26660 \
+            --grpc.address 0.0.0.0:9092 \
+            --p2p.laddr tcp://0.0.0.0:26661 \
+            --log_format=json > rollkit-validator3.log 2>&1 &
+          ROLLKIT_VALIDATOR3_PID=$!
+          echo "ROLLKIT_VALIDATOR3_PID=$ROLLKIT_VALIDATOR3_PID" >> $GITHUB_ENV
+
+          # give validators time to start
+          sleep 10
 
           echo "Waiting for Rollkit chain to start and produce blocks..."
 
@@ -230,10 +336,20 @@ jobs:
             sleep 2
             ATTEMPT=$((ATTEMPT+1))
             
-            # check if the chain is still running
-            if ! ps -p $ROLLKIT_PID > /dev/null; then
-              echo "Rollkit chain process died unexpectedly"
-              cat rollkit-chain.log
+            # check if all rollkit validators are still running
+            if ! ps -p $ROLLKIT_VALIDATOR1_PID > /dev/null; then
+              echo "Rollkit validator 1 process died unexpectedly"
+              cat rollkit-validator1.log
+              exit 1
+            fi
+            if ! ps -p $ROLLKIT_VALIDATOR2_PID > /dev/null; then
+              echo "Rollkit validator 2 process died unexpectedly"
+              cat rollkit-validator2.log
+              exit 1
+            fi
+            if ! ps -p $ROLLKIT_VALIDATOR3_PID > /dev/null; then
+              echo "Rollkit validator 3 process died unexpectedly"
+              cat rollkit-validator3.log
               exit 1
             fi
             
@@ -245,11 +361,16 @@ jobs:
 
           if [ $BLOCKS_FOUND -lt 5 ]; then
             echo "Failed to produce 5 new blocks after migration"
-            cat rollkit-chain.log
+            echo "--- Rollkit Validator 1 logs ---"
+            cat rollkit-validator1.log
+            echo "--- Rollkit Validator 2 logs ---"
+            cat rollkit-validator2.log
+            echo "--- Rollkit Validator 3 logs ---"
+            cat rollkit-validator3.log
             exit 1
           fi
 
-          echo "Success! Rollkit chain produced $BLOCKS_FOUND new blocks after migration."
+          echo "Success! Rollkit chain produced $BLOCKS_FOUND new blocks after migration with 3 validators."
 
       - name: Send Transactions on Rollkit Chain
         run: |
@@ -347,22 +468,42 @@ jobs:
       - name: Print logs on failure
         if: failure()
         run: |
-          echo '--- cosmos-chain.log ---'
-          cat gm/cosmos-chain.log || true
-          echo '--- rollkit-chain.log ---'
-          cat gm/rollkit-chain.log || true
+          echo '--- cosmos validator1.log ---'
+          cat gm/validator1.log || true
+          echo '--- cosmos validator2.log ---'
+          cat gm/validator2.log || true
+          echo '--- cosmos validator3.log ---'
+          cat gm/validator3.log || true
+          echo '--- rollkit-validator1.log ---'
+          cat gm/rollkit-validator1.log || true
+          echo '--- rollkit-validator2.log ---'
+          cat gm/rollkit-validator2.log || true
+          echo '--- rollkit-validator3.log ---'
+          cat gm/rollkit-validator3.log || true
 
       - name: Cleanup Processes
         if: always()
         run: |
-          # kill rollkit chain process if it exists
-          if [[ -n "${ROLLKIT_PID}" ]]; then
-            kill -9 $ROLLKIT_PID || true
+          # kill rollkit validator processes if they exist
+          if [[ -n "${ROLLKIT_VALIDATOR1_PID}" ]]; then
+            kill -9 $ROLLKIT_VALIDATOR1_PID || true
+          fi
+          if [[ -n "${ROLLKIT_VALIDATOR2_PID}" ]]; then
+            kill -9 $ROLLKIT_VALIDATOR2_PID || true
+          fi
+          if [[ -n "${ROLLKIT_VALIDATOR3_PID}" ]]; then
+            kill -9 $ROLLKIT_VALIDATOR3_PID || true
           fi
 
-          # kill cosmos chain process if it exists
-          if [[ -n "${COSMOS_PID}" ]]; then
-            kill -9 $COSMOS_PID || true
+          # kill cosmos validator processes if they exist
+          if [[ -n "${VALIDATOR1_PID}" ]]; then
+            kill -9 $VALIDATOR1_PID || true
+          fi
+          if [[ -n "${VALIDATOR2_PID}" ]]; then
+            kill -9 $VALIDATOR2_PID || true
+          fi
+          if [[ -n "${VALIDATOR3_PID}" ]]; then
+            kill -9 $VALIDATOR3_PID || true
           fi
 
           # kill DA process if it exists

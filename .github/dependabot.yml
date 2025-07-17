@@ -5,7 +5,7 @@ updates:
     schedule:
       interval: daily
       time: "09:00"
-      timezone: "UTC"
+      timezone: "Europe/Amsterdam"
     open-pull-requests-limit: 10
     commit-message:
       prefix: "ci"
@@ -28,10 +28,10 @@ updates:
     schedule:
       interval: daily
       time: "09:00"
-      timezone: "UTC"
+      timezone: "Europe/Amsterdam"
     open-pull-requests-limit: 10
     commit-message:
-      prefix: "deps"
+      prefix: "build"
       include: "scope"
     labels:
       - T:dependencies
@@ -41,7 +41,7 @@ updates:
         applies-to: version-updates
         update-types:
           - "patch"
-      # Group minor updates into a single PR  
+      # Group minor updates into a single PR
       minor-updates:
         applies-to: version-updates
         update-types:

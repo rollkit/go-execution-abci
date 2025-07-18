@@ -36,6 +36,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	rollkitblock "github.com/rollkit/rollkit/block"
 	"github.com/rollkit/rollkit/da/jsonrpc"
 	"github.com/rollkit/rollkit/node"
 	"github.com/rollkit/rollkit/pkg/config"
@@ -472,7 +473,12 @@ func setupNodeAndExecutor(
 		database,
 		metrics,
 		NewLogAdapter(logger),
-		cometcompat.PayloadProvider(),
+		node.NodeOptions{
+			ManagerOptions: rollkitblock.ManagerOptions{
+				SignaturePayloadProvider: cometcompat.SignaturePayloadProvider(),
+				ValidatorHasherProvider:  cometcompat.ValidatorHasherProvider(),
+			},
+		},
 	)
 	if err != nil {
 		return nil, nil, cleanupFn, err

@@ -22,17 +22,17 @@ func Validators(ctx *rpctypes.Context, heightPtr *int64, pagePtr, perPagePtr *in
 	}
 
 	genesisValidators := env.Adapter.AppGenesis.Consensus.Validators
-
 	if len(genesisValidators) != 1 {
 		return nil, fmt.Errorf("there should be exactly one validator in genesis")
 	}
+
 	// Since it's a centralized sequencer
 	// changed behavior to get this from genesis
 	genesisValidator := genesisValidators[0]
 	validator := cmttypes.Validator{
 		Address:          genesisValidator.Address,
 		PubKey:           genesisValidator.PubKey,
-		VotingPower:      int64(1),
+		VotingPower:      genesisValidator.Power,
 		ProposerPriority: int64(1),
 	}
 

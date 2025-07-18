@@ -2,12 +2,14 @@ package adapter
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtstateproto "github.com/cometbft/cometbft/proto/tendermint/state"
 	cmtstate "github.com/cometbft/cometbft/state"
+	cmttypes "github.com/cometbft/cometbft/types"
 	proto "github.com/cosmos/gogoproto/proto"
 	ds "github.com/ipfs/go-datastore"
 	kt "github.com/ipfs/go-datastore/keytransform"
@@ -20,6 +22,8 @@ const (
 	stateKey = "s"
 	// blockResponseKey is the key used for storing block responses
 	blockResponseKey = "br"
+	// commitKey is the key used for storing commits
+	commitKey = "c"
 )
 
 // Store wraps a datastore with ABCI-specific functionality
@@ -70,6 +74,37 @@ func (s *Store) SaveState(ctx context.Context, state *cmtstate.State) error {
 	}
 
 	return s.prefixedStore.Put(ctx, ds.NewKey(stateKey), data)
+}
+
+// SaveCommit saves the commit to disk per height.
+// This is used to store the commit for the block execution
+func (s *Store) SaveCommit(ctx context.Context, height uint64, commit *cmttypes.Commit) error {
+	data, err := json.Marshal(commit)
+	if err != nil {
+		return fmt.Errorf("failed to marshal commit: %w", err)
+	}
+
+	key := ds.NewKey(commitKey).ChildString(strconv.FormatUint(height, 10))
+	return s.prefixedStore.Put(ctx, key, data)
+}
+
+func (s *Store) GetCommit(ctx context.Context, height uint64) (*cmttypes.Commit, error) {
+	key := ds.NewKey(commitKey).ChildString(strconv.FormatUint(height, 10))
+	data, err := s.prefixedStore.Get(ctx, key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get commit: %w", err)
+	}
+
+	if data == nil {
+		return nil, fmt.Errorf("commit not found for height %d", height)
+	}
+
+	var commit cmttypes.Commit
+	if err := json.Unmarshal(data, &commit); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal commit: %w", err)
+	}
+
+	return &commit, nil
 }
 
 // SaveBlockResponse saves the block response to disk per height

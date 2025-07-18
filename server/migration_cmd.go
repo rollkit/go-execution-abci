@@ -226,7 +226,7 @@ func cometBlockToRollkit(block *cmttypes.Block) (*rollkittypes.SignedHeader, *ro
 				Block: block.Version.Block,
 				App:   block.Version.App,
 			},
-			LastHeaderHash:  block.LastBlockID.Hash.Bytes(),
+			LastHeaderHash:  block.Header.Hash().Bytes(),
 			LastCommitHash:  block.LastCommitHash.Bytes(),
 			DataHash:        block.DataHash.Bytes(),
 			ConsensusHash:   block.ConsensusHash.Bytes(),
@@ -235,7 +235,7 @@ func cometBlockToRollkit(block *cmttypes.Block) (*rollkittypes.SignedHeader, *ro
 			ValidatorHash:   block.ValidatorsHash.Bytes(),
 			ProposerAddress: block.ProposerAddress.Bytes(),
 		},
-		Signature: signature, // TODO: figure out this.
+		Signature: signature,
 	}
 
 	data = &rollkittypes.Data{

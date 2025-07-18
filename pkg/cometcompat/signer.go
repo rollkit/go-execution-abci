@@ -1,7 +1,7 @@
 package cometcompat
 
 import (
-	cmbytes "github.com/cometbft/cometbft/libs/bytes"
+	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	cmttypes "github.com/cometbft/cometbft/types"
 
@@ -9,16 +9,16 @@ import (
 )
 
 func SignaturePayloadProvider() types.SignaturePayloadProvider {
-	return func(header *types.Header) ([]byte, error) {
+	return func(header *types.Header, data *types.Data) ([]byte, error) {
 		vote := cmtproto.Vote{
 			Type:   cmtproto.PrecommitType,
 			Height: int64(header.Height()), //nolint:gosec
 			Round:  0,
-			BlockID: cmtproto.BlockID{ // TODO: this isn't the right hash, we need to calculate it from the block data
-				Hash: cmbytes.HexBytes(header.Hash()),
+			BlockID: cmtproto.BlockID{
+				Hash: cmtbytes.HexBytes(data.Hash()),
 				PartSetHeader: cmtproto.PartSetHeader{
 					Total: 1,
-					Hash:  cmbytes.HexBytes(header.Hash()),
+					Hash:  cmtbytes.HexBytes(data.Hash()),
 				},
 			},
 			Timestamp:        header.Time(),

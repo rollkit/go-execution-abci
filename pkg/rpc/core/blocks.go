@@ -194,9 +194,15 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 		return nil, fmt.Errorf("failed to get current height: %w", err)
 	}
 
-	// non canonical commit are not supported.
+	// non canonical commits do not have signatures
 	if height == currentHeight {
-		return nil, fmt.Errorf("commit for the latest block is not available, use Commit for height %d", currentHeight-1)
+		commit := &cmttypes.Commit{
+			Height:  int64(currentHeight), //nolint:gosec
+			Round:   0,
+			BlockID: blockMeta.BlockID,
+		}
+
+		return ctypes.NewResultCommit(&header, commit, false), nil
 	}
 
 	commit, err := env.Adapter.Store.GetLastCommit(ctx.Context(), height+1)

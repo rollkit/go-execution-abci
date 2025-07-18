@@ -571,6 +571,10 @@ func (a *Adapter) getLastCommit(ctx context.Context, blockHeight uint64) (*cmtty
 			Round:  0,
 			BlockID: cmttypes.BlockID{
 				Hash: cmtbytes.HexBytes(data.Hash()),
+				PartSetHeader: cmttypes.PartSetHeader{
+					Total: 1,
+					Hash:  cmtbytes.HexBytes(data.Hash()),
+				},
 			},
 			Signatures: []cmttypes.CommitSig{
 				{

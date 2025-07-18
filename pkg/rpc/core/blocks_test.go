@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	cmttypes "github.com/cometbft/cometbft/types"
+	ds "github.com/ipfs/go-datastore"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -29,10 +31,15 @@ func TestBlockSearch_Success(t *testing.T) {
 	mockApp := new(MockApp)
 	mockBlockIndexer := new(MockBlockIndexer)
 
+	// Create a real adapter store for the test
+	dsStore := ds.NewMapDatastore()
+	adapterStore := adapter.NewExecABCIStore(dsStore)
+
 	env = &Environment{
 		Adapter: &adapter.Adapter{
 			RollkitStore: mockRollkitStore,
 			App:          mockApp,
+			Store:        adapterStore,
 		},
 		TxIndexer:    mockTxIndexer,
 		BlockIndexer: mockBlockIndexer,
@@ -51,29 +58,6 @@ func TestBlockSearch_Success(t *testing.T) {
 	now := time.Now()
 	chainID := "test-chain"
 
-	// Block 1 (needed for getLastCommit for block 2)
-	header0 := &types.SignedHeader{
-		Header: types.Header{
-			BaseHeader: types.BaseHeader{
-				Height:  1,
-				Time:    uint64(now.UnixNano()),
-				ChainID: chainID,
-			},
-			ProposerAddress: []byte("proposer0"),
-			AppHash:         []byte("apphash0"),
-			DataHash:        make([]byte, 32),
-		},
-		Signature: types.Signature(make([]byte, 64)),
-	}
-	data0 := &types.Data{
-		Metadata: &types.Metadata{
-			ChainID: chainID,
-			Height:  1,
-			Time:    uint64(now.UnixNano()),
-		},
-		Txs: make(types.Txs, 0),
-	}
-
 	header2 := &types.SignedHeader{
 		Header: types.Header{
 			BaseHeader: types.BaseHeader{
@@ -81,7 +65,7 @@ func TestBlockSearch_Success(t *testing.T) {
 				Time:    uint64(now.UnixNano() + int64(time.Second)),
 				ChainID: chainID,
 			},
-			ProposerAddress: []byte("proposer2"),
+			ProposerAddress: make([]byte, 20),
 			AppHash:         []byte("apphash2"),
 			DataHash:        make([]byte, 32),
 		},
@@ -103,7 +87,7 @@ func TestBlockSearch_Success(t *testing.T) {
 				Time:    uint64(now.UnixNano() + 2*int64(time.Second)),
 				ChainID: chainID,
 			},
-			ProposerAddress: []byte("proposer3"),
+			ProposerAddress: make([]byte, 20),
 			AppHash:         []byte("apphash3"),
 			DataHash:        make([]byte, 32),
 		},
@@ -118,10 +102,47 @@ func TestBlockSearch_Success(t *testing.T) {
 		Txs: make(types.Txs, 0),
 	}
 
-	// Mock GetBlockData calls (including the ones needed for getLastCommit)
-	mockRollkitStore.On("GetBlockData", mock.Anything, uint64(1)).Return(header0, data0, nil) // For getLastCommit of block 2
-	mockRollkitStore.On("GetBlockData", mock.Anything, uint64(2)).Return(header2, data2, nil) // For block 2 and getLastCommit of block 3
+	// Mock GetBlockData calls
+	mockRollkitStore.On("GetBlockData", mock.Anything, uint64(2)).Return(header2, data2, nil) // For block 2
 	mockRollkitStore.On("GetBlockData", mock.Anything, uint64(3)).Return(header3, data3, nil) // For block 3
+
+	saveCtx := context.Background()
+
+	// Create commit for block 2 (using block 1 data)
+	commit2 := &cmttypes.Commit{
+		Height: 2,
+		BlockID: cmttypes.BlockID{
+			Hash: []byte(header2.Hash()),
+		},
+		Signatures: []cmttypes.CommitSig{
+			{
+				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+				ValidatorAddress: header2.ProposerAddress,
+				Timestamp:        header2.Time(),
+				Signature:        make([]byte, 64),
+			},
+		},
+	}
+	err := adapterStore.SaveLastCommit(saveCtx, 2, commit2)
+	require.NoError(t, err)
+
+	// Create commit for block 3 (using block 2 data)
+	commit3 := &cmttypes.Commit{
+		Height: 3,
+		BlockID: cmttypes.BlockID{
+			Hash: []byte(header3.Hash()),
+		},
+		Signatures: []cmttypes.CommitSig{
+			{
+				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+				ValidatorAddress: header3.ProposerAddress,
+				Timestamp:        header3.Time(),
+				Signature:        make([]byte, 64),
+			},
+		},
+	}
+	err = adapterStore.SaveLastCommit(saveCtx, 3, commit3)
+	require.NoError(t, err)
 
 	// Execute the test
 	result, err := BlockSearch(ctx, query, &page, &perPage, orderBy)

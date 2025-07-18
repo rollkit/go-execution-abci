@@ -34,7 +34,7 @@ func TestBroadcastEvidence(t *testing.T) {
 			Round:            round,
 			Timestamp:        time.Now(),
 			Type:             cmtproto.PrevoteType,
-			BlockID:          cmttypes.BlockID{Hash: []byte("block_hash_test_evidence")},
+			BlockID:          cmttypes.BlockID{Hash: []byte("block_hash_test_evidence"), PartSetHeader: cmttypes.PartSetHeader{Total: 1, Hash: []byte("part_hash_test_evidence_")}},
 		}
 	}
 

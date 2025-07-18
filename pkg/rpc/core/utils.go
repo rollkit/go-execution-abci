@@ -45,20 +45,19 @@ func getBlockMeta(ctx context.Context, n uint64) (*cmttypes.BlockMeta, *cmttypes
 		return nil, nil
 	}
 
-	emptyCommit := &cmttypes.Commit{
-		Height:     int64(header.Height()),
-		Round:      0,
-		BlockID:    cmttypes.BlockID{},
-		Signatures: []cmttypes.CommitSig{},
+	lastCommit, err := env.Adapter.Store.GetLastCommit(ctx, header.Height())
+	if err != nil {
+		env.Logger.Error("Failed to get last commit in getBlockMeta", "height", n, "err", err)
+		return nil, nil
 	}
 
-	abciHeader, err := cometcompat.ToABCIHeader(&header.Header, emptyCommit)
+	abciHeader, err := cometcompat.ToABCIHeader(&header.Header, lastCommit)
 	if err != nil {
 		env.Logger.Error("Failed to convert header to ABCI format", "height", n, "err", err)
 		return nil, nil
 	}
 
-	abciBlock, err := cometcompat.ToABCIBlock(abciHeader, emptyCommit, data)
+	abciBlock, err := cometcompat.ToABCIBlock(abciHeader, lastCommit, data)
 	if err != nil {
 		env.Logger.Error("Failed to convert block to ABCI format", "height", n, "err", err)
 		return nil, nil

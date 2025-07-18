@@ -14,8 +14,12 @@ func SignaturePayloadProvider() types.SignaturePayloadProvider {
 			Type:   cmtproto.PrecommitType,
 			Height: int64(header.Height()), //nolint:gosec
 			Round:  0,
-			BlockID: cmtproto.BlockID{
-				Hash: cmbytes.HexBytes(header.Hash()), // TODO: this isn't the right hash, we need to calculate it from the block data
+			BlockID: cmtproto.BlockID{ // TODO: this isn't the right hash, we need to calculate it from the block data
+				Hash: cmbytes.HexBytes(header.Hash()),
+				PartSetHeader: cmtproto.PartSetHeader{
+					Total: 1,
+					Hash:  cmbytes.HexBytes(header.Hash()),
+				},
 			},
 			Timestamp:        header.Time(),
 			ValidatorAddress: header.ProposerAddress,

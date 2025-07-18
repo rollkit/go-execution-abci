@@ -91,6 +91,10 @@ func BlockSearch(
 			Block: abciBlock,
 			BlockID: cmttypes.BlockID{
 				Hash: abciBlock.Hash(),
+				PartSetHeader: cmttypes.PartSetHeader{
+					Total: 1,
+					Hash:  abciBlock.Hash(),
+				},
 			},
 		})
 	}
@@ -169,6 +173,10 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 	return &ctypes.ResultBlock{
 		BlockID: cmttypes.BlockID{
 			Hash: cmbytes.HexBytes(hash),
+			PartSetHeader: cmttypes.PartSetHeader{
+				Total: 1,
+				Hash:  cmbytes.HexBytes(hash),
+			},
 		},
 		Block: abciBlock,
 	}, nil
@@ -187,7 +195,7 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 	if blockMeta == nil {
 		return nil, nil
 	}
-	header := blockMeta.Header
+	abciHeader := blockMeta.Header
 
 	currentHeight, err := env.Adapter.RollkitStore.Height(ctx.Context())
 	if err != nil {
@@ -196,13 +204,24 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 
 	// non canonical commits do not have signatures
 	if height == currentHeight {
+		header, _, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), uint64(currentHeight))
+		if err != nil {
+			return nil, err
+		}
+
 		commit := &cmttypes.Commit{
 			Height:  int64(currentHeight), //nolint:gosec
 			Round:   0,
 			BlockID: blockMeta.BlockID,
+			Signatures: []cmttypes.CommitSig{{
+				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
+				Signature:        header.Signature,
+				ValidatorAddress: header.ProposerAddress,
+				Timestamp:        header.Time(),
+			}},
 		}
 
-		return ctypes.NewResultCommit(&header, commit, false), nil
+		return ctypes.NewResultCommit(&abciHeader, commit, false), nil
 	}
 
 	commit, err := env.Adapter.Store.GetLastCommit(ctx.Context(), height+1)
@@ -210,7 +229,7 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 		return nil, fmt.Errorf("failed to get last commit for height %d: %w", height, err)
 	}
 
-	return ctypes.NewResultCommit(&header, commit, true), nil
+	return ctypes.NewResultCommit(&abciHeader, commit, true), nil
 }
 
 // BlockResults gets block results at a given height.
@@ -260,7 +279,7 @@ func HeaderByHash(ctx *rpctypes.Context, hash cmbytes.HexBytes) (*ctypes.ResultH
 	// decoding logic in the HTTP service will correctly translate from JSON.
 	// See https://github.com/cometbft/cometbft/issues/6802 for context.
 
-	header, data, err := env.Adapter.RollkitStore.GetBlockByHash(ctx.Context(), rlktypes.Hash(hash))
+	header, _, err := env.Adapter.RollkitStore.GetBlockByHash(ctx.Context(), rlktypes.Hash(hash))
 	if err != nil {
 		return nil, err
 	}
@@ -275,17 +294,7 @@ func HeaderByHash(ctx *rpctypes.Context, hash cmbytes.HexBytes) (*ctypes.ResultH
 		return nil, fmt.Errorf("failed to convert header to ABCI format: %w", err)
 	}
 
-	abciBlock, err := cometcompat.ToABCIBlock(abciHeader, lastCommit, data)
-	if err != nil {
-		return nil, err
-	}
-
-	blockMeta, err := cometcompat.ToABCIBlockMeta(abciBlock)
-	if err != nil {
-		return nil, err
-	}
-
-	return &ctypes.ResultHeader{Header: &blockMeta.Header}, nil
+	return &ctypes.ResultHeader{Header: &abciHeader}, nil
 }
 
 // BlockchainInfo gets block headers for minHeight <= height <= maxHeight.

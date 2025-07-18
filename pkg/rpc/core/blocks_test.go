@@ -214,7 +214,8 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 		// Create and sign block
 		blockData, rollkitHeader := createTestBlock(blockHeight, chainID, now, validatorAddress, validatorHash, i)
 
-		realSignature := signBlock(t, rollkitHeader, aggregatorPrivKey)
+		// Create the signature for the rollkit block
+		realSignature := signBlock(t, rollkitHeader, blockData, aggregatorPrivKey)
 
 		// Mock the store to return our signed block
 		mockBlock(blockHeight, rollkitHeader, blockData, realSignature, aggregatorPubKey, validatorAddress)
@@ -266,8 +267,8 @@ func createTestBlock(height uint64, chainID string, baseTime time.Time, validato
 	return blockData, rollkitHeader
 }
 
-func signBlock(t *testing.T, header types.Header, privKey crypto.PrivKey) []byte {
-	signBytes, err := cometcompat.SignaturePayloadProvider()(&header)
+func signBlock(t *testing.T, header types.Header, data *types.Data, privKey crypto.PrivKey) []byte {
+	signBytes, err := cometcompat.SignaturePayloadProvider()(&header, data)
 	require.NoError(t, err)
 
 	signature, err := privKey.Sign(signBytes)
@@ -365,10 +366,15 @@ func setupTestEnvironmentWithSigner(signer *MockSigner) *Environment {
 	mockApp := new(MockApp)
 	mockRollkitStore := new(rollkitmocks.MockStore)
 
+	// Create a real adapter store for the test
+	dsStore := ds.NewMapDatastore()
+	adapterStore := adapter.NewExecABCIStore(dsStore)
+
 	return &Environment{
 		Adapter: &adapter.Adapter{
 			RollkitStore: mockRollkitStore,
 			App:          mockApp,
+			Store:        adapterStore,
 		},
 		TxIndexer:    mockTxIndexer,
 		BlockIndexer: mockBlockIndexer,

@@ -103,7 +103,7 @@ func TestExecuteFiresEvents(t *testing.T) {
 				AppHash:         []byte("apphash1"),
 			}
 
-			headerBz, err := cometcompat.SignaturePayloadProvider()(&header)
+			headerBz, err := cometcompat.SignaturePayloadProvider()(&header, new(types.Data))
 			require.NoError(t, err)
 
 			sig, err := privKey.Sign(headerBz)

@@ -2,12 +2,12 @@ package adapter
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtstateproto "github.com/cometbft/cometbft/proto/tendermint/state"
+	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	cmtstate "github.com/cometbft/cometbft/state"
 	cmttypes "github.com/cometbft/cometbft/types"
 	proto "github.com/cosmos/gogoproto/proto"
@@ -76,35 +76,40 @@ func (s *Store) SaveState(ctx context.Context, state *cmtstate.State) error {
 	return s.prefixedStore.Put(ctx, ds.NewKey(stateKey), data)
 }
 
-// SaveCommit saves the commit to disk per height.
-// This is used to store the commit for the block execution
-func (s *Store) SaveCommit(ctx context.Context, height uint64, commit *cmttypes.Commit) error {
-	data, err := json.Marshal(commit)
+// SaveLastCommit saves the commit to disk per height.
+// This is used to store the last commit for the block execution
+func (s *Store) SaveLastCommit(ctx context.Context, height uint64, commit *cmttypes.Commit) error {
+	data, err := proto.Marshal(commit.ToProto())
 	if err != nil {
-		return fmt.Errorf("failed to marshal commit: %w", err)
+		return fmt.Errorf("failed to marshal last commit: %w", err)
 	}
 
 	key := ds.NewKey(commitKey).ChildString(strconv.FormatUint(height, 10))
 	return s.prefixedStore.Put(ctx, key, data)
 }
 
-func (s *Store) GetCommit(ctx context.Context, height uint64) (*cmttypes.Commit, error) {
+func (s *Store) GetLastCommit(ctx context.Context, height uint64) (*cmttypes.Commit, error) {
 	key := ds.NewKey(commitKey).ChildString(strconv.FormatUint(height, 10))
 	data, err := s.prefixedStore.Get(ctx, key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get commit: %w", err)
+		return nil, fmt.Errorf("failed to get last commit: %w", err)
 	}
 
 	if data == nil {
-		return nil, fmt.Errorf("commit not found for height %d", height)
+		return nil, fmt.Errorf("last commit not found for height %d", height)
 	}
 
-	var commit cmttypes.Commit
-	if err := json.Unmarshal(data, &commit); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal commit: %w", err)
+	protoCommit := &cmtproto.Commit{}
+	if err := proto.Unmarshal(data, protoCommit); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal state: %w", err)
 	}
 
-	return &commit, nil
+	commit, err := cmttypes.CommitFromProto(protoCommit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert commit from proto: %w", err)
+	}
+
+	return commit, nil
 }
 
 // SaveBlockResponse saves the block response to disk per height

@@ -72,17 +72,17 @@ func BlockSearch(
 			return nil, err
 		}
 
-		commit, err := env.Adapter.Store.GetCommit(wrappedCtx, uint64(results[i]))
+		lastCommit, err := env.Adapter.Store.GetLastCommit(wrappedCtx, uint64(results[i]))
 		if err != nil {
-			return nil, fmt.Errorf("failed to get commit for block %d: %w", results[i], err)
+			return nil, fmt.Errorf("failed to get last commit for block %d: %w", results[i], err)
 		}
 
-		abciHeader, err := cometcompat.ToABCIHeader(&header.Header, commit)
+		abciHeader, err := cometcompat.ToABCIHeader(&header.Header, lastCommit)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert header to ABCI format: %w", err)
 		}
 
-		abciBlock, err := cometcompat.ToABCIBlock(abciHeader, commit, data)
+		abciBlock, err := cometcompat.ToABCIBlock(abciHeader, lastCommit, data)
 		if err != nil {
 			return nil, err
 		}
@@ -151,17 +151,17 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 		return nil, err
 	}
 
-	commit, err := env.Adapter.Store.GetCommit(ctx.Context(), header.Height())
+	lastCommit, err := env.Adapter.Store.GetLastCommit(ctx.Context(), header.Height())
 	if err != nil {
-		return nil, fmt.Errorf("failed to get commit for block %d: %w", header.Height(), err)
+		return nil, fmt.Errorf("failed to get last commit for block %d: %w", header.Height(), err)
 	}
 
-	abciHeader, err := cometcompat.ToABCIHeader(&header.Header, commit)
+	abciHeader, err := cometcompat.ToABCIHeader(&header.Header, lastCommit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert header to ABCI format: %w", err)
 	}
 
-	abciBlock, err := cometcompat.ToABCIBlock(abciHeader, commit, data)
+	abciBlock, err := cometcompat.ToABCIBlock(abciHeader, lastCommit, data)
 	if err != nil {
 		return nil, err
 	}
@@ -196,12 +196,12 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 
 	canonical := height == currentHeight
 
-	commit, err := env.Adapter.Store.GetCommit(ctx.Context(), height)
+	lastCommit, err := env.Adapter.Store.GetLastCommit(ctx.Context(), height)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get commit for height %d: %w", height, err)
+		return nil, fmt.Errorf("failed to get last commit for height %d: %w", height, err)
 	}
 
-	return ctypes.NewResultCommit(&header, commit, canonical), nil
+	return ctypes.NewResultCommit(&header, lastCommit, canonical), nil
 }
 
 // BlockResults gets block results at a given height.
@@ -256,17 +256,17 @@ func HeaderByHash(ctx *rpctypes.Context, hash cmbytes.HexBytes) (*ctypes.ResultH
 		return nil, err
 	}
 
-	commit, err := env.Adapter.Store.GetCommit(ctx.Context(), header.Height())
+	lastCommit, err := env.Adapter.Store.GetLastCommit(ctx.Context(), header.Height())
 	if err != nil {
-		return nil, fmt.Errorf("failed to get commit for block %d: %w", header.Height(), err)
+		return nil, fmt.Errorf("failed to get last commit for block %d: %w", header.Height(), err)
 	}
 
-	abciHeader, err := cometcompat.ToABCIHeader(&header.Header, commit)
+	abciHeader, err := cometcompat.ToABCIHeader(&header.Header, lastCommit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert header to ABCI format: %w", err)
 	}
 
-	abciBlock, err := cometcompat.ToABCIBlock(abciHeader, commit, data)
+	abciBlock, err := cometcompat.ToABCIBlock(abciHeader, lastCommit, data)
 	if err != nil {
 		return nil, err
 	}

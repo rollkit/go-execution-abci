@@ -363,7 +363,7 @@ func (a *Adapter) ExecuteTxs(
 	}
 
 	// save commit to store to avoid recomputing it later
-	if err := a.Store.SaveCommit(ctx, blockHeight, lastCommit); err != nil {
+	if err := a.Store.SaveLastCommit(ctx, blockHeight, lastCommit); err != nil {
 		return nil, 0, fmt.Errorf("save commit: %w", err)
 	}
 

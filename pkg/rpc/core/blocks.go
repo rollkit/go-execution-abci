@@ -196,12 +196,12 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 
 	canonical := height == currentHeight
 
-	lastCommit, err := env.Adapter.Store.GetLastCommit(ctx.Context(), height)
+	commit, err := env.Adapter.Store.GetLastCommit(ctx.Context(), height+1)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get last commit for height %d: %w", height, err)
 	}
 
-	return ctypes.NewResultCommit(&header, lastCommit, canonical), nil
+	return ctypes.NewResultCommit(&header, commit, canonical), nil
 }
 
 // BlockResults gets block results at a given height.

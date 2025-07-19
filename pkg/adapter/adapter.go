@@ -473,6 +473,10 @@ func (a *Adapter) ExecuteTxs(
 
 	currentBlockID := cmttypes.BlockID{
 		Hash: block.Hash(),
+		PartSetHeader: cmttypes.PartSetHeader{
+			Total: 1,
+			Hash:  block.Hash(),
+		},
 	}
 
 	if a.blockFilter.IsPublishable(ctx, int64(header.Height())) {

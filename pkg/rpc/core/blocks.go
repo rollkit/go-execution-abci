@@ -87,14 +87,16 @@ func BlockSearch(
 			return nil, err
 		}
 
+		blockParts, err := abciBlock.MakePartSet(cmttypes.BlockPartSizeBytes)
+		if err != nil {
+			return nil, fmt.Errorf("make part set: %w", err)
+		}
+
 		blocks = append(blocks, &ctypes.ResultBlock{
 			Block: abciBlock,
 			BlockID: cmttypes.BlockID{
-				Hash: abciBlock.Hash(),
-				PartSetHeader: cmttypes.PartSetHeader{
-					Total: 1,
-					Hash:  abciBlock.Hash(),
-				},
+				Hash:          abciBlock.Hash(),
+				PartSetHeader: blockParts.Header(),
 			},
 		})
 	}
@@ -170,13 +172,15 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 		return nil, err
 	}
 
+	blockParts, err := abciBlock.MakePartSet(cmttypes.BlockPartSizeBytes)
+	if err != nil {
+		return nil, fmt.Errorf("make part set: %w", err)
+	}
+
 	return &ctypes.ResultBlock{
 		BlockID: cmttypes.BlockID{
-			Hash: cmbytes.HexBytes(hash),
-			PartSetHeader: cmttypes.PartSetHeader{
-				Total: 1,
-				Hash:  cmbytes.HexBytes(hash),
-			},
+			Hash:          cmbytes.HexBytes(hash),
+			PartSetHeader: blockParts.Header(),
 		},
 		Block: abciBlock,
 	}, nil

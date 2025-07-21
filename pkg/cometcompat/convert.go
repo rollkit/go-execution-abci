@@ -2,6 +2,7 @@ package cometcompat
 
 import (
 	"errors"
+	"fmt"
 
 	cmbytes "github.com/cometbft/cometbft/libs/bytes"
 	cmprotoversion "github.com/cometbft/cometbft/proto/tendermint/version"
@@ -58,13 +59,15 @@ func ToABCIBlock(header cmttypes.Header, lastCommit *cmttypes.Commit, data *rlkt
 
 // ToABCIBlockMeta converts an ABCI block into a BlockMeta format.
 func ToABCIBlockMeta(abciBlock *cmttypes.Block) (*cmttypes.BlockMeta, error) {
+	blockParts, err := abciBlock.MakePartSet(cmttypes.BlockPartSizeBytes)
+	if err != nil {
+		return nil, fmt.Errorf("make part set: %w", err)
+	}
+
 	return &cmttypes.BlockMeta{
 		BlockID: cmttypes.BlockID{
-			Hash: abciBlock.Hash(),
-			PartSetHeader: cmttypes.PartSetHeader{
-				Total: 1,
-				Hash:  abciBlock.Hash(),
-			},
+			Hash:          abciBlock.Hash(),
+			PartSetHeader: blockParts.Header(),
 		},
 		BlockSize: abciBlock.Size(),
 		Header:    abciBlock.Header,

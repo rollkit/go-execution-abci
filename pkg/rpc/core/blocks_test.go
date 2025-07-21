@@ -1,7 +1,7 @@
 package core
 
 import (
-	"context"
+	"crypto/sha256"
 	"testing"
 	"time"
 
@@ -106,13 +106,11 @@ func TestBlockSearch_Success(t *testing.T) {
 	mockRollkitStore.On("GetBlockData", mock.Anything, uint64(2)).Return(header2, data2, nil) // For block 2
 	mockRollkitStore.On("GetBlockData", mock.Anything, uint64(3)).Return(header3, data3, nil) // For block 3
 
-	saveCtx := context.Background()
-
 	// Create commit for block 2 (using block 1 data)
 	commit2 := &cmttypes.Commit{
 		Height: 2,
 		BlockID: cmttypes.BlockID{
-			Hash: []byte(header2.Hash()),
+			Hash: make([]byte, sha256.Size),
 		},
 		Signatures: []cmttypes.CommitSig{
 			{
@@ -123,14 +121,14 @@ func TestBlockSearch_Success(t *testing.T) {
 			},
 		},
 	}
-	err := adapterStore.SaveLastCommit(saveCtx, 2, commit2)
+	err := adapterStore.SaveLastCommit(ctx.Context(), 2, commit2)
 	require.NoError(t, err)
 
 	// Create commit for block 3 (using block 2 data)
 	commit3 := &cmttypes.Commit{
 		Height: 3,
 		BlockID: cmttypes.BlockID{
-			Hash: []byte(header3.Hash()),
+			Hash: make([]byte, sha256.Size),
 		},
 		Signatures: []cmttypes.CommitSig{
 			{
@@ -141,7 +139,7 @@ func TestBlockSearch_Success(t *testing.T) {
 			},
 		},
 	}
-	err = adapterStore.SaveLastCommit(saveCtx, 3, commit3)
+	err = adapterStore.SaveLastCommit(ctx.Context(), 3, commit3)
 	require.NoError(t, err)
 
 	// Execute the test

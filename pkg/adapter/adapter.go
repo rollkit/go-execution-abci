@@ -12,7 +12,6 @@ import (
 	"cosmossdk.io/log"
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtcfg "github.com/cometbft/cometbft/config"
-	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
 	"github.com/cometbft/cometbft/mempool"
 	corep2p "github.com/cometbft/cometbft/p2p"
 	cmtprototypes "github.com/cometbft/cometbft/proto/tendermint/types"
@@ -570,15 +569,32 @@ func (a *Adapter) getLastCommit(ctx context.Context, blockHeight uint64) (*cmtty
 			return nil, fmt.Errorf("get previous block data: %w", err)
 		}
 
+		previousCommit, err := a.Store.GetLastCommit(ctx, blockHeight-1)
+		if err != nil {
+			return nil, fmt.Errorf("get previous commit: %w", err)
+		}
+
+		abciHeader, err := cometcompat.ToABCIHeader(&header.Header, previousCommit)
+		if err != nil {
+			return nil, fmt.Errorf("convert header to ABCI: %w", err)
+		}
+
+		abciBlock, err := cometcompat.ToABCIBlock(abciHeader, previousCommit, data)
+		if err != nil {
+			return nil, err
+		}
+
+		blockParts, err := abciBlock.MakePartSet(cmttypes.BlockPartSizeBytes)
+		if err != nil {
+			return nil, fmt.Errorf("make part set: %w", err)
+		}
+
 		commitForPrevBlock := &cmttypes.Commit{
 			Height: int64(header.Height()),
 			Round:  0,
 			BlockID: cmttypes.BlockID{
-				Hash: cmtbytes.HexBytes(data.Hash()),
-				PartSetHeader: cmttypes.PartSetHeader{
-					Total: 1,
-					Hash:  cmtbytes.HexBytes(data.Hash()),
-				},
+				Hash:          abciBlock.Hash(),
+				PartSetHeader: blockParts.Header(),
 			},
 			Signatures: []cmttypes.CommitSig{
 				{

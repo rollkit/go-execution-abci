@@ -458,25 +458,16 @@ func (a *Adapter) ExecuteTxs(
 		cmtTxs[i] = txs[i]
 	}
 
-	if blockHeight == 0 {
-		lastCommit.Signatures = []cmttypes.CommitSig{
-			{
-				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-				ValidatorAddress: s.Validators.Proposer.Address,
-				Timestamp:        timestamp,
-				Signature:        []byte{},
-			},
-		}
+	abciBlock := s.MakeBlock(int64(blockHeight), cmtTxs, lastCommit, nil, s.Validators.Proposer.Address)
+
+	blockParts, err := abciBlock.MakePartSet(cmttypes.BlockPartSizeBytes)
+	if err != nil {
+		return nil, 0, fmt.Errorf("make part set: %w", err)
 	}
 
-	block := s.MakeBlock(int64(blockHeight), cmtTxs, lastCommit, nil, s.Validators.Proposer.Address)
-
 	currentBlockID := cmttypes.BlockID{
-		Hash: block.Hash(),
-		PartSetHeader: cmttypes.PartSetHeader{
-			Total: 1,
-			Hash:  block.Hash(),
-		},
+		Hash:          abciBlock.Hash(),
+		PartSetHeader: blockParts.Header(),
 	}
 
 	if a.blockFilter.IsPublishable(ctx, int64(header.Height())) {
@@ -485,11 +476,11 @@ func (a *Adapter) ExecuteTxs(
 			return nil, 0, fmt.Errorf("save block response: %w", err)
 		}
 
-		if err := fireEvents(a.EventBus, block, currentBlockID, fbResp, validatorUpdates); err != nil {
+		if err := fireEvents(a.EventBus, abciBlock, currentBlockID, fbResp, validatorUpdates); err != nil {
 			return nil, 0, fmt.Errorf("fire events: %w", err)
 		}
 	} else {
-		a.stackBlockCommitEvents(currentBlockID, block, fbResp, validatorUpdates)
+		a.stackBlockCommitEvents(currentBlockID, abciBlock, fbResp, validatorUpdates)
 		// clear events so that they are not stored with the block data at this stage.
 		fbResp.Events = nil
 		if err := a.Store.SaveBlockResponse(ctx, blockHeight, fbResp); err != nil {
@@ -498,6 +489,7 @@ func (a *Adapter) ExecuteTxs(
 	}
 
 	a.Logger.Info("block executed successfully", "height", blockHeight, "appHash", fmt.Sprintf("%X", fbResp.AppHash))
+
 	return fbResp.AppHash, uint64(s.ConsensusParams.Block.MaxBytes), nil
 }
 

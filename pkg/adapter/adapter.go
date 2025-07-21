@@ -611,10 +611,9 @@ func (a *Adapter) getLastCommit(ctx context.Context, blockHeight uint64) (*cmtty
 	}
 
 	return &cmttypes.Commit{
-		Height:     int64(blockHeight),
-		Round:      0,
-		BlockID:    cmttypes.BlockID{},
-		Signatures: []cmttypes.CommitSig{},
+		Height:  0,
+		Round:   0,
+		BlockID: cmttypes.BlockID{},
 	}, nil
 }
 

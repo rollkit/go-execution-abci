@@ -202,9 +202,9 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 		return nil, fmt.Errorf("failed to get current height: %w", err)
 	}
 
-	// non canonical commits do not have signatures
+	// non canonical commits
 	if height == currentHeight {
-		header, _, err := env.Adapter.RollkitStore.GetBlockData(ctx.Context(), uint64(currentHeight))
+		header, err := env.Adapter.RollkitStore.GetHeader(ctx.Context(), uint64(currentHeight))
 		if err != nil {
 			return nil, err
 		}

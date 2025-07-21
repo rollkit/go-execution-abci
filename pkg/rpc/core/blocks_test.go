@@ -215,7 +215,7 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 		blockData, rollkitHeader := createTestBlock(blockHeight, chainID, now, validatorAddress, validatorHash, i)
 
 		// Create the signature for the rollkit block
-		realSignature := signBlock(t, rollkitHeader, blockData, aggregatorPrivKey)
+		realSignature := signBlock(t, rollkitHeader, aggregatorPrivKey)
 
 		// Mock the store to return our signed block
 		mockBlock(blockHeight, rollkitHeader, blockData, realSignature, aggregatorPubKey, validatorAddress)
@@ -267,8 +267,8 @@ func createTestBlock(height uint64, chainID string, baseTime time.Time, validato
 	return blockData, rollkitHeader
 }
 
-func signBlock(t *testing.T, header types.Header, data *types.Data, privKey crypto.PrivKey) []byte {
-	signBytes, err := cometcompat.SignaturePayloadProvider()(&header, data)
+func signBlock(t *testing.T, header types.Header, privKey crypto.PrivKey) []byte {
+	signBytes, err := cometcompat.SignaturePayloadProvider()(&header)
 	require.NoError(t, err)
 
 	signature, err := privKey.Sign(signBytes)

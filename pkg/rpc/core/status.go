@@ -31,7 +31,7 @@ func Status(ctx *rpctypes.Context) (*ctypes.ResultStatus, error) {
 	}
 
 	if latestHeight != 0 {
-		header, _, err := env.Adapter.RollkitStore.GetBlockData(unwrappedCtx, latestHeight)
+		header, err := env.Adapter.RollkitStore.GetHeader(unwrappedCtx, latestHeight)
 		if err != nil {
 			return nil, fmt.Errorf("failed to find latest block: %w", err)
 		}
@@ -40,7 +40,7 @@ func Status(ctx *rpctypes.Context) (*ctypes.ResultStatus, error) {
 		latestBlockTime = header.Time()
 	}
 
-	initialHeader, _, err := env.Adapter.RollkitStore.GetBlockData(unwrappedCtx, uint64(env.Adapter.AppGenesis.InitialHeight))
+	initialHeader, err := env.Adapter.RollkitStore.GetHeader(unwrappedCtx, uint64(env.Adapter.AppGenesis.InitialHeight))
 	if err != nil {
 		return nil, fmt.Errorf("failed to find earliest block: %w", err)
 	}

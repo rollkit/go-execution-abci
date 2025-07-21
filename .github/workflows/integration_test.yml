@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 30
     env:
       DO_NOT_TRACK: true
-      ROLLKIT_VERSION: "v0.14.2-0.20250718231032-db45c7baea8b"
+      ROLLKIT_VERSION: "v0.14.2-0.20250721143042-086cff7b336d"
       IGNITE_VERSION: "v29.2.0"
     outputs:
       carol_mnemonic: ${{ steps.save_mnemonic.outputs.carol_mnemonic }}
@@ -224,7 +224,7 @@ jobs:
       GMD_HOME: ${{ needs.liveness.outputs.gmd_home }}
       HERMES_VERSION: "v1.13.1"
       CEL_VERSION: "v4.0.3-arabica"
-      ROLLKIT_VERSION: "v0.14.2-0.20250718231032-db45c7baea8b"
+      ROLLKIT_VERSION: "v0.14.2-0.20250721143042-086cff7b336d"
 
     steps:
       - name: Set up Go

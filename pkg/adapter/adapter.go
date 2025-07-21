@@ -33,6 +33,7 @@ import (
 
 	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
 	"github.com/rollkit/go-execution-abci/pkg/p2p"
+	execstore "github.com/rollkit/go-execution-abci/pkg/store"
 )
 
 var _ execution.Executor = &Adapter{}
@@ -71,7 +72,7 @@ func LoadGenesisDoc(cfg *cmtcfg.Config) (*cmttypes.GenesisDoc, error) {
 // Adapter is a struct that will contain an ABCI Application, and will implement the go-execution interface
 type Adapter struct {
 	App          servertypes.ABCI
-	Store        *Store
+	Store        *execstore.Store
 	RollkitStore rstore.Store
 	Mempool      mempool.Mempool
 	MempoolIDs   *mempoolIDs
@@ -107,7 +108,7 @@ func NewABCIExecutor(
 	})
 	rollkitStore := rstore.New(rollkitPrefixStore)
 
-	abciStore := NewExecABCIStore(store)
+	abciStore := execstore.NewExecABCIStore(store)
 
 	a := &Adapter{
 		App:          app,

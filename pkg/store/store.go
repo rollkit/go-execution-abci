@@ -1,4 +1,4 @@
-package adapter
+package store
 
 import (
 	"context"

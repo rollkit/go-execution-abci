@@ -21,6 +21,7 @@ import (
 	rollkitmocks "github.com/rollkit/rollkit/test/mocks"
 
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
+	execstore "github.com/rollkit/go-execution-abci/pkg/store"
 )
 
 var (
@@ -108,14 +109,14 @@ func setupTestValidatorsEnv(t *testing.T, gvs []cmttypes.GenesisValidator, conse
 
 // setupTestConsensusParamsEnv helper for TestConsensusParams
 // Returns the mockRollkitStore (if created), the adapter instance, and the abciStore.
-func setupTestConsensusParamsEnv(t *testing.T, useMockRollkitStore bool, stateToSave *cmtstate.State) (*rollkitmocks.MockStore, *adapter.Store) {
+func setupTestConsensusParamsEnv(t *testing.T, useMockRollkitStore bool, stateToSave *cmtstate.State) (*rollkitmocks.MockStore, *execstore.Store) {
 	var mockRollkitStore *rollkitmocks.MockStore
 	if useMockRollkitStore {
 		mockRollkitStore = new(rollkitmocks.MockStore)
 	}
 
 	dsStore := ds.NewMapDatastore()
-	abciStore := adapter.NewExecABCIStore(dsStore)
+	abciStore := execstore.NewExecABCIStore(dsStore)
 
 	if stateToSave != nil {
 		err := abciStore.SaveState(context.Background(), stateToSave)

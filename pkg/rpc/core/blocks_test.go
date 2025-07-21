@@ -22,6 +22,7 @@ import (
 
 	"github.com/rollkit/go-execution-abci/pkg/adapter"
 	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
+	execstore "github.com/rollkit/go-execution-abci/pkg/store"
 )
 
 func TestBlockSearch_Success(t *testing.T) {
@@ -33,13 +34,13 @@ func TestBlockSearch_Success(t *testing.T) {
 
 	// Create a real adapter store for the test
 	dsStore := ds.NewMapDatastore()
-	adapterStore := adapter.NewExecABCIStore(dsStore)
+	abciExecStore := execstore.NewExecABCIStore(dsStore)
 
 	env = &Environment{
 		Adapter: &adapter.Adapter{
 			RollkitStore: mockRollkitStore,
 			App:          mockApp,
-			Store:        adapterStore,
+			Store:        abciExecStore,
 		},
 		TxIndexer:    mockTxIndexer,
 		BlockIndexer: mockBlockIndexer,
@@ -121,7 +122,7 @@ func TestBlockSearch_Success(t *testing.T) {
 			},
 		},
 	}
-	err := adapterStore.SaveLastCommit(ctx.Context(), 2, commit2)
+	err := abciExecStore.SaveLastCommit(ctx.Context(), 2, commit2)
 	require.NoError(t, err)
 
 	// Create commit for block 3 (using block 2 data)
@@ -139,7 +140,7 @@ func TestBlockSearch_Success(t *testing.T) {
 			},
 		},
 	}
-	err = adapterStore.SaveLastCommit(ctx.Context(), 3, commit3)
+	err = abciExecStore.SaveLastCommit(ctx.Context(), 3, commit3)
 	require.NoError(t, err)
 
 	// Execute the test
@@ -213,7 +214,7 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 		blockData, rollkitHeader := createTestBlock(blockHeight, chainID, now, validatorAddress, validatorHash, i)
 
 		// Create the signature for the rollkit block
-		realSignature := signBlock(t, rollkitHeader, aggregatorPrivKey)
+		realSignature := signBlock(t, env.Adapter.Store, rollkitHeader, aggregatorPrivKey)
 
 		// Mock the store to return our signed block
 		mockBlock(blockHeight, rollkitHeader, blockData, realSignature, aggregatorPubKey, validatorAddress)
@@ -265,8 +266,8 @@ func createTestBlock(height uint64, chainID string, baseTime time.Time, validato
 	return blockData, rollkitHeader
 }
 
-func signBlock(t *testing.T, header types.Header, privKey crypto.PrivKey) []byte {
-	signBytes, err := cometcompat.SignaturePayloadProvider()(&header)
+func signBlock(t *testing.T, abciExecStore *execstore.Store, header types.Header, privKey crypto.PrivKey) []byte {
+	signBytes, err := cometcompat.SignaturePayloadProvider(abciExecStore)(&header)
 	require.NoError(t, err)
 
 	signature, err := privKey.Sign(signBytes)
@@ -366,13 +367,13 @@ func setupTestEnvironmentWithSigner(signer *MockSigner) *Environment {
 
 	// Create a real adapter store for the test
 	dsStore := ds.NewMapDatastore()
-	adapterStore := adapter.NewExecABCIStore(dsStore)
+	abciExecStore := execstore.NewExecABCIStore(dsStore)
 
 	return &Environment{
 		Adapter: &adapter.Adapter{
 			RollkitStore: mockRollkitStore,
 			App:          mockApp,
-			Store:        adapterStore,
+			Store:        abciExecStore,
 		},
 		TxIndexer:    mockTxIndexer,
 		BlockIndexer: mockBlockIndexer,

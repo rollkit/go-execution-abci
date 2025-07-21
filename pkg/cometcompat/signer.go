@@ -5,9 +5,11 @@ import (
 	cmttypes "github.com/cometbft/cometbft/types"
 
 	"github.com/rollkit/rollkit/types"
+
+	abciexecstore "github.com/rollkit/go-execution-abci/pkg/store"
 )
 
-func SignaturePayloadProvider() types.SignaturePayloadProvider {
+func SignaturePayloadProvider(store *abciexecstore.Store) types.SignaturePayloadProvider {
 	return func(header *types.Header) ([]byte, error) {
 		vote := cmtproto.Vote{
 			Type:             cmtproto.PrecommitType,

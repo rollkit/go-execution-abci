@@ -52,6 +52,7 @@ import (
 	"github.com/rollkit/go-execution-abci/pkg/rpc"
 	"github.com/rollkit/go-execution-abci/pkg/rpc/core"
 	execsigner "github.com/rollkit/go-execution-abci/pkg/signer"
+	execstore "github.com/rollkit/go-execution-abci/pkg/store"
 )
 
 const (
@@ -475,7 +476,7 @@ func setupNodeAndExecutor(
 		NewLogAdapter(logger),
 		node.NodeOptions{
 			ManagerOptions: rollkitblock.ManagerOptions{
-				SignaturePayloadProvider: cometcompat.SignaturePayloadProvider(),
+				SignaturePayloadProvider: cometcompat.SignaturePayloadProvider(execstore.NewExecABCIStore(database)),
 				ValidatorHasherProvider:  cometcompat.ValidatorHasherProvider(),
 			},
 		},

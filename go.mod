@@ -5,7 +5,7 @@ go 1.24.1
 replace (
 	github.com/btcsuite/btcd => github.com/btcsuite/btcd v0.22.0-beta
 	github.com/cosmos/cosmos-sdk => github.com/cosmos/cosmos-sdk v0.50.14
-	github.com/rollkit/rollkit => github.com/rollkit/rollkit v0.14.2-0.20250721143042-086cff7b336d
+	github.com/rollkit/rollkit => github.com/rollkit/rollkit v0.14.2-0.20250722091810-a9356d48dff7
 )
 
 exclude github.com/btcsuite/btcd/chaincfg/chainhash v1.0.2

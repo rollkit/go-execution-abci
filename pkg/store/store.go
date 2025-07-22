@@ -24,6 +24,8 @@ const (
 	blockResponseKey = "br"
 	// commitKey is the key used for storing commits
 	commitKey = "c"
+	// blockIDKey is the key used for storing block IDs
+	blockIDKey = "bid"
 )
 
 // Store wraps a datastore with ABCI-specific functionality
@@ -110,6 +112,39 @@ func (s *Store) GetLastCommit(ctx context.Context, height uint64) (*cmttypes.Com
 	}
 
 	return commit, nil
+}
+
+// SaveBlockID saves the block ID to disk per height.
+// This is used to store the block ID for the block execution
+func (s *Store) SaveBlockID(ctx context.Context, height uint64, blockID *cmttypes.BlockID) error {
+	blockIDProto := blockID.ToProto()
+	data, err := proto.Marshal(&blockIDProto)
+	if err != nil {
+		return fmt.Errorf("failed to marshal block ID: %w", err)
+	}
+
+	key := ds.NewKey(blockIDKey).ChildString(strconv.FormatUint(height, 10))
+	return s.prefixedStore.Put(ctx, key, data)
+}
+
+// GetBlockID loads the block ID from disk for a specific height.
+func (s *Store) GetBlockID(ctx context.Context, height uint64) (*cmtproto.BlockID, error) {
+	key := ds.NewKey(blockIDKey).ChildString(strconv.FormatUint(height, 10))
+	data, err := s.prefixedStore.Get(ctx, key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get block ID: %w", err)
+	}
+
+	if data == nil {
+		return nil, fmt.Errorf("block ID not found for height %d", height)
+	}
+
+	protoBlockID := &cmtproto.BlockID{}
+	if err := proto.Unmarshal(data, protoBlockID); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal block ID: %w", err)
+	}
+
+	return protoBlockID, nil
 }
 
 // SaveBlockResponse saves the block response to disk per height

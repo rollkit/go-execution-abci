@@ -470,6 +470,10 @@ func (a *Adapter) ExecuteTxs(
 		PartSetHeader: blockParts.Header(),
 	}
 
+	if err := a.Store.SaveBlockID(ctx, blockHeight, &currentBlockID); err != nil {
+		return nil, 0, fmt.Errorf("save block ID: %w", err)
+	}
+
 	if a.blockFilter.IsPublishable(ctx, int64(header.Height())) {
 		// save response before the events are fired (current behaviour in CometBFT)
 		if err := a.Store.SaveBlockResponse(ctx, blockHeight, fbResp); err != nil {

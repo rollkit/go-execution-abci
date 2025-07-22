@@ -13,19 +13,20 @@ import (
 
 func SignaturePayloadProvider(store *abciexecstore.Store) types.SignaturePayloadProvider {
 	return func(header *types.Header) ([]byte, error) {
-		lastCommit, err := store.GetLastCommit(context.Background(), header.Height()-1)
+		blockID, err := store.GetBlockID(context.Background(), header.Height())
 		if err != nil && header.Height() > 1 {
 			return nil, err
 		}
 
-		if lastCommit == nil {
-			lastCommit = &cmttypes.Commit{}
+		// only true for the first block
+		if header.Height() == 1 {
+			blockID = &cmtproto.BlockID{}
 		}
 
 		vote := cmtproto.Vote{
 			Type:             cmtproto.PrecommitType,
 			Height:           int64(header.Height()), //nolint:gosec
-			BlockID:          lastCommit.BlockID.ToProto(),
+			BlockID:          *blockID,
 			Round:            0,
 			Timestamp:        header.Time(),
 			ValidatorAddress: header.ProposerAddress,

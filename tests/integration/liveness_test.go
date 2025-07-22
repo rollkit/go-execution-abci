@@ -279,13 +279,9 @@ func generateValidNamespace() string {
 	return hex.EncodeToString(share.RandomBlobNamespace().Bytes())
 }
 
-// queryBalanceViaRPC queries the balance of an address using direct RPC calls
-func queryBalanceViaRPC(ctx context.Context, chain *docker.Chain, address string, denom string) (*sdk.Coin, error) {
-	// Get gRPC address from the chain
-	grpcAddr := chain.GetGRPCAddress()
-
-	// Create gRPC connection
-	conn, err := grpc.Dial(grpcAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+// queryBankBalance queries the balance of an address using RPC calls.
+func queryBankBalance(ctx context.Context, grpcAddress string, walletAddress string, denom string) (*sdk.Coin, error) {
+	conn, err := grpc.Dial(grpcAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial gRPC: %w", err)
 	}
@@ -296,7 +292,7 @@ func queryBalanceViaRPC(ctx context.Context, chain *docker.Chain, address string
 
 	// Query balance
 	resp, err := bankClient.Balance(ctx, &banktypes.QueryBalanceRequest{
-		Address: address,
+		Address: walletAddress,
 		Denom:   denom,
 	})
 	if err != nil {
@@ -327,7 +323,7 @@ func sendFunds(ctx context.Context, chain *docker.Chain, fromWallet, toWallet ty
 	if resp.Code != 0 {
 		return fmt.Errorf("transaction failed with code %d: %s", resp.Code, resp.RawLog)
 	}
-	
+
 	return nil
 }
 
@@ -348,7 +344,7 @@ func testTransactionSubmissionAndQuery(t *testing.T, rollkitChain *docker.Chain)
 
 	// Query bob's initial balance using RPC
 	t.Log("Querying Bob's initial balance...")
-	initialBalance, err := queryBalanceViaRPC(ctx, rollkitChain, bobsWallet.GetFormattedAddress(), denom)
+	initialBalance, err := queryBankBalance(ctx, rollkitChain.GetGRPCAddress(), bobsWallet.GetFormattedAddress(), denom)
 	require.NoError(t, err, "failed to query bob's initial balance")
 	require.True(t, initialBalance.Amount.GTE(math.NewInt(100)), "bob should have more tokens")
 
@@ -365,7 +361,7 @@ func testTransactionSubmissionAndQuery(t *testing.T, rollkitChain *docker.Chain)
 
 	// Query bob's final balance using RPC
 	t.Log("Querying Bob's final balance...")
-	finalBalance, err := queryBalanceViaRPC(ctx, rollkitChain, bobsWallet.GetFormattedAddress(), denom)
+	finalBalance, err := queryBankBalance(ctx, rollkitChain.GetGRPCAddress(), bobsWallet.GetFormattedAddress(), denom)
 	require.NoError(t, err, "failed to query bob's final balance")
 
 	t.Logf("Bob's final balance: %s", finalBalance.String())
@@ -377,7 +373,7 @@ func testTransactionSubmissionAndQuery(t *testing.T, rollkitChain *docker.Chain)
 
 	// Query carol's balance using RPC to verify she received the transfer
 	t.Log("Querying Carol's balance...")
-	carolBalance, err := queryBalanceViaRPC(ctx, rollkitChain, carolsWallet.GetFormattedAddress(), denom)
+	carolBalance, err := queryBankBalance(ctx, rollkitChain.GetGRPCAddress(), carolsWallet.GetFormattedAddress(), denom)
 	require.NoError(t, err, "failed to query carol's balance")
 	require.True(t, carolBalance.Amount.GTE(math.NewInt(100)), "carol should have received at least 100 tokens")
 

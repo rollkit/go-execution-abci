@@ -316,7 +316,7 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("load state: %w", err)
 	}
 
-	header, ok := types.SignedHeaderFromContext(ctx)
+	header, ok := types.HeaderFromContext(ctx)
 	if !ok {
 		return nil, 0, fmt.Errorf("rollkit header not found in context")
 	}
@@ -326,7 +326,7 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("get last commit: %w", err)
 	}
 
-	abciHeader, err := cometcompat.ToABCIHeader(&header.Header, lastCommit)
+	abciHeader, err := cometcompat.ToABCIHeader(header, lastCommit)
 	if err != nil {
 		return nil, 0, fmt.Errorf("compute header hash: %w", err)
 	}

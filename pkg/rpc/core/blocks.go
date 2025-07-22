@@ -77,7 +77,7 @@ func BlockSearch(
 			return nil, fmt.Errorf("failed to get last commit for block %d: %w", results[i], err)
 		}
 
-		abciHeader, err := cometcompat.ToABCIHeader(&header.Header, lastCommit)
+		abciHeader, err := cometcompat.ToABCIHeader(header.Header, lastCommit)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert header to ABCI format: %w", err)
 		}
@@ -162,7 +162,7 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 		return nil, fmt.Errorf("failed to get last commit for block %d: %w", header.Height(), err)
 	}
 
-	abciHeader, err := cometcompat.ToABCIHeader(&header.Header, lastCommit)
+	abciHeader, err := cometcompat.ToABCIHeader(header.Header, lastCommit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert header to ABCI format: %w", err)
 	}
@@ -267,7 +267,7 @@ func HeaderByHash(ctx *rpctypes.Context, hash cmbytes.HexBytes) (*ctypes.ResultH
 		return nil, fmt.Errorf("failed to get last commit for block %d: %w", header.Height(), err)
 	}
 
-	abciHeader, err := cometcompat.ToABCIHeader(&header.Header, lastCommit)
+	abciHeader, err := cometcompat.ToABCIHeader(header.Header, lastCommit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert header to ABCI format: %w", err)
 	}

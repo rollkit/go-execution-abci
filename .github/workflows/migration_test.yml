@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 45
     env:
       DO_NOT_TRACK: true
-      ROLLKIT_VERSION: "v0.14.2-0.20250722091810-a9356d48dff7"
+      ROLLKIT_VERSION: "v0.14.2-0.20250722124726-87eeb114c261"
       IGNITE_VERSION: "v29.2.0"
     steps:
       - uses: actions/checkout@v4

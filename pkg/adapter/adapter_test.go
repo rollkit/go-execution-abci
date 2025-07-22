@@ -122,7 +122,7 @@ func TestExecuteFiresEvents(t *testing.T) {
 			require.NoError(t, adapter.Store.SaveState(ctx, execstore.TestingStateFixture()))
 
 			// when
-			ctx = context.WithValue(ctx, types.SignedHeaderContextKey, signedHeader)
+			ctx = context.WithValue(ctx, types.HeaderContextKey, signedHeader)
 			_, _, err = adapter.ExecuteTxs(ctx, spec.txs, 1, timestamp, bytes.Repeat([]byte{1}, 32))
 			if spec.expErr {
 				require.Error(t, err)

@@ -51,7 +51,7 @@ func getBlockMeta(ctx context.Context, n uint64) (*cmttypes.BlockMeta, *cmttypes
 		return nil, nil
 	}
 
-	abciHeader, err := cometcompat.ToABCIHeader(&header.Header, lastCommit)
+	abciHeader, err := cometcompat.ToABCIHeader(header.Header, lastCommit)
 	if err != nil {
 		env.Logger.Error("Failed to convert header to ABCI format", "height", n, "err", err)
 		return nil, nil

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/cometbft/cometbft/crypto/ed25519"
+	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 	"github.com/cometbft/cometbft/libs/math"
 	"github.com/cometbft/cometbft/light"
@@ -296,6 +297,24 @@ func mockBlock(height uint64, header types.Header, data *types.Data, signature [
 	env.Adapter.RollkitStore.(*rollkitmocks.MockStore).On("Height", mock.Anything).Return(header.Height(), nil).Once()
 
 	env.Adapter.RollkitStore.(*rollkitmocks.MockStore).On("GetBlockData", mock.Anything, height).Return(signedHeader, data, nil).Once()
+	
+	// Add mock for GetHeader which is called by GetLastCommit for previous block
+	env.Adapter.RollkitStore.(*rollkitmocks.MockStore).On("GetHeader", mock.Anything, height).Return(signedHeader, nil).Maybe()
+	
+	// Create and save a proper BlockID for this block to support GetLastCommit
+	// This simulates what would happen during normal block execution
+	headerHash := header.Hash()
+	blockID := &cmttypes.BlockID{
+		Hash: cmtbytes.HexBytes(headerHash),
+		PartSetHeader: cmttypes.PartSetHeader{
+			Total: 1,
+			Hash:  cmtbytes.HexBytes(headerHash), // Simplified: using header hash as part set hash
+		},
+	}
+	
+	// Save the BlockID to the real store so GetLastCommit can find it
+	ctx := context.Background()
+	_ = env.Adapter.Store.SaveBlockID(ctx, height, blockID)
 }
 
 func callCommitRPC(t *testing.T, height uint64) *ctypes.ResultCommit {

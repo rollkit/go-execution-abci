@@ -31,6 +31,10 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	denom = "stake"
+)
+
 // CreateCelestiaChain sets up a Celestia app chain for DA
 func CreateCelestiaChain(ctx context.Context, t *testing.T, dockerClient *client.Client, networkID string) (types.Chain, error) {
 	celestia, err := docker.NewChainBuilder(t).
@@ -140,14 +144,14 @@ func CreateRollkitChain(ctx context.Context, t *testing.T, dockerClient *client.
 	rollkitChain, err := docker.NewChainBuilder(t).
 		WithEncodingConfig(&testEncCfg).
 		WithImage(container.NewImage("rollkit-gm", "latest", "10001:10001")).
-		WithDenom("utia"). // TODO: tastora assumes a gas price denomination in utia, can be changed when that is implemented.
+		WithDenom(denom).
 		WithDockerClient(dockerClient).
 		WithName("rollkit").
 		WithDockerNetworkID(networkID).
 		WithChainID("rollkit-test").
 		WithBech32Prefix("gm").
 		WithBinaryName("gmd").
-		WithGasPrices("0.00utia").
+		WithGasPrices(fmt.Sprintf("0.00%s", denom)).
 		WithNode(docker.NewChainNodeConfigBuilder().
 			// Create aggregator node with rollkit-specific start arguments
 			WithAdditionalStartArgs(
@@ -295,7 +299,7 @@ func testTransactionSubmissionAndQuery(t *testing.T, rollkitChain *docker.Chain)
 
 	ctx := context.Background()
 
-	bobsWallet, err := wallet.CreateAndFund(ctx, "bob", sdk.NewCoins(sdk.NewCoin("utia", math.NewInt(1000))), rollkitChain)
+	bobsWallet, err := wallet.CreateAndFund(ctx, "bob", sdk.NewCoins(sdk.NewCoin(denom, math.NewInt(1000))), rollkitChain)
 	require.NoError(t, err, "failed to create bob wallet")
 
 	carolsWallet, err := rollkitChain.CreateWallet(ctx, "carol")
@@ -306,15 +310,15 @@ func testTransactionSubmissionAndQuery(t *testing.T, rollkitChain *docker.Chain)
 
 	// Query bob's initial balance using RPC
 	t.Log("Querying Bob's initial balance...")
-	initialBalance, err := queryBalanceViaRPC(ctx, rollkitChain, bobsWallet.GetFormattedAddress(), "utia")
+	initialBalance, err := queryBalanceViaRPC(ctx, rollkitChain, bobsWallet.GetFormattedAddress(), denom)
 	require.NoError(t, err, "failed to query bob's initial balance")
 	require.True(t, initialBalance.Amount.GTE(math.NewInt(100)), "bob should have more tokens")
 
 	t.Logf("Bob's initial balance: %s", initialBalance.String())
 
 	// Create and send bank transfer message
-	t.Log("Sending 100utia from Bob to Carol...")
-	transferAmount := sdk.NewCoins(sdk.NewCoin("utia", math.NewInt(100)))
+	t.Logf("Sending 100%s from Bob to Carol...", denom)
+	transferAmount := sdk.NewCoins(sdk.NewCoin(denom, math.NewInt(100)))
 
 	// Fund the da node address
 	fromAddress, err := sdkacc.AddressFromWallet(bobsWallet)
@@ -338,7 +342,7 @@ func testTransactionSubmissionAndQuery(t *testing.T, rollkitChain *docker.Chain)
 
 	// Query bob's final balance using RPC
 	t.Log("Querying Bob's final balance...")
-	finalBalance, err := queryBalanceViaRPC(ctx, rollkitChain, bobsWallet.GetFormattedAddress(), "utia")
+	finalBalance, err := queryBalanceViaRPC(ctx, rollkitChain, bobsWallet.GetFormattedAddress(), denom)
 	require.NoError(t, err, "failed to query bob's final balance")
 
 	t.Logf("Bob's final balance: %s", finalBalance.String())
@@ -350,7 +354,7 @@ func testTransactionSubmissionAndQuery(t *testing.T, rollkitChain *docker.Chain)
 
 	// Query carol's balance using RPC to verify she received the transfer
 	t.Log("Querying Carol's balance...")
-	carolBalance, err := queryBalanceViaRPC(ctx, rollkitChain, carolsWallet.GetFormattedAddress(), "utia")
+	carolBalance, err := queryBalanceViaRPC(ctx, rollkitChain, carolsWallet.GetFormattedAddress(), denom)
 	require.NoError(t, err, "failed to query carol's balance")
 	require.True(t, carolBalance.Amount.GTE(math.NewInt(100)), "carol should have received at least 100 tokens")
 

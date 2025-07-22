@@ -342,7 +342,7 @@ jobs:
 
       - name: Create IBC Connection and Channel
         run: |
-          hermes create channel --a-chain gm --a-port transfer --b-chain celestia-local --b-port transfer --order unordered --new-client-connection --yes
+          hermes create channel --a-chain gm --a-port transfer --b-chain celestia-local --b-port transfer --order unordered --new-client-connection --yes --verbose
 
       - name: ICS20 Transfer Rollkit -> Celestia
         run: |

@@ -201,6 +201,7 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 	}
 	abciHeader := blockMeta.Header
 
+	// get current commit
 	commit, err := env.Adapter.GetLastCommit(ctx.Context(), height+1)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get last commit for height %d: %w", height, err)

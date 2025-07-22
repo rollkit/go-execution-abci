@@ -36,8 +36,10 @@ const (
 )
 
 // CreateCelestiaChain sets up a Celestia app chain for DA
-func CreateCelestiaChain(ctx context.Context, t *testing.T, dockerClient *client.Client, networkID string) (types.Chain, error) {
+func CreateCelestiaChain(ctx context.Context, t *testing.T, dockerClient *client.Client, networkID string) (*docker.Chain, error) {
+	testEncCfg := testutil.MakeTestEncodingConfig(auth.AppModuleBasic{}, bank.AppModuleBasic{})
 	celestia, err := docker.NewChainBuilder(t).
+		WithEncodingConfig(&testEncCfg).
 		WithDockerClient(dockerClient).
 		WithDockerNetworkID(networkID).
 		WithImage(container.NewImage("ghcr.io/celestiaorg/celestia-app", "v4.0.0-rc6", "10001:10001")).
@@ -64,7 +66,7 @@ func CreateCelestiaChain(ctx context.Context, t *testing.T, dockerClient *client
 }
 
 // CreateDANetwork sets up the DA network with bridge and full nodes
-func CreateDANetwork(ctx context.Context, t *testing.T, dockerClient *client.Client, networkID string, celestiaChain types.Chain) (types.DataAvailabilityNetwork, types.DANode, error) {
+func CreateDANetwork(ctx context.Context, t *testing.T, dockerClient *client.Client, networkID string, celestiaChain *docker.Chain) (types.DataAvailabilityNetwork, types.DANode, error) {
 	logger, err := zap.NewDevelopment()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create logger: %w", err)
@@ -120,6 +122,21 @@ func CreateDANetwork(ctx context.Context, t *testing.T, dockerClient *client.Cli
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to start bridge node: %w", err)
 	}
+
+	sdk.GetConfig().SetBech32PrefixForAccount("celestia", "celestiapub")
+
+	// Fund the bridge node DA wallet to enable blob submission
+	t.Log("Funding bridge node DA wallet...")
+	fundingWallet := celestiaChain.GetFaucetWallet()
+
+	// Get the bridge node's wallet
+	bridgeWallet, err := bridgeNode.GetWallet()
+	require.NoError(t, err, "failed to get bridge node wallet")
+
+	// fund the bridge node wallet
+	daFundingAmount := sdk.NewCoins(sdk.NewCoin("utia", math.NewInt(10000)))
+	err = sendFunds(ctx, celestiaChain, fundingWallet, bridgeWallet, daFundingAmount)
+	require.NoError(t, err, "failed to fund bridge node DA wallet")
 
 	return daNetwork, bridgeNode, nil
 }
@@ -289,13 +306,34 @@ func queryBalanceViaRPC(ctx context.Context, chain *docker.Chain, address string
 	return resp.Balance, nil
 }
 
+// sendFunds sends funds from one wallet to another using bank transfer
+func sendFunds(ctx context.Context, chain *docker.Chain, fromWallet, toWallet types.Wallet, amount sdk.Coins) error {
+	fromAddress, err := sdkacc.AddressFromWallet(fromWallet)
+	if err != nil {
+		return fmt.Errorf("failed to get sender address: %w", err)
+	}
+
+	toAddress, err := sdkacc.AddressFromWallet(toWallet)
+	if err != nil {
+		return fmt.Errorf("failed to get destination address: %w", err)
+	}
+
+	msg := banktypes.NewMsgSend(fromAddress, toAddress, amount)
+	resp, err := chain.BroadcastMessages(ctx, fromWallet, msg)
+	if err != nil {
+		return fmt.Errorf("failed to broadcast transaction: %w", err)
+	}
+
+	if resp.Code != 0 {
+		return fmt.Errorf("transaction failed with code %d: %s", resp.Code, resp.RawLog)
+	}
+	
+	return nil
+}
+
 // testTransactionSubmissionAndQuery tests sending transactions and querying results using tastora API
 func testTransactionSubmissionAndQuery(t *testing.T, rollkitChain *docker.Chain) {
-
-	// TODO: move somewhere else
-	cfg := sdk.GetConfig()
-	cfg.SetBech32PrefixForAccount("gm", "gmpub")
-	cfg.Seal()
+	sdk.GetConfig().SetBech32PrefixForAccount("gm", "gmpub")
 
 	ctx := context.Background()
 
@@ -316,27 +354,12 @@ func testTransactionSubmissionAndQuery(t *testing.T, rollkitChain *docker.Chain)
 
 	t.Logf("Bob's initial balance: %s", initialBalance.String())
 
-	// Create and send bank transfer message
+	// Send funds from Bob to Carol
 	t.Logf("Sending 100%s from Bob to Carol...", denom)
 	transferAmount := sdk.NewCoins(sdk.NewCoin(denom, math.NewInt(100)))
 
-	// Fund the da node address
-	fromAddress, err := sdkacc.AddressFromWallet(bobsWallet)
-	require.NoError(t, err)
-
-	bz, err := sdk.GetFromBech32(carolsWallet.GetFormattedAddress(), "gm")
-	require.NoError(t, err)
-
-	toAddress := sdk.AccAddress(bz)
-
-	msg := banktypes.NewMsgSend(fromAddress, toAddress, transferAmount)
-
-	resp, err := rollkitChain.BroadcastMessages(ctx, bobsWallet, msg)
-
-	require.NotNil(t, resp, "transaction resp should not be empty")
-	require.NoError(t, err, "failed to broadcast transaction")
-	require.Equal(t, uint32(0), resp.Code, "transaction should have succeeded")
-	t.Logf("Transaction hash: %s", resp.TxHash)
+	err = sendFunds(ctx, rollkitChain, bobsWallet, carolsWallet, transferAmount)
+	require.NoError(t, err, "failed to send funds from Bob to Carol")
 
 	t.Log("Transaction executed successfully")
 

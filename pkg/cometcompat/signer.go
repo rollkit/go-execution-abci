@@ -13,15 +13,22 @@ import (
 
 func SignaturePayloadProvider(store *abciexecstore.Store) types.SignaturePayloadProvider {
 	return func(header *types.Header) ([]byte, error) {
+		var blockIDProto cmtproto.BlockID
+		
+		// Try to get the BlockID from store, but handle cases where it doesn't exist yet
 		blockID, err := store.GetBlockID(context.Background(), header.Height())
-		if err != nil && header.Height() > 1 {
-			return nil, err
+		if err != nil {
+			// For any height where BlockID is not available yet (either genesis or during signing),
+			// use empty BlockID. This maintains compatibility with the existing flow.
+			blockIDProto = cmtproto.BlockID{}
+		} else {
+			blockIDProto = blockID.ToProto()
 		}
 
 		vote := cmtproto.Vote{
 			Type:             cmtproto.PrecommitType,
 			Height:           int64(header.Height()), //nolint:gosec
-			BlockID:          blockID.ToProto(),
+			BlockID:          blockIDProto,
 			Round:            0,
 			Timestamp:        header.Time(),
 			ValidatorAddress: header.ProposerAddress,

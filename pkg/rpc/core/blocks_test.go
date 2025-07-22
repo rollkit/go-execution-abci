@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -35,6 +36,30 @@ func TestBlockSearch_Success(t *testing.T) {
 	dsStore := ds.NewMapDatastore()
 	abciExecStore := execstore.NewExecABCIStore(dsStore)
 
+	// Save BlockID data needed for GetLastCommit calls
+	// For GetLastCommit(2), we need BlockID(1)
+	blockID1 := &cmttypes.BlockID{
+		Hash: make([]byte, 32), // 32-byte hash
+		PartSetHeader: cmttypes.PartSetHeader{
+			Total: 1,
+			Hash:  make([]byte, 32), // 32-byte hash
+		},
+	}
+	storeCtx := context.Background()
+	err := abciExecStore.SaveBlockID(storeCtx, 1, blockID1)
+	require.NoError(t, err)
+
+	// For GetLastCommit(3), we need BlockID(2)
+	blockID2 := &cmttypes.BlockID{
+		Hash: make([]byte, 32), // 32-byte hash
+		PartSetHeader: cmttypes.PartSetHeader{
+			Total: 1,
+			Hash:  make([]byte, 32), // 32-byte hash
+		},
+	}
+	err = abciExecStore.SaveBlockID(storeCtx, 2, blockID2)
+	require.NoError(t, err)
+
 	env = &Environment{
 		Adapter: &adapter.Adapter{
 			RollkitStore: mockRollkitStore,
@@ -57,6 +82,21 @@ func TestBlockSearch_Success(t *testing.T) {
 
 	now := time.Now()
 	chainID := "test-chain"
+
+	// Create header for height 1 (needed for GetLastCommit of height 2)
+	header1 := &types.SignedHeader{
+		Header: types.Header{
+			BaseHeader: types.BaseHeader{
+				Height:  1,
+				Time:    uint64(now.UnixNano()),
+				ChainID: chainID,
+			},
+			ProposerAddress: make([]byte, 20),
+			AppHash:         []byte("apphash1"),
+			DataHash:        make([]byte, 32),
+		},
+		Signature: types.Signature(make([]byte, 64)),
+	}
 
 	header2 := &types.SignedHeader{
 		Header: types.Header{
@@ -105,6 +145,10 @@ func TestBlockSearch_Success(t *testing.T) {
 	// Mock GetBlockData calls
 	mockRollkitStore.On("GetBlockData", mock.Anything, uint64(2)).Return(header2, data2, nil) // For block 2
 	mockRollkitStore.On("GetBlockData", mock.Anything, uint64(3)).Return(header3, data3, nil) // For block 3
+
+	// Mock GetHeader calls needed for GetLastCommit
+	mockRollkitStore.On("GetHeader", mock.Anything, uint64(1)).Return(header1, nil) // For GetLastCommit(2)
+	mockRollkitStore.On("GetHeader", mock.Anything, uint64(2)).Return(header2, nil) // For GetLastCommit(3)
 
 	// Execute the test
 	result, err := BlockSearch(ctx, query, &page, &perPage, orderBy)

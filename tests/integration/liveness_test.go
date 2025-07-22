@@ -92,9 +92,11 @@ func (s *LivenessTestSuite) setupCelestiaNetwork() {
 }
 
 func (s *LivenessTestSuite) TearDownSuite() {
-	// TODO: implement Stop method for rollkit chain
 	if s.celestiaChain != nil {
 		_ = s.celestiaChain.Stop(s.ctx)
+	}
+	if s.rollkitChain != nil {
+		_ = s.rollkitChain.Stop(s.ctx)
 	}
 }
 
@@ -115,9 +117,12 @@ func (s *LivenessTestSuite) TestLivenessWithCelestiaDA() {
 
 	chainID := s.celestiaChain.GetChainID()
 
+	celestiaNodeHostname, err := s.celestiaChain.GetNodes()[0].GetInternalHostName(s.ctx)
+	s.Require().NoError(err)
+
 	err = bridgeNode.Start(s.ctx,
 		types.WithChainID(chainID),
-		types.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", "celestia-app", "--rpc.addr", "0.0.0.0"),
+		types.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", celestiaNodeHostname, "--rpc.addr", "0.0.0.0"),
 		types.WithEnvironmentVariables(map[string]string{
 			"CELESTIA_CUSTOM": types.BuildCelestiaCustomEnvVar(chainID, genesisHash, ""),
 			"P2P_NETWORK":     chainID,
@@ -170,7 +175,7 @@ func (s *LivenessTestSuite) startRollkitChain(authToken, daAddress string) {
 
 	rollkitChain, err := docker.NewChainBuilder(s.T()).
 		WithImage(container.NewImage("rollkit-gm", "latest", "10001:10001")).
-		WithDenom("utia").
+		WithDenom("utia"). // TODO: tastora assumes a gas price denomination in utia, can be changed when that is implemented.
 		WithDockerClient(s.dockerClient).
 		WithName("rollkit").
 		WithDockerNetworkID(s.networkID).
@@ -238,8 +243,6 @@ func (s *LivenessTestSuite) startRollkitChain(authToken, daAddress string) {
 						"power": "5",
 					},
 				}
-
-				genDoc["initial_height"] = 1
 
 				// Marshal and write back
 				updatedGenesis, err := json.MarshalIndent(genDoc, "", "  ")

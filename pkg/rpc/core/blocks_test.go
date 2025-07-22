@@ -1,7 +1,6 @@
 package core
 
 import (
-	"crypto/sha256"
 	"testing"
 	"time"
 
@@ -106,42 +105,6 @@ func TestBlockSearch_Success(t *testing.T) {
 	// Mock GetBlockData calls
 	mockRollkitStore.On("GetBlockData", mock.Anything, uint64(2)).Return(header2, data2, nil) // For block 2
 	mockRollkitStore.On("GetBlockData", mock.Anything, uint64(3)).Return(header3, data3, nil) // For block 3
-
-	// Create commit for block 2 (using block 1 data)
-	commit2 := &cmttypes.Commit{
-		Height: 2,
-		BlockID: cmttypes.BlockID{
-			Hash: make([]byte, sha256.Size),
-		},
-		Signatures: []cmttypes.CommitSig{
-			{
-				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-				ValidatorAddress: header2.ProposerAddress,
-				Timestamp:        header2.Time(),
-				Signature:        make([]byte, 64),
-			},
-		},
-	}
-	err := abciExecStore.SaveLastCommit(ctx.Context(), 2, commit2)
-	require.NoError(t, err)
-
-	// Create commit for block 3 (using block 2 data)
-	commit3 := &cmttypes.Commit{
-		Height: 3,
-		BlockID: cmttypes.BlockID{
-			Hash: make([]byte, sha256.Size),
-		},
-		Signatures: []cmttypes.CommitSig{
-			{
-				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-				ValidatorAddress: header3.ProposerAddress,
-				Timestamp:        header3.Time(),
-				Signature:        make([]byte, 64),
-			},
-		},
-	}
-	err = abciExecStore.SaveLastCommit(ctx.Context(), 3, commit3)
-	require.NoError(t, err)
 
 	// Execute the test
 	result, err := BlockSearch(ctx, query, &page, &perPage, orderBy)

@@ -22,8 +22,6 @@ const (
 	stateKey = "s"
 	// blockResponseKey is the key used for storing block responses
 	blockResponseKey = "br"
-	// commitKey is the key used for storing commits
-	commitKey = "c"
 	// blockIDKey is the key used for storing block IDs
 	blockIDKey = "bid"
 )
@@ -78,42 +76,6 @@ func (s *Store) SaveState(ctx context.Context, state *cmtstate.State) error {
 	return s.prefixedStore.Put(ctx, ds.NewKey(stateKey), data)
 }
 
-// SaveLastCommit saves the commit to disk per height.
-// This is used to store the last commit for the block execution
-func (s *Store) SaveLastCommit(ctx context.Context, height uint64, commit *cmttypes.Commit) error {
-	data, err := proto.Marshal(commit.ToProto())
-	if err != nil {
-		return fmt.Errorf("failed to marshal last commit: %w", err)
-	}
-
-	key := ds.NewKey(commitKey).ChildString(strconv.FormatUint(height, 10))
-	return s.prefixedStore.Put(ctx, key, data)
-}
-
-func (s *Store) GetLastCommit(ctx context.Context, height uint64) (*cmttypes.Commit, error) {
-	key := ds.NewKey(commitKey).ChildString(strconv.FormatUint(height, 10))
-	data, err := s.prefixedStore.Get(ctx, key)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get last commit: %w", err)
-	}
-
-	if data == nil {
-		return nil, fmt.Errorf("last commit not found for height %d", height)
-	}
-
-	protoCommit := &cmtproto.Commit{}
-	if err := proto.Unmarshal(data, protoCommit); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal state: %w", err)
-	}
-
-	commit, err := cmttypes.CommitFromProto(protoCommit)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert commit from proto: %w", err)
-	}
-
-	return commit, nil
-}
-
 // SaveBlockID saves the block ID to disk per height.
 // This is used to store the block ID for the block execution
 func (s *Store) SaveBlockID(ctx context.Context, height uint64, blockID *cmttypes.BlockID) error {
@@ -128,7 +90,7 @@ func (s *Store) SaveBlockID(ctx context.Context, height uint64, blockID *cmttype
 }
 
 // GetBlockID loads the block ID from disk for a specific height.
-func (s *Store) GetBlockID(ctx context.Context, height uint64) (*cmtproto.BlockID, error) {
+func (s *Store) GetBlockID(ctx context.Context, height uint64) (*cmttypes.BlockID, error) {
 	key := ds.NewKey(blockIDKey).ChildString(strconv.FormatUint(height, 10))
 	data, err := s.prefixedStore.Get(ctx, key)
 	if err != nil {
@@ -144,7 +106,12 @@ func (s *Store) GetBlockID(ctx context.Context, height uint64) (*cmtproto.BlockI
 		return nil, fmt.Errorf("failed to unmarshal block ID: %w", err)
 	}
 
-	return protoBlockID, nil
+	blockID, err := cmttypes.BlockIDFromProto(protoBlockID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert block ID from proto: %w", err)
+	}
+
+	return blockID, nil
 }
 
 // SaveBlockResponse saves the block response to disk per height

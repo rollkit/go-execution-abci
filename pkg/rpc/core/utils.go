@@ -45,7 +45,7 @@ func getBlockMeta(ctx context.Context, n uint64) (*cmttypes.BlockMeta, *cmttypes
 		return nil, nil
 	}
 
-	lastCommit, err := env.Adapter.Store.GetLastCommit(ctx, header.Height())
+	lastCommit, err := env.Adapter.GetLastCommit(ctx, header.Height())
 	if err != nil {
 		env.Logger.Error("Failed to get last commit in getBlockMeta", "height", n, "err", err)
 		return nil, nil

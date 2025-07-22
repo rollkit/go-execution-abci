@@ -18,15 +18,10 @@ func SignaturePayloadProvider(store *abciexecstore.Store) types.SignaturePayload
 			return nil, err
 		}
 
-		// only true for the first block
-		if header.Height() == 1 {
-			blockID = &cmtproto.BlockID{}
-		}
-
 		vote := cmtproto.Vote{
 			Type:             cmtproto.PrecommitType,
 			Height:           int64(header.Height()), //nolint:gosec
-			BlockID:          *blockID,
+			BlockID:          blockID.ToProto(),
 			Round:            0,
 			Timestamp:        header.Time(),
 			ValidatorAddress: header.ProposerAddress,

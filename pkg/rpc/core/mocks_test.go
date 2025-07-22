@@ -286,14 +286,6 @@ type MockStore struct {
 	mock.Mock
 }
 
-func (m *MockStore) GetLastCommit(ctx context.Context, height uint64) (*cmttypes.Commit, error) {
-	args := m.Called(ctx, height)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*cmttypes.Commit), args.Error(1)
-}
-
 func (m *MockStore) LoadState(ctx context.Context) (*cmtstate.State, error) {
 	args := m.Called(ctx)
 	if args.Get(0) == nil {
@@ -318,9 +310,4 @@ func (m *MockStore) GetFinalizeBlockResponse(ctx context.Context, height uint64)
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*abci.ResponseFinalizeBlock), args.Error(1)
-}
-
-func (m *MockStore) SaveLastCommit(ctx context.Context, height uint64, commit *cmttypes.Commit) error {
-	args := m.Called(ctx, height, commit)
-	return args.Error(0)
 }

@@ -72,7 +72,7 @@ func BlockSearch(
 			return nil, err
 		}
 
-		lastCommit, err := env.Adapter.Store.GetLastCommit(wrappedCtx, uint64(results[i]))
+		lastCommit, err := env.Adapter.GetLastCommit(wrappedCtx, uint64(results[i]))
 		if err != nil {
 			return nil, fmt.Errorf("failed to get last commit for block %d: %w", results[i], err)
 		}
@@ -157,7 +157,7 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 		return nil, err
 	}
 
-	lastCommit, err := env.Adapter.Store.GetLastCommit(ctx.Context(), header.Height())
+	lastCommit, err := env.Adapter.GetLastCommit(ctx.Context(), header.Height())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get last commit for block %d: %w", header.Height(), err)
 	}
@@ -213,10 +213,15 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 			return nil, err
 		}
 
+		blockID, err := env.Adapter.Store.GetBlockID(ctx.Context(), uint64(currentHeight))
+		if err != nil {
+			return nil, fmt.Errorf("failed to get block ID for height %d: %w", currentHeight, err)
+		}
+
 		commit := &cmttypes.Commit{
 			Height:  int64(currentHeight), //nolint:gosec
 			Round:   0,
-			BlockID: blockMeta.BlockID,
+			BlockID: *blockID,
 			Signatures: []cmttypes.CommitSig{{
 				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
 				Signature:        header.Signature,
@@ -228,7 +233,7 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 		return ctypes.NewResultCommit(&abciHeader, commit, false), nil
 	}
 
-	commit, err := env.Adapter.Store.GetLastCommit(ctx.Context(), height+1)
+	commit, err := env.Adapter.GetLastCommit(ctx.Context(), height+1)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get last commit for height %d: %w", height, err)
 	}
@@ -288,7 +293,7 @@ func HeaderByHash(ctx *rpctypes.Context, hash cmbytes.HexBytes) (*ctypes.ResultH
 		return nil, err
 	}
 
-	lastCommit, err := env.Adapter.Store.GetLastCommit(ctx.Context(), header.Height())
+	lastCommit, err := env.Adapter.GetLastCommit(ctx.Context(), header.Height())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get last commit for block %d: %w", header.Height(), err)
 	}

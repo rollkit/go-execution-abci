@@ -321,7 +321,7 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("rollkit header not found in context")
 	}
 
-	lastCommit, err := a.getLastCommit(ctx, blockHeight)
+	lastCommit, err := a.GetLastCommit(ctx, blockHeight)
 	if err != nil {
 		return nil, 0, fmt.Errorf("get last commit: %w", err)
 	}
@@ -360,11 +360,6 @@ func (a *Adapter) ExecuteTxs(
 	})
 	if err != nil {
 		return nil, 0, err
-	}
-
-	// save commit to store to avoid recomputing it later
-	if err := a.Store.SaveLastCommit(ctx, blockHeight, lastCommit); err != nil {
-		return nil, 0, fmt.Errorf("save commit: %w", err)
 	}
 
 	for i, tx := range txs {
@@ -558,41 +553,23 @@ func fireEvents(
 	return nil
 }
 
-// getLastCommit retrieves the last commit for the given block height.
-func (a *Adapter) getLastCommit(ctx context.Context, blockHeight uint64) (*cmttypes.Commit, error) {
+// GetLastCommit retrieves the last commit for the given block height.
+func (a *Adapter) GetLastCommit(ctx context.Context, blockHeight uint64) (*cmttypes.Commit, error) {
 	if blockHeight > 1 {
-		header, data, err := a.RollkitStore.GetBlockData(ctx, blockHeight-1)
+		header, err := a.RollkitStore.GetHeader(ctx, blockHeight-1)
 		if err != nil {
 			return nil, fmt.Errorf("get previous block data: %w", err)
 		}
 
-		previousCommit, err := a.Store.GetLastCommit(ctx, blockHeight-1)
+		blockID, err := a.Store.GetBlockID(ctx, blockHeight-1)
 		if err != nil {
-			return nil, fmt.Errorf("get previous commit: %w", err)
-		}
-
-		abciHeader, err := cometcompat.ToABCIHeader(&header.Header, previousCommit)
-		if err != nil {
-			return nil, fmt.Errorf("convert header to ABCI: %w", err)
-		}
-
-		abciBlock, err := cometcompat.ToABCIBlock(abciHeader, previousCommit, data)
-		if err != nil {
-			return nil, err
-		}
-
-		blockParts, err := abciBlock.MakePartSet(cmttypes.BlockPartSizeBytes)
-		if err != nil {
-			return nil, fmt.Errorf("make part set: %w", err)
+			return nil, fmt.Errorf("get previous block ID: %w", err)
 		}
 
 		commitForPrevBlock := &cmttypes.Commit{
-			Height: int64(header.Height()),
-			Round:  0,
-			BlockID: cmttypes.BlockID{
-				Hash:          abciBlock.Hash(),
-				PartSetHeader: blockParts.Header(),
-			},
+			Height:  int64(header.Height()),
+			Round:   0,
+			BlockID: *blockID,
 			Signatures: []cmttypes.CommitSig{
 				{
 					BlockIDFlag:      cmttypes.BlockIDFlagCommit,

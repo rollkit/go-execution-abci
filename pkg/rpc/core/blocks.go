@@ -201,38 +201,6 @@ func Commit(ctx *rpctypes.Context, heightPtr *int64) (*ctypes.ResultCommit, erro
 	}
 	abciHeader := blockMeta.Header
 
-	currentHeight, err := env.Adapter.RollkitStore.Height(ctx.Context())
-	if err != nil {
-		return nil, fmt.Errorf("failed to get current height: %w", err)
-	}
-
-	// non canonical commits
-	if height == currentHeight {
-		header, err := env.Adapter.RollkitStore.GetHeader(ctx.Context(), uint64(currentHeight))
-		if err != nil {
-			return nil, err
-		}
-
-		blockID, err := env.Adapter.Store.GetBlockID(ctx.Context(), uint64(currentHeight))
-		if err != nil {
-			return nil, fmt.Errorf("failed to get block ID for height %d: %w", currentHeight, err)
-		}
-
-		commit := &cmttypes.Commit{
-			Height:  int64(currentHeight), //nolint:gosec
-			Round:   0,
-			BlockID: *blockID,
-			Signatures: []cmttypes.CommitSig{{
-				BlockIDFlag:      cmttypes.BlockIDFlagCommit,
-				Signature:        header.Signature,
-				ValidatorAddress: header.ProposerAddress,
-				Timestamp:        header.Time(),
-			}},
-		}
-
-		return ctypes.NewResultCommit(&abciHeader, commit, false), nil
-	}
-
 	commit, err := env.Adapter.GetLastCommit(ctx.Context(), height+1)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get last commit for height %d: %w", height, err)

@@ -7,53 +7,24 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"testing"
+
 	"github.com/celestiaorg/go-square/v2/share"
 	"github.com/celestiaorg/tastora/framework/docker"
 	"github.com/celestiaorg/tastora/framework/docker/container"
 	"github.com/celestiaorg/tastora/framework/testutil/wait"
 	"github.com/celestiaorg/tastora/framework/types"
 	"github.com/moby/moby/client"
-	"github.com/stretchr/testify/suite"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"strings"
-	"testing"
 )
 
-const (
-	// pre-built rollkit chain image (built by workflow before test)
-	rollkitChainImage = "rollkit-chain:latest"
-)
-
-type LivenessTestSuite struct {
-	suite.Suite
-	ctx           context.Context
-	dockerClient  *client.Client
-	networkID     string
-	logger        *zap.Logger
-	provider      *docker.Provider
-	celestiaChain types.Chain
-	rollkitChain  *docker.Chain
-}
-
-func (s *LivenessTestSuite) SetupSuite() {
-	s.ctx = context.Background()
-
-	// setup logger
-	logger, err := zap.NewDevelopment()
-	s.Require().NoError(err)
-	s.logger = logger
-
-	// setup docker
-	s.dockerClient, s.networkID = docker.DockerSetup(s.T())
-
-	// setup celestia DA network
-	s.setupCelestiaNetwork()
-}
-
-func (s *LivenessTestSuite) setupCelestiaNetwork() {
-	builder := docker.NewChainBuilder(s.T()).
-		WithDockerClient(s.dockerClient).
-		WithDockerNetworkID(s.networkID).
+// CreateCelestiaChain sets up a Celestia app chain for DA
+func CreateCelestiaChain(ctx context.Context, t *testing.T, dockerClient *client.Client, networkID string) (types.Chain, error) {
+	celestia, err := docker.NewChainBuilder(t).
+		WithDockerClient(dockerClient).
+		WithDockerNetworkID(networkID).
 		WithImage(container.NewImage("ghcr.io/celestiaorg/celestia-app", "v4.0.0-rc6", "10001:10001")).
 		WithAdditionalStartArgs(
 			"--force-no-bbr",
@@ -62,22 +33,32 @@ func (s *LivenessTestSuite) setupCelestiaNetwork() {
 			"--rpc.grpc_laddr=tcp://0.0.0.0:9098",
 			"--timeout-commit", "1s",
 		).
-		WithNode(docker.NewChainNodeConfigBuilder().Build())
+		WithNode(docker.NewChainNodeConfigBuilder().Build()).
+		Build(ctx)
 
-	// build and start celestia chain
-	chain, err := builder.Build(s.ctx)
-	s.Require().NoError(err)
-	s.celestiaChain = chain
+	if err != nil {
+		return nil, fmt.Errorf("failed to build celestia chain: %w", err)
+	}
 
-	err = chain.Start(s.ctx)
-	s.Require().NoError(err)
-	s.T().Log("Celestia app chain started")
+	err = celestia.Start(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start celestia chain: %w", err)
+	}
 
-	// create our DA provider with config
+	return celestia, nil
+}
+
+// CreateDANetwork sets up the DA network with bridge and full nodes
+func CreateDANetwork(ctx context.Context, t *testing.T, dockerClient *client.Client, networkID string, celestiaChain types.Chain) (types.DataAvailabilityNetwork, types.DANode, error) {
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create logger: %w", err)
+	}
+
 	config := &docker.Config{
-		Logger:          s.logger,
-		DockerClient:    s.dockerClient,
-		DockerNetworkID: s.networkID,
+		Logger:          logger,
+		DockerClient:    dockerClient,
+		DockerNetworkID: networkID,
 		DataAvailabilityNetworkConfig: &docker.DataAvailabilityNetworkConfig{
 			Image: container.Image{
 				Repository: "ghcr.io/celestiaorg/celestia-node",
@@ -88,39 +69,32 @@ func (s *LivenessTestSuite) setupCelestiaNetwork() {
 			BridgeNodeCount: 1,
 		},
 	}
-	s.provider = docker.NewProvider(*config, s.T())
-}
 
-func (s *LivenessTestSuite) TearDownSuite() {
-	if s.celestiaChain != nil {
-		_ = s.celestiaChain.Stop(s.ctx)
+	provider := docker.NewProvider(*config, t)
+	daNetwork, err := provider.GetDataAvailabilityNetwork(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get DA network: %w", err)
 	}
-	if s.rollkitChain != nil {
-		_ = s.rollkitChain.Stop(s.ctx)
+
+	genesisHash, err := getGenesisHash(ctx, celestiaChain)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get genesis hash: %w", err)
 	}
-}
 
-func (s *LivenessTestSuite) TestLivenessWithCelestiaDA() {
-	// get genesis hash from celestia chain
-	genesisHash, err := s.getGenesisHash()
-	s.Require().NoError(err)
-	s.T().Logf("Genesis hash: %s", genesisHash)
-
-	// get DA network
-	daNetwork, err := s.provider.GetDataAvailabilityNetwork(s.ctx)
-	s.Require().NoError(err)
-
-	// start bridge node with correct genesis hash
 	bridgeNodes := daNetwork.GetBridgeNodes()
-	s.Require().Len(bridgeNodes, 1)
+	if len(bridgeNodes) == 0 {
+		return nil, nil, fmt.Errorf("no bridge nodes available")
+	}
+
 	bridgeNode := bridgeNodes[0]
 
-	chainID := s.celestiaChain.GetChainID()
+	chainID := celestiaChain.GetChainID()
+	celestiaNodeHostname, err := celestiaChain.GetNodes()[0].GetInternalHostName(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get celestia node hostname: %w", err)
+	}
 
-	celestiaNodeHostname, err := s.celestiaChain.GetNodes()[0].GetInternalHostName(s.ctx)
-	s.Require().NoError(err)
-
-	err = bridgeNode.Start(s.ctx,
+	err = bridgeNode.Start(ctx,
 		types.WithChainID(chainID),
 		types.WithAdditionalStartArguments("--p2p.network", chainID, "--core.ip", celestiaNodeHostname, "--rpc.addr", "0.0.0.0"),
 		types.WithEnvironmentVariables(map[string]string{
@@ -128,57 +102,35 @@ func (s *LivenessTestSuite) TestLivenessWithCelestiaDA() {
 			"P2P_NETWORK":     chainID,
 		}),
 	)
-	s.Require().NoError(err)
-	s.T().Log("Bridge node started")
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to start bridge node: %w", err)
+	}
 
-	// get DA connection details
+	return daNetwork, bridgeNode, nil
+}
+
+// CreateRollkitChain sets up the rollkit chain connected to the DA network
+func CreateRollkitChain(ctx context.Context, t *testing.T, dockerClient *client.Client, networkID string, bridgeNode types.DANode) (*docker.Chain, error) {
+	// Get DA connection details
 	authToken, err := bridgeNode.GetAuthToken()
-	s.Require().NoError(err)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get auth token: %w", err)
+	}
 
 	bridgeRPCAddress, err := bridgeNode.GetInternalRPCAddress()
-	s.Require().NoError(err)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get bridge RPC address: %w", err)
+	}
 
 	daAddress := fmt.Sprintf("http://%s", bridgeRPCAddress)
-	// start rollkit chain using pre-built image
-	s.startRollkitChain(authToken, daAddress)
-
-	// test block production (wait for 5 blocks)
-	s.testBlockProduction()
-}
-
-func (s *LivenessTestSuite) getGenesisHash() (string, error) {
-	// getGenesisHash retrieves the genesis hash from the celestia chain
-	node := s.celestiaChain.GetNodes()[0]
-	c, err := node.GetRPCClient()
-	if err != nil {
-		return "", fmt.Errorf("failed to get node client: %w", err)
-	}
-
-	first := int64(1)
-	block, err := c.Block(s.ctx, &first)
-	if err != nil {
-		return "", fmt.Errorf("failed to get block: %w", err)
-	}
-
-	genesisHash := block.Block.Header.Hash().String()
-	if genesisHash == "" {
-		return "", fmt.Errorf("genesis hash is empty")
-	}
-
-	return genesisHash, nil
-}
-
-func (s *LivenessTestSuite) startRollkitChain(authToken, daAddress string) {
-	s.T().Log("Starting rollkit chain...")
-
 	namespace := generateValidNamespace()
 
-	rollkitChain, err := docker.NewChainBuilder(s.T()).
+	rollkitChain, err := docker.NewChainBuilder(t).
 		WithImage(container.NewImage("rollkit-gm", "latest", "10001:10001")).
 		WithDenom("utia"). // TODO: tastora assumes a gas price denomination in utia, can be changed when that is implemented.
-		WithDockerClient(s.dockerClient).
+		WithDockerClient(dockerClient).
 		WithName("rollkit").
-		WithDockerNetworkID(s.networkID).
+		WithDockerNetworkID(networkID).
 		WithChainID("rollkit-test").
 		WithBech32Prefix("gm").
 		WithBinaryName("gmd").
@@ -252,28 +204,77 @@ func (s *LivenessTestSuite) startRollkitChain(authToken, daAddress string) {
 				return node.WriteFile(ctx, "config/genesis.json", updatedGenesis)
 			}).
 			Build()).
-		Build(s.ctx)
+		Build(ctx)
 
-	s.Require().NoError(err)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build rollkit chain: %w", err)
+	}
 
-	s.rollkitChain = rollkitChain
+	err = rollkitChain.Start(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start rollkit chain: %w", err)
+	}
 
-	err = s.rollkitChain.Start(s.ctx)
-	s.Require().NoError(err)
+	return rollkitChain, nil
+}
+
+// getGenesisHash retrieves the genesis hash from the celestia chain
+func getGenesisHash(ctx context.Context, celestiaChain types.Chain) (string, error) {
+	node := celestiaChain.GetNodes()[0]
+	c, err := node.GetRPCClient()
+	if err != nil {
+		return "", fmt.Errorf("failed to get node client: %w", err)
+	}
+
+	first := int64(1)
+	block, err := c.Block(ctx, &first)
+	if err != nil {
+		return "", fmt.Errorf("failed to get block: %w", err)
+	}
+
+	genesisHash := block.Block.Header.Hash().String()
+	if genesisHash == "" {
+		return "", fmt.Errorf("genesis hash is empty")
+	}
+
+	return genesisHash, nil
 }
 
 func generateValidNamespace() string {
 	return hex.EncodeToString(share.RandomBlobNamespace().Bytes())
 }
 
-func (s *LivenessTestSuite) testBlockProduction() {
-	s.T().Log("Testing block production...")
+func TestLivenessWithCelestiaDA(t *testing.T) {
+	ctx := context.Background()
+	dockerClient, networkID := docker.DockerSetup(t)
 
-	s.Require().NoError(wait.ForBlocks(s.ctx, 5, s.rollkitChain))
+	celestiaChain, err := CreateCelestiaChain(ctx, t, dockerClient, networkID)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		if err := celestiaChain.Stop(ctx); err != nil {
+			t.Logf("failed to stop celestia chain: %v", err)
+		}
+	})
 
-	s.T().Log("Block production test passed - rollkit chain is running")
-}
+	t.Log("Celestia app chain started")
 
-func TestLivenessSuite(t *testing.T) {
-	suite.Run(t, new(LivenessTestSuite))
+	_, bridgeNode, err := CreateDANetwork(ctx, t, dockerClient, networkID, celestiaChain)
+	require.NoError(t, err)
+
+	t.Log("Bridge node started")
+
+	rollkitChain, err := CreateRollkitChain(ctx, t, dockerClient, networkID, bridgeNode)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		if err := rollkitChain.Stop(ctx); err != nil {
+			t.Logf("failed to stop rollkit chain: %v", err)
+		}
+	})
+
+	t.Log("Rollkit chain started")
+
+	// Test block production - wait for rollkit chain to produce blocks
+	t.Log("Testing block production...")
+	require.NoError(t, wait.ForBlocks(ctx, 5, rollkitChain))
+
 }

@@ -311,3 +311,11 @@ func (m *MockStore) GetFinalizeBlockResponse(ctx context.Context, height uint64)
 	}
 	return args.Get(0).(*abci.ResponseFinalizeBlock), args.Error(1)
 }
+
+func (m *MockStore) GetBlockID(ctx context.Context, height uint64) (*cmttypes.BlockID, error) {
+	args := m.Called(ctx, height)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*cmttypes.BlockID), args.Error(1)
+}

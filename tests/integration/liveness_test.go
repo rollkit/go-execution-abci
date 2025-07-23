@@ -271,11 +271,9 @@ func sendFunds(ctx context.Context, chain *docker.Chain, fromWallet, toWallet ty
 }
 
 // testTransactionSubmissionAndQuery tests sending transactions and querying results using tastora API
-func testTransactionSubmissionAndQuery(t *testing.T, rollkitChain *docker.Chain) {
+func testTransactionSubmissionAndQuery(t *testing.T, ctx context.Context, rollkitChain *docker.Chain) {
 	// hack to get around global, need to set the address prefix before use.
 	sdk.GetConfig().SetBech32PrefixForAccount("gm", "gmpub")
-
-	ctx := context.Background()
 
 	bobsWallet, err := wallet.CreateAndFund(ctx, "bob", sdk.NewCoins(sdk.NewCoin(denom, math.NewInt(1000))), rollkitChain)
 	require.NoError(t, err, "failed to create bob wallet")
@@ -298,7 +296,7 @@ func testTransactionSubmissionAndQuery(t *testing.T, rollkitChain *docker.Chain)
 	require.NoError(t, err, "failed to query bob's final balance")
 
 	expectedBalance := initialBalance.Amount.Sub(math.NewInt(100))
-	require.True(t, finalBalance.Amount.Equal(expectedBalance), "final balance should be at most initial - 100")
+	require.True(t, finalBalance.Amount.Equal(expectedBalance), "final balance should be exactly initial minus 100")
 
 	carolBalance, err := queryBankBalance(ctx, rollkitChain.GetGRPCAddress(), carolsWallet.GetFormattedAddress(), denom)
 	require.NoError(t, err, "failed to query carol's balance")
@@ -340,7 +338,7 @@ func TestLivenessWithCelestiaDA(t *testing.T) {
 
 	// Test transaction submission and query
 	t.Log("Testing transaction submission and query...")
-	testTransactionSubmissionAndQuery(t, rollkitChain)
+	testTransactionSubmissionAndQuery(t, ctx, rollkitChain)
 }
 
 // getPubKey returns the validator public key.
@@ -390,7 +388,10 @@ func AddSingleSequencer(ctx context.Context, node *docker.ChainNode) error {
 		return fmt.Errorf("failed to parse genesis.json: %w", err)
 	}
 
-	consensus := genDoc["consensus"].(map[string]interface{})
+	consensus, ok := genDoc["consensus"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("genesis.json does not contain a valid 'consensus' object")
+	}
 	consensus["validators"] = []map[string]interface{}{
 		{
 			"name":    "Rollkit Sequencer",

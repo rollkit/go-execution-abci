@@ -7,6 +7,9 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
+env:
+  CAROL_MNEMONIC: "angry twist harsh drastic left brass behave host shove marriage fall update business leg direct reward object ugly security warm tuna model broccoli choice"
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -22,9 +25,6 @@ jobs:
       IGNITE_VERSION: "v29.2.0"
       ROLLKIT_IMAGE_REPO: "rollkit-gm"
       ROLLKIT_IMAGE_TAG: "latest"
-    outputs:
-      carol_mnemonic: ${{ steps.save_mnemonic.outputs.carol_mnemonic }}
-      gmd_home: ${{ steps.paths.outputs.GMD_HOME }}
 
     steps:
       - uses: actions/checkout@v4
@@ -60,11 +60,8 @@ jobs:
     name: Test IBC Connection Rollkit <-> Celestia
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    needs: liveness
     env:
       DO_NOT_TRACK: true
-      CAROL_MNEMONIC: ${{ needs.liveness.outputs.carol_mnemonic }}
-      GMD_HOME: ${{ needs.liveness.outputs.gmd_home }}
       HERMES_VERSION: "v1.13.1"
       CEL_VERSION: "v4.0.3-arabica"
       ROLLKIT_VERSION: "v1.0.0-beta.1"

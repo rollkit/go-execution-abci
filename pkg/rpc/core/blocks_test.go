@@ -197,7 +197,7 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 	mockSigner.On("GetPublic").Return(aggregatorPubKey, nil)
 	mockSigner.On("GetAddress").Return(validatorAddress, nil)
 
-	env = setupTestEnvironmentWithSigner(mockSigner)
+	env = setupTestEnvironment(mockSigner)
 
 	chainID := "test-chain"
 	now := time.Now()
@@ -225,7 +225,7 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 		realSignature := signBlock(t, env.Adapter.Store, rollkitHeader, aggregatorPrivKey)
 
 		// Mock the store to return our signed block
-		mockBlock(blockHeight, rollkitHeader, blockData, realSignature, aggregatorPubKey, validatorAddress)
+		mockBlock(t, blockHeight, rollkitHeader, blockData, realSignature, aggregatorPubKey, validatorAddress)
 
 		// Call Commit RPC
 		commitResult := callCommitRPC(t, blockHeight)
@@ -284,7 +284,7 @@ func signBlock(t *testing.T, abciExecStore *execstore.Store, header types.Header
 	return signature
 }
 
-func mockBlock(height uint64, header types.Header, data *types.Data, signature []byte, pubKey crypto.PubKey, address []byte) {
+func mockBlock(t *testing.T, height uint64, header types.Header, data *types.Data, signature []byte, pubKey crypto.PubKey, address []byte) {
 	signedHeader := &types.SignedHeader{
 		Header:    header,
 		Signature: types.Signature(signature),
@@ -297,10 +297,9 @@ func mockBlock(height uint64, header types.Header, data *types.Data, signature [
 	env.Adapter.RollkitStore.(*rollkitmocks.MockStore).On("Height", mock.Anything).Return(header.Height(), nil).Once()
 
 	env.Adapter.RollkitStore.(*rollkitmocks.MockStore).On("GetBlockData", mock.Anything, height).Return(signedHeader, data, nil).Once()
-	
-	// Add mock for GetHeader which is called by GetLastCommit for previous block
+
 	env.Adapter.RollkitStore.(*rollkitmocks.MockStore).On("GetHeader", mock.Anything, height).Return(signedHeader, nil).Maybe()
-	
+
 	// Create and save a proper BlockID for this block to support GetLastCommit
 	// This simulates what would happen during normal block execution
 	headerHash := header.Hash()
@@ -311,10 +310,10 @@ func mockBlock(height uint64, header types.Header, data *types.Data, signature [
 			Hash:  cmtbytes.HexBytes(headerHash), // Simplified: using header hash as part set hash
 		},
 	}
-	
+
 	// Save the BlockID to the real store so GetLastCommit can find it
-	ctx := context.Background()
-	_ = env.Adapter.Store.SaveBlockID(ctx, height, blockID)
+	err := env.Adapter.Store.SaveBlockID(context.Background(), height, blockID)
+	require.NoError(t, err, "Failed to save BlockID for height %d", height)
 }
 
 func callCommitRPC(t *testing.T, height uint64) *ctypes.ResultCommit {
@@ -384,8 +383,8 @@ func (m *MockSigner) GetAddress() ([]byte, error) {
 	return args.Get(0).([]byte), args.Error(1)
 }
 
-// setupTestEnvironmentWithSigner creates a test environment with a signer
-func setupTestEnvironmentWithSigner(signer *MockSigner) *Environment {
+// setupTestEnvironment creates a test environment
+func setupTestEnvironment(signer *MockSigner) *Environment {
 	mockTxIndexer := new(MockTxIndexer)
 	mockBlockIndexer := new(MockBlockIndexer)
 	mockApp := new(MockApp)

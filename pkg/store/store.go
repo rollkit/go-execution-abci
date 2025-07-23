@@ -94,7 +94,7 @@ func (s *Store) GetBlockID(ctx context.Context, height uint64) (*cmttypes.BlockI
 	key := ds.NewKey(blockIDKey).ChildString(strconv.FormatUint(height, 10))
 	data, err := s.prefixedStore.Get(ctx, key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get block ID: %w", err)
+		return nil, fmt.Errorf("failed to get block ID %d: %w", height, err)
 	}
 
 	if data == nil {

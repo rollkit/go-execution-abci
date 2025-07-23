@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/cometbft/cometbft/crypto/ed25519"
-	cmtbytes "github.com/cometbft/cometbft/libs/bytes"
+	cmbytes "github.com/cometbft/cometbft/libs/bytes"
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 	"github.com/cometbft/cometbft/libs/math"
 	"github.com/cometbft/cometbft/light"
@@ -221,6 +221,21 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 		// Create and sign block
 		blockData, rollkitHeader := createTestBlock(blockHeight, chainID, now, validatorAddress, validatorHash, i)
 
+		// Create and save a proper BlockID for this block to support GetLastCommit
+		// This simulates what would happen during normal block execution
+		headerHash := rollkitHeader.Hash()
+		blockID := &cmttypes.BlockID{
+			Hash: cmbytes.HexBytes(headerHash),
+			PartSetHeader: cmttypes.PartSetHeader{
+				Total: 1,
+				Hash:  cmbytes.HexBytes(headerHash), // Simplified: using header hash as part set hash
+			},
+		}
+
+		// Save the BlockID to the real store so GetLastCommit can find it
+		err := env.Adapter.Store.SaveBlockID(context.Background(), blockHeight, blockID)
+		require.NoError(err, "Failed to save BlockID for height %d", blockHeight)
+
 		// Create the signature for the rollkit block
 		realSignature := signBlock(t, env.Adapter.Store, rollkitHeader, aggregatorPrivKey)
 
@@ -299,21 +314,6 @@ func mockBlock(t *testing.T, height uint64, header types.Header, data *types.Dat
 	env.Adapter.RollkitStore.(*rollkitmocks.MockStore).On("GetBlockData", mock.Anything, height).Return(signedHeader, data, nil).Once()
 
 	env.Adapter.RollkitStore.(*rollkitmocks.MockStore).On("GetHeader", mock.Anything, height).Return(signedHeader, nil).Maybe()
-
-	// Create and save a proper BlockID for this block to support GetLastCommit
-	// This simulates what would happen during normal block execution
-	headerHash := header.Hash()
-	blockID := &cmttypes.BlockID{
-		Hash: cmtbytes.HexBytes(headerHash),
-		PartSetHeader: cmttypes.PartSetHeader{
-			Total: 1,
-			Hash:  cmtbytes.HexBytes(headerHash), // Simplified: using header hash as part set hash
-		},
-	}
-
-	// Save the BlockID to the real store so GetLastCommit can find it
-	err := env.Adapter.Store.SaveBlockID(context.Background(), height, blockID)
-	require.NoError(t, err, "Failed to save BlockID for height %d", height)
 }
 
 func callCommitRPC(t *testing.T, height uint64) *ctypes.ResultCommit {

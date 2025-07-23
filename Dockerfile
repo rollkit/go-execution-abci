@@ -2,14 +2,11 @@ FROM golang:1.24-alpine AS ignite-builder
 
 # Install dependencies needed for ignite and building
 RUN apk add --no-cache \
-    git \
-    make \
+    libc6-compat \
     curl \
-    bash \
-    jq
+    bash
 
 # Set environment variables
-ENV DO_NOT_TRACK=true
 ENV ROLLKIT_VERSION=v1.0.0-beta.1
 ENV IGNITE_VERSION=v29.2.0
 

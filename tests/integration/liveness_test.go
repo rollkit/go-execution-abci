@@ -49,6 +49,7 @@ func CreateCelestiaChain(ctx context.Context, t *testing.T, dockerClient *client
 			"--grpc.address", "0.0.0.0:9090",
 			"--rpc.grpc_laddr=tcp://0.0.0.0:9098",
 			"--timeout-commit", "1s",
+			"--minimum-gas-prices", "0.000001utia",
 		).
 		WithNode(docker.NewChainNodeConfigBuilder().Build()).
 		Build(ctx)
@@ -175,7 +176,7 @@ func CreateRollkitChain(ctx context.Context, t *testing.T, dockerClient *client.
 				"--rollkit.node.aggregator",
 				"--rollkit.signer.passphrase", "12345678",
 				"--rollkit.da.address", daAddress,
-				"--rollkit.da.gas_price", "0.025",
+				"--rollkit.da.gas_price", "0.000001",
 				"--rollkit.da.auth_token", authToken,
 				"--rollkit.rpc.address", "0.0.0.0:7331", // bind to 0.0.0.0 so rpc is reachable from test host.
 				"--rollkit.da.namespace", namespace,

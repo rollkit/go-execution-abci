@@ -2,17 +2,17 @@ package integration_test
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/celestiaorg/tastora/framework/testutil/sdkacc"
 	"github.com/celestiaorg/tastora/framework/testutil/wallet"
+	"github.com/cometbft/cometbft/crypto"
+	cmtjson "github.com/cometbft/cometbft/libs/json"
+	cmprivval "github.com/cometbft/cometbft/privval"
 	"github.com/cosmos/cosmos-sdk/types/module/testutil"
 	"github.com/cosmos/cosmos-sdk/x/auth"
 	"github.com/cosmos/cosmos-sdk/x/bank"
-	"strings"
 	"testing"
 
 	"cosmossdk.io/math"
@@ -124,6 +124,7 @@ func CreateDANetwork(ctx context.Context, t *testing.T, dockerClient *client.Cli
 		return nil, nil, fmt.Errorf("failed to start bridge node: %w", err)
 	}
 
+	// hack to get around global, need to set the address prefix before use.
 	sdk.GetConfig().SetBech32PrefixForAccount("celestia", "celestiapub")
 
 	// Fund the bridge node DA wallet to enable blob submission
@@ -135,7 +136,7 @@ func CreateDANetwork(ctx context.Context, t *testing.T, dockerClient *client.Cli
 	require.NoError(t, err, "failed to get bridge node wallet")
 
 	// fund the bridge node wallet
-	daFundingAmount := sdk.NewCoins(sdk.NewCoin("utia", math.NewInt(10000)))
+	daFundingAmount := sdk.NewCoins(sdk.NewCoin("utia", math.NewInt(10_000_000)))
 	err = sendFunds(ctx, celestiaChain, fundingWallet, bridgeWallet, daFundingAmount)
 	require.NoError(t, err, "failed to fund bridge node DA wallet")
 
@@ -182,57 +183,34 @@ func CreateRollkitChain(ctx context.Context, t *testing.T, dockerClient *client.
 				"--rollkit.da.namespace", namespace,
 			).
 			WithPostInit(func(ctx context.Context, node *docker.ChainNode) error {
-				// Rollkit needs validators in the genesis validators array
-				// Let's create the simplest possible validator to match what staking produces
-
-				// Read current genesis.json
 				genesisBz, err := node.ReadFile(ctx, "config/genesis.json")
 				if err != nil {
 					return fmt.Errorf("failed to read genesis.json: %w", err)
 				}
 
-				// Parse as generic JSON
+				pubKey, err := getPubKey(ctx, node)
+				if err != nil {
+					return fmt.Errorf("failed to get pubkey: %w", err)
+				}
+
 				var genDoc map[string]interface{}
 				if err := json.Unmarshal(genesisBz, &genDoc); err != nil {
 					return fmt.Errorf("failed to parse genesis.json: %w", err)
 				}
 
-				// Extract public key from priv_validator_key.json (like ignite rollkit init does)
-				privValidatorKeyBytes, err := node.ReadFile(ctx, "config/priv_validator_key.json")
-				if err != nil {
-					return fmt.Errorf("failed to read priv_validator_key.json: %w", err)
-				}
-
-				var privValidatorKey map[string]interface{}
-				if err := json.Unmarshal(privValidatorKeyBytes, &privValidatorKey); err != nil {
-					return fmt.Errorf("failed to parse priv_validator_key.json: %w", err)
-				}
-
-				// Extract public key from priv_validator_key.json
-				pubKey := privValidatorKey["pub_key"].(map[string]interface{})
-				pubKeyType := pubKey["type"].(string)
-				pubKeyValue := pubKey["value"].(string)
-
-				// Calculate address from public key (first 20 bytes of sha256 hash)
-				pubkeyBytes, _ := base64.StdEncoding.DecodeString(pubKeyValue)
-				hash := sha256.Sum256(pubkeyBytes)
-				address := strings.ToUpper(hex.EncodeToString(hash[:20]))
-
-				// Add rollkit sequencer validator to consensus.validators (like bash script does)
 				consensus := genDoc["consensus"].(map[string]interface{})
 				consensus["validators"] = []map[string]interface{}{
 					{
 						"name":    "Rollkit Sequencer",
-						"address": address,
+						"address": pubKey.Address(),
 						"pub_key": map[string]interface{}{
-							"type":  pubKeyType, // Use exact type from priv_validator_key.json
-							"value": pubKeyValue,
+							"type":  "tendermint/PubKeyEd25519",
+							"value": pubKey.Bytes(),
 						},
-						"power": "5", // NOTE: because of default fund amount this has to be set to 5
+						"power": "5", // NOTE: because of default validator wallet amount in tastora the power will be computed as 5.
 					},
 				}
 
-				// Marshal and write back
 				updatedGenesis, err := json.MarshalIndent(genDoc, "", "  ")
 				if err != nil {
 					return fmt.Errorf("failed to marshal genesis: %w", err)
@@ -330,6 +308,7 @@ func sendFunds(ctx context.Context, chain *docker.Chain, fromWallet, toWallet ty
 
 // testTransactionSubmissionAndQuery tests sending transactions and querying results using tastora API
 func testTransactionSubmissionAndQuery(t *testing.T, rollkitChain *docker.Chain) {
+	// hack to get around global, need to set the address prefix before use.
 	sdk.GetConfig().SetBech32PrefixForAccount("gm", "gmpub")
 
 	ctx := context.Background()
@@ -340,47 +319,26 @@ func testTransactionSubmissionAndQuery(t *testing.T, rollkitChain *docker.Chain)
 	carolsWallet, err := rollkitChain.CreateWallet(ctx, "carol")
 	require.NoError(t, err, "failed to create carol wallet")
 
-	t.Logf("Bob's address: %s", bobsWallet.GetFormattedAddress())
-	t.Logf("Carol's address: %s", carolsWallet.GetFormattedAddress())
-
-	// Query bob's initial balance using RPC
 	t.Log("Querying Bob's initial balance...")
 	initialBalance, err := queryBankBalance(ctx, rollkitChain.GetGRPCAddress(), bobsWallet.GetFormattedAddress(), denom)
 	require.NoError(t, err, "failed to query bob's initial balance")
-	require.True(t, initialBalance.Amount.GTE(math.NewInt(100)), "bob should have more tokens")
+	require.True(t, initialBalance.Amount.Equal(math.NewInt(1000)), "bob should have 1000 tokens")
 
-	t.Logf("Bob's initial balance: %s", initialBalance.String())
-
-	// Send funds from Bob to Carol
 	t.Logf("Sending 100%s from Bob to Carol...", denom)
 	transferAmount := sdk.NewCoins(sdk.NewCoin(denom, math.NewInt(100)))
 
 	err = sendFunds(ctx, rollkitChain, bobsWallet, carolsWallet, transferAmount)
 	require.NoError(t, err, "failed to send funds from Bob to Carol")
 
-	t.Log("Transaction executed successfully")
-
-	// Query bob's final balance using RPC
-	t.Log("Querying Bob's final balance...")
 	finalBalance, err := queryBankBalance(ctx, rollkitChain.GetGRPCAddress(), bobsWallet.GetFormattedAddress(), denom)
 	require.NoError(t, err, "failed to query bob's final balance")
 
-	t.Logf("Bob's final balance: %s", finalBalance.String())
-
-	// Verify balance decreased by 100 (plus gas)
 	expectedBalance := initialBalance.Amount.Sub(math.NewInt(100))
-	require.True(t, finalBalance.Amount.LTE(expectedBalance), "final balance should be at most initial - 100 (accounting for gas)")
-	require.True(t, finalBalance.Amount.GT(expectedBalance.Sub(math.NewInt(1000))), "final balance shouldn't be too much less than expected (reasonable gas cost)")
+	require.True(t, finalBalance.Amount.Equal(expectedBalance), "final balance should be at most initial - 100")
 
-	// Query carol's balance using RPC to verify she received the transfer
-	t.Log("Querying Carol's balance...")
 	carolBalance, err := queryBankBalance(ctx, rollkitChain.GetGRPCAddress(), carolsWallet.GetFormattedAddress(), denom)
 	require.NoError(t, err, "failed to query carol's balance")
-	require.True(t, carolBalance.Amount.GTE(math.NewInt(100)), "carol should have received at least 100 tokens")
-
-	t.Logf("Carol's balance: %s", carolBalance.String())
-
-	t.Log("✅ Transaction test successful! Balance correctly updated.")
+	require.True(t, carolBalance.Amount.Equal(math.NewInt(100)), "carol should have received 100 tokens")
 }
 
 func TestLivenessWithCelestiaDA(t *testing.T) {
@@ -419,4 +377,17 @@ func TestLivenessWithCelestiaDA(t *testing.T) {
 	// Test transaction submission and query
 	t.Log("Testing transaction submission and query...")
 	testTransactionSubmissionAndQuery(t, rollkitChain)
+}
+
+// getPubKey returns the validator public key.
+func getPubKey(ctx context.Context, chainNode *docker.ChainNode) (crypto.PubKey, error) {
+	keyJSONBytes, err := chainNode.ReadFile(ctx, "config/priv_validator_key.json")
+	if err != nil {
+		return nil, err
+	}
+	var pvKey cmprivval.FilePVKey
+	if err = cmtjson.Unmarshal(keyJSONBytes, &pvKey); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal priv_validator_key.json: %w", err)
+	}
+	return pvKey.PubKey, nil
 }

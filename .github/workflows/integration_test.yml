@@ -7,20 +7,16 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
-env:
-  CAROL_MNEMONIC: "angry twist harsh drastic left brass behave host shove marriage fall update business leg direct reward object ugly security warm tuna model broccoli choice"
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  liveness:
-    name: Test with Rollkit Chain
+  liveness-tastora:
+    name: Test with Rollkit Chain (Tastora)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      DO_NOT_TRACK: true
       ROLLKIT_VERSION: "v1.0.0-beta.1"
       IGNITE_VERSION: "v29.2.0"
       ROLLKIT_IMAGE_REPO: "rollkit-gm"
@@ -56,12 +52,216 @@ jobs:
           ROLLKIT_IMAGE_REPO: ${{ env.ROLLKIT_IMAGE_REPO }}
           ROLLKIT_IMAGE_TAG: ${{ env.ROLLKIT_IMAGE_TAG }}
 
+  liveness:
+    name: Test with Rollkit Chain
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DO_NOT_TRACK: true
+      ROLLKIT_VERSION: "v1.0.0-beta.1"
+      IGNITE_VERSION: "v29.2.0"
+    outputs:
+      carol_mnemonic: ${{ steps.save_mnemonic.outputs.carol_mnemonic }}
+      gmd_home: ${{ steps.paths.outputs.GMD_HOME }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+          cache: true
+
+      - name: Install Ignite CLI
+        run: |
+          curl -sSL https://get.ignite.com/cli@$IGNITE_VERSION! | bash
+
+      - name: Start Local DA
+        run: |
+          go install github.com/rollkit/rollkit/da/cmd/local-da@$ROLLKIT_VERSION
+          # start the local da in the background
+          local-da &
+          # capture the background process PID
+          echo "DA_PID=$!" >> $GITHUB_ENV
+          # give it a moment to start
+          sleep 3
+
+      - name: Scaffold Rollkit Chain
+        run: |
+          # scaffold a new chain
+          ignite scaffold chain gm --no-module --skip-git --address-prefix gm
+          cd gm
+
+          # install rollkit app
+          ignite app install github.com/ignite/apps/rollkit@main
+
+          # add rollkit to the chain
+          ignite rollkit add
+
+      - name: Replace ABCI Module with Current Branch And Prepare Chain
+        run: |
+          # get the path to the current checkout of go-execution-abci
+          CURRENT_DIR=$(pwd)
+          GO_EXECUTION_ABCI_DIR=$CURRENT_DIR
+
+          # enter the gm directory
+          cd gm
+
+          # replace the github.com/rollkit/rollkit module with tagged version
+          go mod edit -replace github.com/rollkit/rollkit=github.com/rollkit/rollkit@$ROLLKIT_VERSION
+
+          # replace the github.com/rollkit/go-execution-abci module with the local version
+          go mod edit -replace github.com/rollkit/go-execution-abci=$GO_EXECUTION_ABCI_DIR
+
+          # download dependencies and update go.mod/go.sum
+          go mod tidy
+
+          # build the chain
+          ignite chain build --skip-proto
+
+          # initialize rollkit
+          ignite rollkit init
+
+      - name: Create extra accounts
+        id: save_mnemonic
+        run: |
+          MNEMONIC=$(gmd keys add carol --output json | jq -r .mnemonic)
+          echo "$MNEMONIC" > carol.mnemonic
+          echo "CAROL_MNEMONIC=$MNEMONIC" >> $GITHUB_ENV
+          echo "carol_mnemonic=$MNEMONIC" >> $GITHUB_OUTPUT
+
+      - name: Get gm binary and gmd home paths
+        id: paths
+        run: |
+          GM_BINARY_PATH=$(which gmd)
+          echo "GM_BINARY_PATH=$GM_BINARY_PATH"
+          echo "GM_BINARY_PATH=$GM_BINARY_PATH" >> $GITHUB_ENV
+          echo "GM_BINARY_PATH=$GM_BINARY_PATH" >> $GITHUB_OUTPUT
+          GMD_HOME=$(gmd config home)
+          echo "GMD_HOME=$GMD_HOME"
+          echo "GMD_HOME=$GMD_HOME" >> $GITHUB_ENV
+          echo "GMD_HOME=$GMD_HOME" >> $GITHUB_OUTPUT
+
+      - name: Upload gm Binary and gmd Home Directory
+        uses: actions/upload-artifact@v4
+        with:
+          name: gmd
+          include-hidden-files: true
+          if-no-files-found: error
+          path: |
+            ${{ steps.paths.outputs.GM_BINARY_PATH }}
+            ${{ steps.paths.outputs.GMD_HOME }}
+
+      - name: Start Chain and Wait for Blocks
+        run: |
+          # start the chain and send output to a log file
+          gmd start --rollkit.node.aggregator --log_format=json > chain.log 2>&1 &
+          CHAIN_PID=$!
+          echo "CHAIN_PID=$CHAIN_PID" >> $GITHUB_ENV
+
+          echo "Waiting for chain to produce blocks..."
+
+          # wait for chain to start and check for 5 blocks
+          BLOCKS_FOUND=0
+          MAX_ATTEMPTS=60
+          ATTEMPT=0
+
+          while [ $BLOCKS_FOUND -lt 5 ] && [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            sleep 2
+            ATTEMPT=$((ATTEMPT+1))
+            
+            # check if the chain is still running
+            if ! ps -p $CHAIN_PID > /dev/null; then
+              echo "Chain process died unexpectedly"
+              cat chain.log
+              exit 1
+            fi
+            
+            # query the node for the current block height
+            BLOCKS_FOUND=$(gmd query block --output json | tail -n +2 | jq -r '.header.height')
+            echo "Found $BLOCKS_FOUND blocks so far (attempt $ATTEMPT/$MAX_ATTEMPTS)"
+          done
+
+          if [ $BLOCKS_FOUND -lt 5 ]; then
+            echo "Failed to find 5 blocks within time limit"
+            cat chain.log
+            exit 1
+          fi
+
+          echo "Success! Chain produced at least 5 blocks."
+
+      - name: Test Transaction Submission and Query
+        run: |
+          # get Bob's and Carol's addresses
+          BOB_ADDRESS=$(gmd keys show bob -a)
+          CAROL_ADDRESS=$(gmd keys show carol -a)
+          echo "Bob's address: $BOB_ADDRESS"
+          echo "Carol's address: $CAROL_ADDRESS"
+
+          # query bob's initial balance
+          echo "Querying Bob's initial balance..."
+          INITIAL_BALANCE=$(gmd query bank balances $BOB_ADDRESS --output json | jq '.balances[0].amount' -r)
+          echo "Bob's initial balance: $INITIAL_BALANCE stake"
+
+          # check that bob has funds
+          if [ "$INITIAL_BALANCE" == "" ] || [ "$INITIAL_BALANCE" == "null" ] || [ "$INITIAL_BALANCE" -lt 100 ]; then
+            echo "Error: Bob's account not properly funded"
+            exit 1
+          fi
+
+          # send transaction from bob to carol and get tx hash
+          echo "Sending 100stake from Bob to Carol..."
+          TX_HASH=$(gmd tx bank send $BOB_ADDRESS $CAROL_ADDRESS 100stake -y --output json | jq -r .txhash)
+
+          sleep 3
+
+          # query the transaction
+          TX_RESULT=$(gmd query tx $TX_HASH --output json)
+          TX_CODE=$(echo $TX_RESULT | jq -r '.code')
+          if [ "$TX_CODE" != "0" ]; then
+            echo "Error: Transaction failed with code $TX_CODE"
+            echo $TX_RESULT | jq
+            exit 1
+          fi
+
+          # query bob's balance after transaction
+          FINAL_BALANCE=$(gmd query bank balances $BOB_ADDRESS --output json | jq '.balances[0].amount' -r)
+          echo "Bob's final balance: $FINAL_BALANCE"
+
+          # calculate and verify the expected balance
+          EXPECTED_BALANCE=$((INITIAL_BALANCE - 100))
+          if [ "$FINAL_BALANCE" != "$EXPECTED_BALANCE" ]; then
+            echo "Error: Balance mismatch. Expected: $EXPECTED_BALANCE, Actual: $FINAL_BALANCE"
+            exit 1
+          fi
+
+          echo "✅ Transaction test successful! Balance correctly updated."
+
+      - name: Cleanup Processes
+        if: always()
+        run: |
+          # kill chain process if it exists
+          if [[ -n "${CHAIN_PID}" ]]; then
+            kill -9 $CHAIN_PID || true
+          fi
+
+          # kill DA process if it exists
+          if [[ -n "${DA_PID}" ]]; then
+            kill -9 $DA_PID || true
+          fi
+
   ibc:
     name: Test IBC Connection Rollkit <-> Celestia
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    needs: liveness
     env:
       DO_NOT_TRACK: true
+      CAROL_MNEMONIC: ${{ needs.liveness.outputs.carol_mnemonic }}
+      GMD_HOME: ${{ needs.liveness.outputs.gmd_home }}
       HERMES_VERSION: "v1.13.1"
       CEL_VERSION: "v4.0.3-arabica"
       ROLLKIT_VERSION: "v1.0.0-beta.1"

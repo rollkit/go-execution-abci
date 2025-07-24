@@ -2,13 +2,16 @@ module github.com/rollkit/go-execution-abci
 
 go 1.24.1
 
-replace github.com/btcsuite/btcd => github.com/btcsuite/btcd v0.22.0-beta
+replace (
+	github.com/btcsuite/btcd => github.com/btcsuite/btcd v0.22.0-beta
+	github.com/cosmos/cosmos-sdk => github.com/cosmos/cosmos-sdk v0.50.14
+)
 
 exclude github.com/btcsuite/btcd/chaincfg/chainhash v1.0.2
 
 require (
 	cosmossdk.io/api v0.9.2
-	cosmossdk.io/collections v1.2.1
+	cosmossdk.io/collections v1.3.1
 	cosmossdk.io/core v0.11.3
 	cosmossdk.io/depinject v1.2.1
 	cosmossdk.io/errors v1.0.2
@@ -18,7 +21,7 @@ require (
 	github.com/celestiaorg/go-header v0.6.6
 	github.com/cometbft/cometbft v0.38.17
 	github.com/cometbft/cometbft-db v0.14.1
-	github.com/cosmos/cosmos-db v1.1.1
+	github.com/cosmos/cosmos-db v1.1.3
 	github.com/cosmos/cosmos-proto v1.0.0-beta.5
 	github.com/cosmos/cosmos-sdk v0.50.14
 	github.com/cosmos/gogoproto v1.7.0
@@ -42,7 +45,7 @@ require (
 	golang.org/x/net v0.42.0
 	golang.org/x/sync v0.16.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20250528174236-200df99c418a
-	google.golang.org/grpc v1.74.0
+	google.golang.org/grpc v1.74.2
 	google.golang.org/protobuf v1.36.6
 )
 
@@ -127,7 +130,7 @@ require (
 	github.com/flynn/noise v1.1.0 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
-	github.com/getsentry/sentry-go v0.32.0 // indirect
+	github.com/getsentry/sentry-go v0.33.0 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-chi/chi/v5 v5.2.2 // indirect
 	github.com/go-kit/log v0.2.1 // indirect

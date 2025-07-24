@@ -15,7 +15,7 @@ import (
 	storepkg "github.com/rollkit/rollkit/pkg/store"
 	rlktypes "github.com/rollkit/rollkit/types"
 
-	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
+	"github.com/evstack/ev-abci/pkg/cometcompat"
 )
 
 // BlockSearch searches for a paginated set of blocks matching BeginBlock and

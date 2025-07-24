@@ -20,7 +20,7 @@ import (
 	rstore "github.com/rollkit/rollkit/pkg/store"
 	rollkitmocks "github.com/rollkit/rollkit/test/mocks"
 
-	"github.com/rollkit/go-execution-abci/pkg/adapter"
+	"github.com/evstack/ev-abci/pkg/adapter"
 )
 
 var (

@@ -10,7 +10,7 @@ import (
 
 	"github.com/rollkit/rollkit/pkg/signer"
 
-	"github.com/rollkit/go-execution-abci/pkg/adapter"
+	"github.com/evstack/ev-abci/pkg/adapter"
 )
 
 // set by Node

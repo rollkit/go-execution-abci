@@ -1,4 +1,4 @@
-module github.com/rollkit/go-execution-abci/tests/integration
+module github.com/evstack/ev-abci/tests/integration
 
 go 1.24.1
 

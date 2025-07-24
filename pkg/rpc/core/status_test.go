@@ -17,7 +17,7 @@ import (
 	rollkitmocks "github.com/rollkit/rollkit/test/mocks"
 	rlktypes "github.com/rollkit/rollkit/types"
 
-	"github.com/rollkit/go-execution-abci/pkg/adapter"
+	"github.com/evstack/ev-abci/pkg/adapter"
 )
 
 func TestStatus(t *testing.T) {

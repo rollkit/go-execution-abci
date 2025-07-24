@@ -24,8 +24,8 @@ import (
 
 	"github.com/rollkit/rollkit/types"
 
-	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
-	execstore "github.com/rollkit/go-execution-abci/pkg/store"
+	"github.com/evstack/ev-abci/pkg/cometcompat"
+	execstore "github.com/evstack/ev-abci/pkg/store"
 )
 
 func TestExecuteFiresEvents(t *testing.T) {

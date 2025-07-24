@@ -3,7 +3,7 @@ package network
 import (
 	autocliv1 "cosmossdk.io/api/cosmos/autocli/v1"
 
-	networkv1 "github.com/rollkit/go-execution-abci/modules/network/types"
+	networkv1 "github.com/evstack/ev-abci/modules/network/types"
 )
 
 // AutoCLIOptions implements the autocli.HasAutoCLIConfig interface.

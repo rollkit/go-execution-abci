@@ -7,7 +7,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/types/address"
 	"github.com/stretchr/testify/require"
 
-	"github.com/rollkit/go-execution-abci/modules/rollkitmngr/types"
+	"github.com/evstack/ev-abci/modules/rollkitmngr/types"
 )
 
 func TestMigrateToRollkit_AuthorityError(t *testing.T) {

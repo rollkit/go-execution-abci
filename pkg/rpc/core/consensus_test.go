@@ -20,8 +20,8 @@ import (
 
 	rollkitmocks "github.com/rollkit/rollkit/test/mocks"
 
-	"github.com/rollkit/go-execution-abci/pkg/adapter"
-	execstore "github.com/rollkit/go-execution-abci/pkg/store"
+	"github.com/evstack/ev-abci/pkg/adapter"
+	execstore "github.com/evstack/ev-abci/pkg/store"
 )
 
 var (

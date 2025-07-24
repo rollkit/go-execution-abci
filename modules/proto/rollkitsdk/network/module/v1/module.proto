@@ -4,12 +4,12 @@ package rollkitsdk.network.module.v1;
 
 import "cosmos/app/v1alpha1/module.proto";
 
-option go_package = "github.com/rollkit/go-execution-abci/modules/network/module/v1";
+option go_package = "github.com/evstack/ev-abci/modules/network/module/v1";
 
 // Module is the config object for the module.
 message Module {
   option (cosmos.app.v1alpha1.module) = {
-    go_import: "github.com/rollkit/go-execution-abci/modules/network"
+    go_import: "github.com/evstack/ev-abci/modules/network"
   };
 
   // authority defines the custom module authority. If not set, defaults to the governance module.

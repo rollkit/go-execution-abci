@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/rollkit/go-execution-abci/modules/network/types"
+	"github.com/evstack/ev-abci/modules/network/types"
 )
 
 // queryServer is a wrapper around the network module's keeper providing gRPC query

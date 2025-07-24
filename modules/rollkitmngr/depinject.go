@@ -10,9 +10,9 @@ import (
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	govtypes "github.com/cosmos/cosmos-sdk/x/gov/types"
 
-	"github.com/rollkit/go-execution-abci/modules/rollkitmngr/keeper"
-	modulev1 "github.com/rollkit/go-execution-abci/modules/rollkitmngr/module"
-	"github.com/rollkit/go-execution-abci/modules/rollkitmngr/types"
+	"github.com/evstack/ev-abci/modules/rollkitmngr/keeper"
+	modulev1 "github.com/evstack/ev-abci/modules/rollkitmngr/module"
+	"github.com/evstack/ev-abci/modules/rollkitmngr/types"
 )
 
 // IsOnePerModuleType implements the depinject.OnePerModuleType interface.

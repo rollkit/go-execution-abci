@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/cometbft/cometbft/crypto/ed25519"
-	cmbytes "github.com/cometbft/cometbft/libs/bytes"
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 	"github.com/cometbft/cometbft/libs/math"
 	"github.com/cometbft/cometbft/light"
@@ -212,50 +211,50 @@ func TestCommit_VerifyCometBFTLightClientCompatibility_MultipleBlocks(t *testing
 	}
 
 	var trustedHeader cmttypes.SignedHeader
-	isFirstBlock := true
 
 	// Test multiple blocks
-	for i := 1; i <= 3; i++ {
+	for i := 1; i <= 10; i++ {
 		blockHeight := uint64(i)
 
-		// Create and sign block
 		blockData, rollkitHeader := createTestBlock(blockHeight, chainID, now, validatorAddress, validatorHash, i)
 
-		// Create and save a proper BlockID for this block to support GetLastCommit
-		// This simulates what would happen during normal block execution
-		headerHash := rollkitHeader.Hash()
+		// create an ABCI header to get the correct hash for light client compatibility
+		lastCommit, err := env.Adapter.GetLastCommit(context.Background(), blockHeight)
+		require.NoError(err, "Failed to get last commit for height %d", blockHeight)
+
+		abciHeader, err := cometcompat.ToABCIHeader(rollkitHeader, lastCommit)
+		require.NoError(err, "Failed to create ABCI header")
+
+		abciBlock, err := cometcompat.ToABCIBlock(abciHeader, lastCommit, blockData)
+		require.NoError(err, "Failed to create ABCI block")
+
+		blockParts, err := abciBlock.MakePartSet(cmttypes.BlockPartSizeBytes)
+		require.NoError(err, "Failed to create part set")
+
+		// use abci header hash to match the light client validation check
 		blockID := &cmttypes.BlockID{
-			Hash: cmbytes.HexBytes(headerHash),
-			PartSetHeader: cmttypes.PartSetHeader{
-				Total: 1,
-				Hash:  cmbytes.HexBytes(headerHash), // Simplified: using header hash as part set hash
-			},
+			Hash:          abciHeader.Hash(),
+			PartSetHeader: blockParts.Header(),
 		}
 
-		// Save the BlockID to the real store so GetLastCommit can find it
-		err := env.Adapter.Store.SaveBlockID(context.Background(), blockHeight, blockID)
+		err = env.Adapter.Store.SaveBlockID(context.Background(), blockHeight, blockID)
 		require.NoError(err, "Failed to save BlockID for height %d", blockHeight)
 
-		// Create the signature for the rollkit block
+		// create the signature for the rollkit block
 		realSignature := signBlock(t, env.Adapter.Store, rollkitHeader, aggregatorPrivKey)
 
-		// Mock the store to return our signed block
-		mockBlock(t, blockHeight, rollkitHeader, blockData, realSignature, aggregatorPubKey, validatorAddress)
+		// mock the store to return our signed block
+		mockBlock(blockHeight, rollkitHeader, blockData, realSignature, aggregatorPubKey, validatorAddress)
 
-		// Call Commit RPC
+		// call Commit RPC
 		commitResult := callCommitRPC(t, blockHeight)
 
-		// Verify basic structure (without checking specific signature since Commit RPC re-signs)
-		verifyCommitResultBasic(t, commitResult, blockHeight, rollkitHeader)
-
-		// Light client verification
-		if isFirstBlock {
+		// light client verification
+		if blockHeight == 1 {
 			trustedHeader = commitResult.SignedHeader
 			verifyFirstBlock(t, fixedValSet, chainID, trustedHeader)
-			isFirstBlock = false
 		} else {
-			t.Logf("Verifying block %d against trusted header %d", blockHeight, trustedHeader.Height)
-			verifySubsequentBlock(t, fixedValSet, &trustedHeader, &commitResult.SignedHeader, rollkitHeader)
+			verifySubsequentBlock(t, fixedValSet, &trustedHeader, &commitResult.SignedHeader)
 			trustedHeader = commitResult.SignedHeader
 		}
 	}
@@ -299,7 +298,7 @@ func signBlock(t *testing.T, abciExecStore *execstore.Store, header types.Header
 	return signature
 }
 
-func mockBlock(t *testing.T, height uint64, header types.Header, data *types.Data, signature []byte, pubKey crypto.PubKey, address []byte) {
+func mockBlock(height uint64, header types.Header, data *types.Data, signature []byte, pubKey crypto.PubKey, address []byte) {
 	signedHeader := &types.SignedHeader{
 		Header:    header,
 		Signature: types.Signature(signature),
@@ -324,23 +323,12 @@ func callCommitRPC(t *testing.T, height uint64) *ctypes.ResultCommit {
 	return result
 }
 
-func verifyCommitResultBasic(t *testing.T, result *ctypes.ResultCommit, height uint64, header types.Header) {
-	require := require.New(t)
-
-	require.Equal(int64(height), result.Height)
-	require.EqualValues(header.AppHash, result.AppHash.Bytes())
-	require.NotEqual(make([]byte, 64), result.Commit.Signatures[0].Signature, "Signature should not be zeros")
-}
-
 func verifyFirstBlock(t *testing.T, valSet *cmttypes.ValidatorSet, chainID string, header cmttypes.SignedHeader) {
 	err := valSet.VerifyCommitLight(chainID, header.Commit.BlockID, header.Height, header.Commit)
-	if err != nil {
-		t.Logf("First block verification failed: %v, doing basic checks", err)
-		require.NotEqual(t, make([]byte, 64), header.Commit.Signatures[0].Signature, "First block signature should not be zeros")
-	}
+	require.NoError(t, err, "First block verification must pass")
 }
 
-func verifySubsequentBlock(t *testing.T, valSet *cmttypes.ValidatorSet, trustedHeader, newHeader *cmttypes.SignedHeader, rollkitHeader types.Header) {
+func verifySubsequentBlock(t *testing.T, valSet *cmttypes.ValidatorSet, trustedHeader, newHeader *cmttypes.SignedHeader) {
 	require := require.New(t)
 
 	trustingPeriod := 3 * time.Hour
@@ -353,7 +341,7 @@ func verifySubsequentBlock(t *testing.T, valSet *cmttypes.ValidatorSet, trustedH
 		newHeader,
 		valSet,
 		trustingPeriod,
-		time.Unix(0, int64(rollkitHeader.BaseHeader.Time)),
+		newHeader.Time,
 		maxClockDrift,
 		trustLevel,
 	)

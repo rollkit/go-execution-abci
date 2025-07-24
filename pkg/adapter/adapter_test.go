@@ -99,7 +99,7 @@ func TestExecuteFiresEvents(t *testing.T) {
 			val := cmtypes.NewValidator(cometBftPubKey, 1)
 
 			header := types.Header{
-				BaseHeader:      types.BaseHeader{Height: 2, Time: uint64(time.Now().UnixNano())},
+				BaseHeader:      types.BaseHeader{Height: 1, Time: uint64(time.Now().UnixNano())},
 				ProposerAddress: val.Address,
 				AppHash:         []byte("apphash1"),
 			}
@@ -122,7 +122,7 @@ func TestExecuteFiresEvents(t *testing.T) {
 			require.NoError(t, adapter.Store.SaveState(ctx, execstore.TestingStateFixture()))
 
 			// when
-			ctx = context.WithValue(ctx, types.HeaderContextKey, signedHeader)
+			ctx = context.WithValue(ctx, types.HeaderContextKey, signedHeader.Header)
 			_, _, err = adapter.ExecuteTxs(ctx, spec.txs, 1, timestamp, bytes.Repeat([]byte{1}, 32))
 			if spec.expErr {
 				require.Error(t, err)

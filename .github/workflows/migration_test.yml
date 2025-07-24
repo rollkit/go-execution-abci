@@ -13,7 +13,7 @@ jobs:
     timeout-minutes: 45
     env:
       DO_NOT_TRACK: true
-      ROLLKIT_VERSION: "v0.14.2-0.20250722142536-c43f2738227a"
+      ROLLKIT_VERSION: "v1.0.0-beta.2"
       IGNITE_VERSION: "v29.2.0"
     steps:
       - uses: actions/checkout@v4
@@ -199,7 +199,7 @@ jobs:
 
       - name: Start Local DA for Rollkit
         run: |
-          go install github.com/rollkit/rollkit/da/cmd/local-da@v1.0.0-beta.1
+          go install github.com/rollkit/rollkit/da/cmd/local-da@$ROLLKIT_VERSION
           # start the local da in the background
           local-da &
           # capture the background process PID

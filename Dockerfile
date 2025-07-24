@@ -7,7 +7,7 @@ RUN apk add --no-cache \
     bash
 
 # Set environment variables
-ENV ROLLKIT_VERSION=v1.0.0-beta.1
+ENV ROLLKIT_VERSION=v1.0.0-beta.2
 ENV IGNITE_VERSION=v29.2.0
 
 RUN curl -sSL https://get.ignite.com/cli@${IGNITE_VERSION}! | bash

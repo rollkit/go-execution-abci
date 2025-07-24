@@ -5,7 +5,6 @@ go 1.24.1
 replace (
 	github.com/btcsuite/btcd => github.com/btcsuite/btcd v0.22.0-beta
 	github.com/cosmos/cosmos-sdk => github.com/cosmos/cosmos-sdk v0.50.14
-	github.com/rollkit/rollkit => github.com/rollkit/rollkit v0.14.2-0.20250722142536-c43f2738227a
 )
 
 exclude github.com/btcsuite/btcd/chaincfg/chainhash v1.0.2
@@ -36,7 +35,7 @@ require (
 	github.com/libp2p/go-libp2p-pubsub v0.14.2
 	github.com/multiformats/go-multiaddr v0.16.0
 	github.com/prometheus/client_golang v1.22.0
-	github.com/rollkit/rollkit v1.0.0-beta.1
+	github.com/rollkit/rollkit v1.0.0-beta.2
 	github.com/rollkit/rollkit/core v1.0.0-beta.1
 	github.com/rollkit/rollkit/da v1.0.0-beta.1
 	github.com/rollkit/rollkit/sequencers/single v1.0.0-beta.1

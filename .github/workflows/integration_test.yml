@@ -265,6 +265,7 @@ jobs:
       HERMES_VERSION: "v1.13.1"
       CEL_VERSION: "v4.0.3-arabica"
       ROLLKIT_VERSION: "v1.0.0-beta.2"
+      ROLLKIT_DA_VERSION: "v1.0.0-beta.1"
 
     steps:
       - name: Set up Go

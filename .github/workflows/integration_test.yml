@@ -17,6 +17,7 @@ jobs:
     timeout-minutes: 30
     env:
       ROLLKIT_VERSION: "v1.0.0-beta.2"
+      ROLLKIT_DA_VERSION: "v1.0.0-beta.1"
       IGNITE_VERSION: "v29.2.0"
       ROLLKIT_IMAGE_REPO: "rollkit-gm"
       ROLLKIT_IMAGE_TAG: "latest"
@@ -80,7 +81,7 @@ jobs:
 
       - name: Start Local DA
         run: |
-          go install github.com/rollkit/rollkit/da/cmd/local-da@$ROLLKIT_VERSION
+          go install github.com/rollkit/rollkit/da/cmd/local-da@$ROLLKIT_DA_VERSION
           # start the local da in the background
           local-da &
           # capture the background process PID
@@ -304,7 +305,7 @@ jobs:
 
       - name: Start Local DA
         run: |
-          go install github.com/rollkit/rollkit/da/cmd/local-da@$ROLLKIT_VERSION
+          go install github.com/rollkit/rollkit/da/cmd/local-da@$ROLLKIT_DA_VERSION
           # start the local da in the background
           local-da &
           # capture the background process PID

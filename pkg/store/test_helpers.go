@@ -1,31 +1,14 @@
-package adapter
+package store
 
 import (
-	"testing"
 	"time"
 
 	"github.com/cometbft/cometbft/crypto/secp256k1"
 	"github.com/cometbft/cometbft/state"
 	"github.com/cometbft/cometbft/types"
-	ds "github.com/ipfs/go-datastore"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func TestStateIO(t *testing.T) {
-	db := ds.NewMapDatastore()
-	abciStore := NewExecABCIStore(db)
-	myState := stateFixture()
-	require.NoError(t, abciStore.SaveState(t.Context(), myState))
-	gotState, gotErr := abciStore.LoadState(t.Context())
-	require.NoError(t, gotErr)
-	assert.Equal(t, myState, gotState)
-	exists, gotErr := db.Has(t.Context(), ds.NewKey("/abci/s"))
-	require.NoError(t, gotErr)
-	assert.True(t, exists)
-}
-
-func stateFixture() *state.State {
+func TestingStateFixture() *state.State {
 	val := anyValidator()
 	return &state.State{
 		ChainID:         "test-chain",

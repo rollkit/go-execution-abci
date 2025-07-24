@@ -40,7 +40,7 @@ import (
 
 	"github.com/rollkit/go-execution-abci/modules/rollkitmngr"
 	rollkitmngrtypes "github.com/rollkit/go-execution-abci/modules/rollkitmngr/types"
-	"github.com/rollkit/go-execution-abci/pkg/adapter"
+	execstore "github.com/rollkit/go-execution-abci/pkg/store"
 )
 
 var (
@@ -226,7 +226,7 @@ func cometBlockToRollkit(block *cmttypes.Block) (*rollkittypes.SignedHeader, *ro
 				Block: block.Version.Block,
 				App:   block.Version.App,
 			},
-			LastHeaderHash:  block.LastBlockID.Hash.Bytes(),
+			LastHeaderHash:  block.Header.Hash().Bytes(),
 			LastCommitHash:  block.LastCommitHash.Bytes(),
 			DataHash:        block.DataHash.Bytes(),
 			ConsensusHash:   block.ConsensusHash.Bytes(),
@@ -235,7 +235,7 @@ func cometBlockToRollkit(block *cmttypes.Block) (*rollkittypes.SignedHeader, *ro
 			ValidatorHash:   block.ValidatorsHash.Bytes(),
 			ProposerAddress: block.ProposerAddress.Bytes(),
 		},
-		Signature: signature, // TODO: figure out this.
+		Signature: signature,
 	}
 
 	data = &rollkittypes.Data{
@@ -286,7 +286,7 @@ func loadStateAndBlockStore(config *cfg.Config) (*cmtstore.BlockStore, state.Sto
 
 type rollkitStores struct {
 	rollkitStore    rollkitstore.Store
-	abciExecStore   *adapter.Store
+	abciExecStore   *execstore.Store
 	dataSyncStore   *goheaderstore.Store[*rollkittypes.Data]
 	headerSyncStore *goheaderstore.Store[*rollkittypes.SignedHeader]
 }
@@ -321,7 +321,7 @@ func loadRollkitStores(rootDir string) (rollkitStores, error) {
 
 	return rollkitStores{
 		rollkitStore:    rollkitstore.New(rollkitPrefixStore),
-		abciExecStore:   adapter.NewExecABCIStore(store),
+		abciExecStore:   execstore.NewExecABCIStore(store),
 		dataSyncStore:   ds,
 		headerSyncStore: hs,
 	}, nil

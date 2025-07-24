@@ -1,30 +1,33 @@
 package cometcompat
 
 import (
+	"context"
+
 	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	cmttypes "github.com/cometbft/cometbft/types"
 
 	"github.com/rollkit/rollkit/types"
+
+	abciexecstore "github.com/rollkit/go-execution-abci/pkg/store"
 )
 
-func PayloadProvider() types.SignaturePayloadProvider {
+func SignaturePayloadProvider(store *abciexecstore.Store) types.SignaturePayloadProvider {
 	return func(header *types.Header) ([]byte, error) {
-		abciHeaderForSigning, err := ToABCIHeader(header)
-		if err != nil {
+		blockID, err := store.GetBlockID(context.Background(), header.Height())
+		if err != nil && header.Height() > 1 {
 			return nil, err
 		}
+
 		vote := cmtproto.Vote{
-			Type:   cmtproto.PrecommitType,
-			Height: int64(header.Height()), //nolint:gosec
-			Round:  0,
-			BlockID: cmtproto.BlockID{
-				Hash:          abciHeaderForSigning.Hash(),
-				PartSetHeader: cmtproto.PartSetHeader{},
-			},
+			Type:             cmtproto.PrecommitType,
+			Height:           int64(header.Height()), //nolint:gosec
+			BlockID:          blockID.ToProto(),
+			Round:            0,
 			Timestamp:        header.Time(),
 			ValidatorAddress: header.ProposerAddress,
 			ValidatorIndex:   0,
 		}
+
 		chainID := header.ChainID()
 		consensusVoteBytes := cmttypes.VoteSignBytes(chainID, &vote)
 

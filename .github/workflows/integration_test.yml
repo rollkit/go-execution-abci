@@ -4,7 +4,6 @@ on:
   push:
     branches: ["main"]
   pull_request:
-    branches: ["main"]
   workflow_dispatch:
 
 concurrency:
@@ -17,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      ROLLKIT_VERSION: "v1.0.0-beta.1"
+      ROLLKIT_VERSION: "v1.0.0-beta.2"
       IGNITE_VERSION: "v29.2.0"
       ROLLKIT_IMAGE_REPO: "rollkit-gm"
       ROLLKIT_IMAGE_TAG: "latest"
@@ -58,7 +57,8 @@ jobs:
     timeout-minutes: 30
     env:
       DO_NOT_TRACK: true
-      ROLLKIT_VERSION: "v1.0.0-beta.1"
+      ROLLKIT_VERSION: "v1.0.0-beta.2"
+      ROLLKIT_DA_VERSION: "v1.0.0-beta.1"
       IGNITE_VERSION: "v29.2.0"
     outputs:
       carol_mnemonic: ${{ steps.save_mnemonic.outputs.carol_mnemonic }}
@@ -81,7 +81,7 @@ jobs:
 
       - name: Start Local DA
         run: |
-          go install github.com/rollkit/rollkit/da/cmd/local-da@$ROLLKIT_VERSION
+          go install github.com/rollkit/rollkit/da/cmd/local-da@$ROLLKIT_DA_VERSION
           # start the local da in the background
           local-da &
           # capture the background process PID
@@ -264,7 +264,8 @@ jobs:
       GMD_HOME: ${{ needs.liveness.outputs.gmd_home }}
       HERMES_VERSION: "v1.13.1"
       CEL_VERSION: "v4.0.3-arabica"
-      ROLLKIT_VERSION: "v1.0.0-beta.1"
+      ROLLKIT_VERSION: "v1.0.0-beta.2"
+      ROLLKIT_DA_VERSION: "v1.0.0-beta.1"
 
     steps:
       - name: Set up Go
@@ -305,7 +306,7 @@ jobs:
 
       - name: Start Local DA
         run: |
-          go install github.com/rollkit/rollkit/da/cmd/local-da@$ROLLKIT_VERSION
+          go install github.com/rollkit/rollkit/da/cmd/local-da@$ROLLKIT_DA_VERSION
           # start the local da in the background
           local-da &
           # capture the background process PID

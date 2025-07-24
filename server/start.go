@@ -36,6 +36,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	rollkitblock "github.com/rollkit/rollkit/block"
 	"github.com/rollkit/rollkit/da/jsonrpc"
 	"github.com/rollkit/rollkit/node"
 	"github.com/rollkit/rollkit/pkg/config"
@@ -51,6 +52,7 @@ import (
 	"github.com/rollkit/go-execution-abci/pkg/rpc"
 	"github.com/rollkit/go-execution-abci/pkg/rpc/core"
 	execsigner "github.com/rollkit/go-execution-abci/pkg/signer"
+	execstore "github.com/rollkit/go-execution-abci/pkg/store"
 )
 
 const (
@@ -472,7 +474,12 @@ func setupNodeAndExecutor(
 		database,
 		metrics,
 		NewLogAdapter(logger),
-		cometcompat.PayloadProvider(),
+		node.NodeOptions{
+			ManagerOptions: rollkitblock.ManagerOptions{
+				SignaturePayloadProvider: cometcompat.SignaturePayloadProvider(execstore.NewExecABCIStore(database)),
+				ValidatorHasherProvider:  cometcompat.ValidatorHasherProvider(),
+			},
+		},
 	)
 	if err != nil {
 		return nil, nil, cleanupFn, err

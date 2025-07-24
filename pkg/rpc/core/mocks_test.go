@@ -6,6 +6,7 @@ import (
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtlog "github.com/cometbft/cometbft/libs/log"
 	cmquery "github.com/cometbft/cometbft/libs/pubsub/query"
+	cmtstate "github.com/cometbft/cometbft/state"
 	"github.com/cometbft/cometbft/state/indexer"
 	"github.com/cometbft/cometbft/state/txindex"
 	cmttypes "github.com/cometbft/cometbft/types"
@@ -278,4 +279,43 @@ func (m *MockP2PClient) Addrs() []ma.Multiaddr {
 
 func (m *MockP2PClient) Peers() []rlkp2p.PeerConnection {
 	return []rlkp2p.PeerConnection{} // Stub implementation
+}
+
+// MockStore is a mock for adapter.Store
+type MockStore struct {
+	mock.Mock
+}
+
+func (m *MockStore) LoadState(ctx context.Context) (*cmtstate.State, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*cmtstate.State), args.Error(1)
+}
+
+func (m *MockStore) SaveState(ctx context.Context, state *cmtstate.State) error {
+	args := m.Called(ctx, state)
+	return args.Error(0)
+}
+
+func (m *MockStore) SaveFinalizeBlockResponse(ctx context.Context, height uint64, response *abci.ResponseFinalizeBlock) error {
+	args := m.Called(ctx, height, response)
+	return args.Error(0)
+}
+
+func (m *MockStore) GetFinalizeBlockResponse(ctx context.Context, height uint64) (*abci.ResponseFinalizeBlock, error) {
+	args := m.Called(ctx, height)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*abci.ResponseFinalizeBlock), args.Error(1)
+}
+
+func (m *MockStore) GetBlockID(ctx context.Context, height uint64) (*cmttypes.BlockID, error) {
+	args := m.Called(ctx, height)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*cmttypes.BlockID), args.Error(1)
 }

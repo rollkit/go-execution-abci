@@ -1,4 +1,4 @@
-package adapter
+package store
 
 import (
 	"context"
@@ -7,7 +7,9 @@ import (
 
 	abci "github.com/cometbft/cometbft/abci/types"
 	cmtstateproto "github.com/cometbft/cometbft/proto/tendermint/state"
+	cmtproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	cmtstate "github.com/cometbft/cometbft/state"
+	cmttypes "github.com/cometbft/cometbft/types"
 	proto "github.com/cosmos/gogoproto/proto"
 	ds "github.com/ipfs/go-datastore"
 	kt "github.com/ipfs/go-datastore/keytransform"
@@ -20,6 +22,8 @@ const (
 	stateKey = "s"
 	// blockResponseKey is the key used for storing block responses
 	blockResponseKey = "br"
+	// blockIDKey is the key used for storing block IDs
+	blockIDKey = "bid"
 )
 
 // Store wraps a datastore with ABCI-specific functionality
@@ -70,6 +74,44 @@ func (s *Store) SaveState(ctx context.Context, state *cmtstate.State) error {
 	}
 
 	return s.prefixedStore.Put(ctx, ds.NewKey(stateKey), data)
+}
+
+// SaveBlockID saves the block ID to disk per height.
+// This is used to store the block ID for the block execution
+func (s *Store) SaveBlockID(ctx context.Context, height uint64, blockID *cmttypes.BlockID) error {
+	blockIDProto := blockID.ToProto()
+	data, err := proto.Marshal(&blockIDProto)
+	if err != nil {
+		return fmt.Errorf("failed to marshal block ID: %w", err)
+	}
+
+	key := ds.NewKey(blockIDKey).ChildString(strconv.FormatUint(height, 10))
+	return s.prefixedStore.Put(ctx, key, data)
+}
+
+// GetBlockID loads the block ID from disk for a specific height.
+func (s *Store) GetBlockID(ctx context.Context, height uint64) (*cmttypes.BlockID, error) {
+	key := ds.NewKey(blockIDKey).ChildString(strconv.FormatUint(height, 10))
+	data, err := s.prefixedStore.Get(ctx, key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get block ID %d: %w", height, err)
+	}
+
+	if data == nil {
+		return nil, fmt.Errorf("block ID not found for height %d", height)
+	}
+
+	protoBlockID := &cmtproto.BlockID{}
+	if err := proto.Unmarshal(data, protoBlockID); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal block ID: %w", err)
+	}
+
+	blockID, err := cmttypes.BlockIDFromProto(protoBlockID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert block ID from proto: %w", err)
+	}
+
+	return blockID, nil
 }
 
 // SaveBlockResponse saves the block response to disk per height

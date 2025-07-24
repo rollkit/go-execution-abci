@@ -25,6 +25,7 @@ import (
 	"github.com/rollkit/rollkit/types"
 
 	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
+	execstore "github.com/rollkit/go-execution-abci/pkg/store"
 )
 
 func TestExecuteFiresEvents(t *testing.T) {
@@ -98,12 +99,12 @@ func TestExecuteFiresEvents(t *testing.T) {
 			val := cmtypes.NewValidator(cometBftPubKey, 1)
 
 			header := types.Header{
-				BaseHeader:      types.BaseHeader{Height: 2, Time: uint64(time.Now().UnixNano())},
+				BaseHeader:      types.BaseHeader{Height: 1, Time: uint64(time.Now().UnixNano())},
 				ProposerAddress: val.Address,
 				AppHash:         []byte("apphash1"),
 			}
 
-			headerBz, err := cometcompat.PayloadProvider()(&header)
+			headerBz, err := cometcompat.SignaturePayloadProvider(adapter.Store)(&header)
 			require.NoError(t, err)
 
 			sig, err := privKey.Sign(headerBz)
@@ -118,10 +119,10 @@ func TestExecuteFiresEvents(t *testing.T) {
 				Signature: sig,
 			}
 			require.NoError(t, adapter.RollkitStore.SaveBlockData(ctx, signedHeader, &types.Data{Txs: make(types.Txs, 0)}, &sigT))
-			require.NoError(t, adapter.Store.SaveState(ctx, stateFixture()))
+			require.NoError(t, adapter.Store.SaveState(ctx, execstore.TestingStateFixture()))
 
 			// when
-			ctx = context.WithValue(ctx, types.SignedHeaderContextKey, signedHeader)
+			ctx = context.WithValue(ctx, types.HeaderContextKey, signedHeader.Header)
 			_, _, err = adapter.ExecuteTxs(ctx, spec.txs, 1, timestamp, bytes.Repeat([]byte{1}, 32))
 			if spec.expErr {
 				require.Error(t, err)

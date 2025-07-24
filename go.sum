@@ -987,8 +987,8 @@ github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFR
 github.com/rogpeppe/go-internal v1.9.0/go.mod h1:WtVeX8xhTBvf0smdhujwtBcq4Qrzq/fJaraNFVN+nFs=
 github.com/rogpeppe/go-internal v1.14.1 h1:UQB4HGPB6osV0SQTLymcB4TgvyWu6ZyliaW0tI/otEQ=
 github.com/rogpeppe/go-internal v1.14.1/go.mod h1:MaRKkUm5W0goXpeCfT7UZI6fk/L7L7so1lCWt35ZSgc=
-github.com/rollkit/rollkit v1.0.0-beta.1 h1:d9Wkb5XgMtIdbsYm+hOoFdc+AcX0fI7ram0X3iREOUc=
-github.com/rollkit/rollkit v1.0.0-beta.1/go.mod h1:sjDcpuc+djvPmhaDf0+CFJZ5mCuselDnh21H+e7gv6o=
+github.com/rollkit/rollkit v1.0.0-beta.2 h1:g9NISvSWLkFzoGufVxDAofRd4gweRewTtqW8RASW5Ss=
+github.com/rollkit/rollkit v1.0.0-beta.2/go.mod h1:6OYfH1dYTOhqg+bCMxvkrb4qe7SruYoSup5zxQNyrKs=
 github.com/rollkit/rollkit/core v1.0.0-beta.1 h1:lAcFWOTUaNGDWEDIjVv07FWizJswBsF3JWi9jEScV7k=
 github.com/rollkit/rollkit/core v1.0.0-beta.1/go.mod h1:0RhbqC8Is970KRhr6zPUQOZkmKt6/WqPRDQWfd2P7P0=
 github.com/rollkit/rollkit/da v1.0.0-beta.1 h1:MjN845kIsuRpisgnPJ2d3zuF6aN/uzOaiy/FCtJL7i0=

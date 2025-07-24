@@ -35,7 +35,7 @@ require (
 	github.com/libp2p/go-libp2p-pubsub v0.14.2
 	github.com/multiformats/go-multiaddr v0.16.0
 	github.com/prometheus/client_golang v1.22.0
-	github.com/rollkit/rollkit v1.0.0-beta.1
+	github.com/rollkit/rollkit v1.0.0-beta.2
 	github.com/rollkit/rollkit/core v1.0.0-beta.1
 	github.com/rollkit/rollkit/da v1.0.0-beta.1
 	github.com/rollkit/rollkit/sequencers/single v1.0.0-beta.1

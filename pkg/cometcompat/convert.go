@@ -12,88 +12,65 @@ import (
 	rlktypes "github.com/rollkit/rollkit/types"
 )
 
-// ToABCIBlock converts Rolkit block into block format defined by ABCI.
-func ToABCIBlock(header *rlktypes.SignedHeader, data *rlktypes.Data, lastCommit *cmttypes.Commit) (*cmttypes.Block, error) {
-	abciHeader, err := ToABCIHeader(&header.Header)
-	if err != nil {
-		return nil, err
-	}
-
-	// validate have one validator
+// ToABCIHeader converts rollkit header format defined by ABCI.
+func ToABCIHeader(header rlktypes.Header, lastCommit *cmttypes.Commit) (cmttypes.Header, error) {
 	if len(header.ProposerAddress) == 0 {
-		return nil, errors.New("proposer address is not set")
+		return cmttypes.Header{}, errors.New("proposer address is not set")
 	}
 
-	// set commit hash
-	abciHeader.LastCommitHash = lastCommit.Hash()
-
-	// set validator hash
-	if header.Signer.Address != nil {
-		validatorHash, err := validatorHasher(header.ProposerAddress, header.Signer.PubKey)
-		if err != nil {
-			return nil, fmt.Errorf("failed to compute validator hash: %w", err)
-		}
-		abciHeader.ValidatorsHash = cmbytes.HexBytes(validatorHash)
-		abciHeader.NextValidatorsHash = cmbytes.HexBytes(validatorHash)
-	}
-
-	abciBlock := cmttypes.Block{
-		Header: abciHeader,
-		Evidence: cmttypes.EvidenceData{
-			Evidence: nil,
-		},
-		LastCommit: lastCommit,
-	}
-	abciBlock.Txs = make([]cmttypes.Tx, len(data.Txs))
-	for i := range data.Txs {
-		abciBlock.Txs[i] = cmttypes.Tx(data.Txs[i])
-	}
-	abciBlock.DataHash = cmbytes.HexBytes(header.DataHash)
-
-	return &abciBlock, nil
-}
-
-// ToABCIBlockMeta converts Rollkit block into BlockMeta format defined by ABCI
-func ToABCIBlockMeta(header *rlktypes.SignedHeader, data *rlktypes.Data, lastCommit *cmttypes.Commit) (*cmttypes.BlockMeta, error) {
-	cmblock, err := ToABCIBlock(header, data, lastCommit)
-	if err != nil {
-		return nil, err
-	}
-	blockID := cmttypes.BlockID{Hash: cmblock.Hash()}
-
-	return &cmttypes.BlockMeta{
-		BlockID:   blockID,
-		BlockSize: cmblock.Size(),
-		Header:    cmblock.Header,
-		NumTxs:    len(cmblock.Txs),
-	}, nil
-}
-
-// ToABCIHeader converts Rollkit header to Header format defined in ABCI.
-func ToABCIHeader(header *rlktypes.Header) (cmttypes.Header, error) {
 	return cmttypes.Header{
 		Version: cmprotoversion.Consensus{
 			Block: cmtversion.BlockProtocol,
 			App:   header.Version.App,
 		},
-		Height: int64(header.Height()), //nolint:gosec
-		Time:   header.Time(),
-		LastBlockID: cmttypes.BlockID{
-			Hash: cmbytes.HexBytes(header.LastHeaderHash),
-			PartSetHeader: cmttypes.PartSetHeader{
-				Total: 0,
-				Hash:  nil,
-			},
+		Height:             int64(header.Height()), //nolint:gosec
+		Time:               header.Time(),
+		LastBlockID:        lastCommit.BlockID,
+		LastCommitHash:     lastCommit.Hash(),
+		DataHash:           cmbytes.HexBytes(header.DataHash),
+		ConsensusHash:      cmbytes.HexBytes(header.ConsensusHash),
+		AppHash:            cmbytes.HexBytes(header.AppHash),
+		LastResultsHash:    cmbytes.HexBytes(header.LastResultsHash),
+		EvidenceHash:       new(cmttypes.EvidenceData).Hash(),
+		ProposerAddress:    header.ProposerAddress,
+		ChainID:            header.ChainID(),
+		ValidatorsHash:     cmbytes.HexBytes(header.ValidatorHash),
+		NextValidatorsHash: cmbytes.HexBytes(header.ValidatorHash),
+	}, nil
+}
+
+// ToABCIBlock converts rollit block into block format defined by ABCI.
+func ToABCIBlock(header cmttypes.Header, lastCommit *cmttypes.Commit, data *rlktypes.Data) (*cmttypes.Block, error) {
+	abciBlock := cmttypes.Block{
+		Header: header,
+		Evidence: cmttypes.EvidenceData{
+			Evidence: nil,
 		},
-		LastCommitHash:  cmbytes.HexBytes(header.LastCommitHash),
-		DataHash:        cmbytes.HexBytes(header.DataHash),
-		ConsensusHash:   cmbytes.HexBytes(header.ConsensusHash),
-		AppHash:         cmbytes.HexBytes(header.AppHash),
-		LastResultsHash: cmbytes.HexBytes(header.LastResultsHash),
-		EvidenceHash:    new(cmttypes.EvidenceData).Hash(),
-		ProposerAddress: header.ProposerAddress,
-		ChainID:         header.ChainID(),
-		// validator hash and next validator hash are not set here
-		// they are set later (in ToABCIBlock)
+		LastCommit: lastCommit,
+	}
+
+	abciBlock.Txs = make([]cmttypes.Tx, len(data.Txs))
+	for i := range data.Txs {
+		abciBlock.Txs[i] = cmttypes.Tx(data.Txs[i])
+	}
+
+	return &abciBlock, nil
+}
+
+// ToABCIBlockMeta converts an ABCI block into a BlockMeta format.
+func ToABCIBlockMeta(abciBlock *cmttypes.Block) (*cmttypes.BlockMeta, error) {
+	blockParts, err := abciBlock.MakePartSet(cmttypes.BlockPartSizeBytes)
+	if err != nil {
+		return nil, fmt.Errorf("make part set: %w", err)
+	}
+
+	return &cmttypes.BlockMeta{
+		BlockID: cmttypes.BlockID{
+			Hash:          abciBlock.Header.Hash(),
+			PartSetHeader: blockParts.Header(),
+		},
+		BlockSize: abciBlock.Size(),
+		Header:    abciBlock.Header,
+		NumTxs:    len(abciBlock.Txs),
 	}, nil
 }

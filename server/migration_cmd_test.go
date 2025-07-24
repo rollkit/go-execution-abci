@@ -85,7 +85,7 @@ func TestCometBlockToRollkit(t *testing.T) {
 	require.Equal(t, chainID, header.ChainID())
 	require.Equal(t, uint64(11), header.Version.Block)
 	require.Equal(t, uint64(1), header.Version.App)
-	require.Equal(t, []byte("lastblockhash"), []byte(header.LastHeaderHash))
+	require.Equal(t, block.Header.Hash().Bytes(), []byte(header.LastHeaderHash))
 	require.Equal(t, []byte("lastcommithash"), []byte(header.LastCommitHash))
 	require.Equal(t, []byte("datahash"), []byte(header.DataHash))
 	require.Equal(t, []byte("consensushash"), []byte(header.ConsensusHash))

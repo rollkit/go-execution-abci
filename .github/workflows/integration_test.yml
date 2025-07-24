@@ -12,6 +12,46 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  liveness-tastora:
+    name: Test with Rollkit Chain (Tastora)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ROLLKIT_VERSION: "v1.0.0-beta.1"
+      IGNITE_VERSION: "v29.2.0"
+      ROLLKIT_IMAGE_REPO: "rollkit-gm"
+      ROLLKIT_IMAGE_TAG: "latest"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "stable"
+          cache: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Rollkit Docker Image
+        run: |
+          docker build \
+            --build-arg ROLLKIT_VERSION=${{ env.ROLLKIT_VERSION }} \
+            --build-arg IGNITE_VERSION=${{ env.IGNITE_VERSION }} \
+            -t ${{ env.ROLLKIT_IMAGE_REPO }}:${{ env.ROLLKIT_IMAGE_TAG }} \
+            .
+
+      - name: Run Liveness Test
+        run: |
+          cd tests/integration
+          go test -v -run TestLivenessWithCelestiaDA -timeout 30m
+        env:
+          ROLLKIT_IMAGE_REPO: ${{ env.ROLLKIT_IMAGE_REPO }}
+          ROLLKIT_IMAGE_TAG: ${{ env.ROLLKIT_IMAGE_TAG }}
+
   liveness:
     name: Test with Rollkit Chain
     runs-on: ubuntu-latest

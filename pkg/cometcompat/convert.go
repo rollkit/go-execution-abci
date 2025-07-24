@@ -66,7 +66,7 @@ func ToABCIBlockMeta(abciBlock *cmttypes.Block) (*cmttypes.BlockMeta, error) {
 
 	return &cmttypes.BlockMeta{
 		BlockID: cmttypes.BlockID{
-			Hash:          abciBlock.Hash(),
+			Hash:          abciBlock.Header.Hash(),
 			PartSetHeader: blockParts.Header(),
 		},
 		BlockSize: abciBlock.Size(),

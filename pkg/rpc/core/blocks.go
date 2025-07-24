@@ -95,7 +95,7 @@ func BlockSearch(
 		blocks = append(blocks, &ctypes.ResultBlock{
 			Block: abciBlock,
 			BlockID: cmttypes.BlockID{
-				Hash:          abciBlock.Hash(),
+				Hash:          abciHeader.Hash(),
 				PartSetHeader: blockParts.Header(),
 			},
 		})
@@ -179,7 +179,7 @@ func BlockByHash(ctx *rpctypes.Context, hash []byte) (*ctypes.ResultBlock, error
 
 	return &ctypes.ResultBlock{
 		BlockID: cmttypes.BlockID{
-			Hash:          cmbytes.HexBytes(hash),
+			Hash:          abciHeader.Hash(),
 			PartSetHeader: blockParts.Header(),
 		},
 		Block: abciBlock,

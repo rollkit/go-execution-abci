@@ -460,8 +460,10 @@ func (a *Adapter) ExecuteTxs(
 		return nil, 0, fmt.Errorf("make part set: %w", err)
 	}
 
+	// use rollkit header hash to match the light client validation check
+	// where sh.Header.Hash() must equal sh.Commit.BlockID.Hash
 	currentBlockID := cmttypes.BlockID{
-		Hash:          abciBlock.Hash(),
+		Hash:          abciHeader.Hash(),
 		PartSetHeader: blockParts.Header(),
 	}
 

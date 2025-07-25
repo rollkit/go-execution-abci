@@ -8,7 +8,7 @@ import (
 
 	"github.com/rollkit/rollkit/types"
 
-	abciexecstore "github.com/rollkit/go-execution-abci/pkg/store"
+	abciexecstore "github.com/evstack/ev-abci/pkg/store"
 )
 
 func SignaturePayloadProvider(store *abciexecstore.Store) types.SignaturePayloadProvider {

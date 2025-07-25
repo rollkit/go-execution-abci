@@ -10,7 +10,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
 
-	"github.com/rollkit/go-execution-abci/modules/network/types"
+	"github.com/evstack/ev-abci/modules/network/types"
 )
 
 // GetTxCmd returns the transaction commands for this module

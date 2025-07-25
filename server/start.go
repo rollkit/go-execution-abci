@@ -47,12 +47,12 @@ import (
 	"github.com/rollkit/rollkit/pkg/store"
 	"github.com/rollkit/rollkit/sequencers/single"
 
-	"github.com/rollkit/go-execution-abci/pkg/adapter"
-	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
-	"github.com/rollkit/go-execution-abci/pkg/rpc"
-	"github.com/rollkit/go-execution-abci/pkg/rpc/core"
-	execsigner "github.com/rollkit/go-execution-abci/pkg/signer"
-	execstore "github.com/rollkit/go-execution-abci/pkg/store"
+	"github.com/evstack/ev-abci/pkg/adapter"
+	"github.com/evstack/ev-abci/pkg/cometcompat"
+	"github.com/evstack/ev-abci/pkg/rpc"
+	"github.com/evstack/ev-abci/pkg/rpc/core"
+	execsigner "github.com/evstack/ev-abci/pkg/signer"
+	execstore "github.com/evstack/ev-abci/pkg/store"
 )
 
 const (

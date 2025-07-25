@@ -10,7 +10,7 @@ import (
 	"cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	"github.com/rollkit/go-execution-abci/modules/network/types"
+	"github.com/evstack/ev-abci/modules/network/types"
 )
 
 // EndBlocker handles end block logic for the network module

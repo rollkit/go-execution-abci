@@ -13,7 +13,7 @@ import (
 
 	"github.com/rollkit/rollkit/types"
 
-	execstore "github.com/rollkit/go-execution-abci/pkg/store"
+	execstore "github.com/evstack/ev-abci/pkg/store"
 )
 
 func TestSignatureCompatibility_HeaderAndCommit(t *testing.T) {

@@ -15,7 +15,7 @@ RUN curl -sSL https://get.ignite.com/cli@${IGNITE_VERSION}! | bash
 
 WORKDIR /workspace
 
-COPY . ./go-execution-abci
+COPY . ./ev-abci
 
 RUN ignite scaffold chain gm --no-module --skip-git --address-prefix gm
 
@@ -25,7 +25,7 @@ RUN ignite app install github.com/ignite/apps/rollkit@${IGNITE_ROLLKIT_APP_VERSI
     ignite rollkit add
 
 RUN go mod edit -replace github.com/rollkit/rollkit=github.com/rollkit/rollkit@${ROLLKIT_VERSION} && \
-    go mod edit -replace github.com/rollkit/go-execution-abci=/workspace/go-execution-abci && \
+    go mod edit -replace github.com/evstack/ev-abci=/workspace/ev-abci && \
     go mod tidy
 
 RUN ignite chain build --skip-proto

@@ -16,9 +16,9 @@ import (
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	"github.com/stretchr/testify/require"
 
-	"github.com/rollkit/go-execution-abci/modules/rollkitmngr"
-	"github.com/rollkit/go-execution-abci/modules/rollkitmngr/keeper"
-	"github.com/rollkit/go-execution-abci/modules/rollkitmngr/types"
+	"github.com/evstack/ev-abci/modules/rollkitmngr"
+	"github.com/evstack/ev-abci/modules/rollkitmngr/keeper"
+	"github.com/evstack/ev-abci/modules/rollkitmngr/types"
 )
 
 // mockStakingKeeper is a minimal mock for stakingKeeper used in Attesters tests.

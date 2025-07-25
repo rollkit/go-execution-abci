@@ -5,8 +5,8 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	"github.com/rollkit/go-execution-abci/modules/network/keeper"
-	"github.com/rollkit/go-execution-abci/modules/network/types"
+	"github.com/evstack/ev-abci/modules/network/keeper"
+	"github.com/evstack/ev-abci/modules/network/types"
 )
 
 // InitGenesis initializes the network module's state from a provided genesis state.

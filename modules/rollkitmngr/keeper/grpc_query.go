@@ -5,7 +5,7 @@ import (
 
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 
-	"github.com/rollkit/go-execution-abci/modules/rollkitmngr/types"
+	"github.com/evstack/ev-abci/modules/rollkitmngr/types"
 )
 
 var _ types.QueryServer = queryServer{}

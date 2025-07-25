@@ -16,7 +16,7 @@ import (
 	"github.com/rs/cors"
 	"golang.org/x/net/netutil"
 
-	"github.com/rollkit/go-execution-abci/pkg/rpc/core"
+	"github.com/evstack/ev-abci/pkg/rpc/core"
 )
 
 // NewRPCServer creates a new RPC server.

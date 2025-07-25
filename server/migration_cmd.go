@@ -38,9 +38,9 @@ import (
 	rollkitstore "github.com/rollkit/rollkit/pkg/store"
 	rollkittypes "github.com/rollkit/rollkit/types"
 
-	"github.com/rollkit/go-execution-abci/modules/rollkitmngr"
-	rollkitmngrtypes "github.com/rollkit/go-execution-abci/modules/rollkitmngr/types"
-	execstore "github.com/rollkit/go-execution-abci/pkg/store"
+	"github.com/evstack/ev-abci/modules/rollkitmngr"
+	rollkitmngrtypes "github.com/evstack/ev-abci/modules/rollkitmngr/types"
+	execstore "github.com/evstack/ev-abci/pkg/store"
 )
 
 var (

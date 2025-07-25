@@ -22,11 +22,11 @@ formatters:
     - goimports
   settings:
     goimports:
-      local-prefixes: [github.com/rollkit]
+      local-prefixes: [github.com/evstack]
     gci:
       sections:
         - standard
         - default
-        - prefix(github.com/rollkit)
-        - prefix(github.com/rollkit/go-execution-abci)
+        - prefix(github.com/evstack)
+        - prefix(github.com/evstack/ev-abci)
       custom-order: true

@@ -3,7 +3,7 @@ package rollkitmngr
 import (
 	autocliv1 "cosmossdk.io/api/cosmos/autocli/v1"
 
-	"github.com/rollkit/go-execution-abci/modules/rollkitmngr/types"
+	"github.com/evstack/ev-abci/modules/rollkitmngr/types"
 )
 
 // AutoCLIOptions implements the autocli.HasAutoCLIConfig interface.

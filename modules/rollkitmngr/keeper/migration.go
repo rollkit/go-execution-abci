@@ -9,7 +9,7 @@ import (
 	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 
-	"github.com/rollkit/go-execution-abci/modules/rollkitmngr/types"
+	"github.com/evstack/ev-abci/modules/rollkitmngr/types"
 )
 
 // IBCSmoothingFactor is the factor used to smooth the migration process when IBC is enabled. It determines how many blocks the migration will take.

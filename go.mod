@@ -1,4 +1,4 @@
-module github.com/rollkit/go-execution-abci
+module github.com/evstack/ev-abci
 
 go 1.24.1
 

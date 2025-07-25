@@ -48,7 +48,7 @@ fmt:
 ## gci: Format Go imports
 gci:
 	@echo "--> Formatting Go imports"
-	@gci write --section standard --section default --section "prefix(github.com/rollkit/go-execution-abci)" --section "prefix(github.com/rollkit)" .
+	@gci write --section standard --section default --section "prefix(github.com/evstack/ev-abci)" --section "prefix(github.com/rollkit)" .
 .PHONY: gci
 
 ## vet: Run go vet
@@ -70,10 +70,10 @@ proto-gen:
 		go tool github.com/bufbuild/buf/cmd/buf dep update
 	@cd modules/proto && \
 		go tool github.com/bufbuild/buf/cmd/buf generate
-	@mv modules/github.com/rollkit/go-execution-abci/modules/rollkitmngr/types/** modules/rollkitmngr/types/ && \
-		mv modules/github.com/rollkit/go-execution-abci/modules/rollkitmngr/module/* modules/rollkitmngr/module/ && \
-		mv modules/github.com/rollkit/go-execution-abci/modules/network/types/** modules/network/types/ && \
-		mv modules/github.com/rollkit/go-execution-abci/modules/network/module/v1/* modules/network/module/v1
+	@mv modules/github.com/evstack/ev-abci/modules/rollkitmngr/types/** modules/rollkitmngr/types/ && \
+		mv modules/github.com/evstack/ev-abci/modules/rollkitmngr/module/* modules/rollkitmngr/module/ && \
+		mv modules/github.com/evstack/ev-abci/modules/network/types/** modules/network/types/ && \
+		mv modules/github.com/evstack/ev-abci/modules/network/module/v1/* modules/network/module/v1
 	@rm -r modules/github.com
 
 .PHONY: proto-gen

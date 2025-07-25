@@ -14,8 +14,8 @@ jobs:
     env:
       DO_NOT_TRACK: true
       ROLLKIT_VERSION: "v1.0.0-beta.2"
-      ROLLKIT_DA_VERSION: "v1.0.0-beta.1"
       IGNITE_VERSION: "v29.2.0"
+      IGNITE_ROLLKIT_APP_VERSION: "rollkit/v0.3.0"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -173,10 +173,10 @@ jobs:
           GO_EXECUTION_ABCI_DIR=$CURRENT_DIR
 
           # install rollkit app
-          ignite app install github.com/ignite/apps/rollkit@main
+          ignite app install github.com/ignite/apps/rollkit@$IGNITE_ROLLKIT_APP_VERSION
 
-          # add rollkit to the chain
-          ignite rollkit add
+          # add rollkit to the chain + wire optional modules
+          ignite rollkit add --migrate
 
           # replace the github.com/rollkit/rollkit module with tagged version
           go mod edit -replace github.com/rollkit/rollkit=github.com/rollkit/rollkit@$ROLLKIT_VERSION
@@ -198,11 +198,11 @@ jobs:
           # migrate the chain data from cosmos sdk to rollkit
           gmd rollkit-migrate --home ~/.gm
 
-      - name: Start Local DA for Rollkit
+      - name: Start Local DA
         run: |
-          go install github.com/rollkit/rollkit/da/cmd/local-da@$ROLLKIT_DA_VERSION
+          cd gm
           # start the local da in the background
-          local-da &
+          go tool github.com/rollkit/rollkit/da/cmd/local-da &
           # capture the background process PID
           echo "DA_PID=$!" >> $GITHUB_ENV
           # give it a moment to start

@@ -174,14 +174,14 @@ jobs:
           while [ $BLOCKS_FOUND -lt 5 ] && [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
             sleep 2
             ATTEMPT=$((ATTEMPT+1))
-            
+
             # check if the chain is still running
             if ! ps -p $CHAIN_PID > /dev/null; then
               echo "Chain process died unexpectedly"
               cat chain.log
               exit 1
             fi
-            
+
             # query the node for the current block height
             BLOCKS_FOUND=$(gmd query block --output json | tail -n +2 | jq -r '.header.height')
             echo "Found $BLOCKS_FOUND blocks so far (attempt $ATTEMPT/$MAX_ATTEMPTS)"
@@ -265,7 +265,7 @@ jobs:
       CAROL_MNEMONIC: ${{ needs.liveness.outputs.carol_mnemonic }}
       GMD_HOME: ${{ needs.liveness.outputs.gmd_home }}
       HERMES_VERSION: "v1.13.1"
-      CEL_VERSION: "v4.0.3-arabica"
+      CEL_VERSION: "v4.0.3-arabica" # todo wait with version with ibc fixed
       ROLLKIT_VERSION: "v1.0.0-beta.2"
       ROLLKIT_DA_VERSION: "v1.0.0-beta.1"
 
@@ -402,7 +402,7 @@ jobs:
           while [ $ATTEMPT -lt $MAX_ATTEMPTS ] && [ "$IBC_FOUND" = false ]; do
             sleep 3
             ATTEMPT=$((ATTEMPT+1))
-            
+
             BALANCE=$(celestia-appd query bank balances $CELESTIA_ADDR --output json --node http://localhost:26654 | jq '.balances')
             echo "Attempt $ATTEMPT/$MAX_ATTEMPTS - Gm balance: $BALANCE"
 
@@ -424,11 +424,7 @@ jobs:
         run: |
           ROLLKIT_ADDR=$(./gmd/go/bin/gmd keys show carol -a --home ./gmd/.gm)
           CELESTIA_ADDR=$(celestia-appd keys show validator -a --keyring-backend test)
-          TX_HASH=$(celestia-appd tx ibc-transfer transfer transfer channel-0 $ROLLKIT_ADDR 100utia --from validator --node http://localhost:26654 --fees 400utia --keyring-backend test -y --output json | jq -r '.txhash')
-
-          # query the transaction
-          sleep 10
-          celestia-appd query tx $TX_HASH --output json --node http://localhost:26654
+          celestia-appd tx ibc-transfer transfer transfer channel-0 $ROLLKIT_ADDR 100utia --from validator --node http://localhost:26654 --fees 400utia --keyring-backend test -y --output json | jq -r '.txhash'
 
           # Wait for IBC transfer to complete with retry logic
           echo "Waiting for IBC transfer to complete..."
@@ -439,7 +435,7 @@ jobs:
           while [ $ATTEMPT -lt $MAX_ATTEMPTS ] && [ "$IBC_FOUND" = false ]; do
             sleep 3
             ATTEMPT=$((ATTEMPT+1))
-            
+
             BALANCE=$(./gmd/go/bin/gmd query bank balances $ROLLKIT_ADDR --output json --home ./gmd/.gm | jq '.balances')
             echo "Attempt $ATTEMPT/$MAX_ATTEMPTS - Gm balance: $BALANCE"
 

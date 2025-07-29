@@ -265,7 +265,7 @@ jobs:
       CAROL_MNEMONIC: ${{ needs.liveness.outputs.carol_mnemonic }}
       GMD_HOME: ${{ needs.liveness.outputs.gmd_home }}
       HERMES_VERSION: "v1.13.1"
-      CEL_VERSION: "v4.1.0-arabica"
+      CEL_VERSION: "v5.0.0-rc0"
       ROLLKIT_VERSION: "v1.0.0-beta.2"
       ROLLKIT_DA_VERSION: "v1.0.0-beta.1"
 

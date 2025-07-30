@@ -15,13 +15,13 @@ service Msg {
 
   // Attest submits a signed vote for a checkpoint
   rpc Attest(MsgAttest) returns (MsgAttestResponse);
-  
+
   // JoinAttesterSet opts a validator into the attester set
   rpc JoinAttesterSet(MsgJoinAttesterSet) returns (MsgJoinAttesterSetResponse);
-  
+
   // LeaveAttesterSet opts a validator out of the attester set
   rpc LeaveAttesterSet(MsgLeaveAttesterSet) returns (MsgLeaveAttesterSetResponse);
-  
+
   // UpdateParams updates the module parameters
   rpc UpdateParams(MsgUpdateParams) returns (MsgUpdateParamsResponse);
 }
@@ -34,10 +34,10 @@ message MsgAttest {
 
   // validator is the address of the validator submitting the attestation
   string validator = 1 [(cosmos_proto.scalar) = "cosmos.ValidatorAddressString"];
-  
+
   // height is the checkpoint height being attested
   int64 height = 2;
-  
+
   // vote is the base64-encoded canonical Comet vote
   bytes vote = 3;
 }

@@ -12,8 +12,8 @@ import (
 	"github.com/cosmos/cosmos-sdk/types/module"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 
-	"github.com/rollkit/go-execution-abci/modules/rollkitmngr/keeper"
-	"github.com/rollkit/go-execution-abci/modules/rollkitmngr/types"
+	"github.com/evstack/ev-abci/modules/rollkitmngr/keeper"
+	"github.com/evstack/ev-abci/modules/rollkitmngr/types"
 )
 
 var (

@@ -1,10 +1,10 @@
-# go-execution-abci
+# ev-abci
 
 An ABCI adapter for [Rollkit](https://github.com/rollkit/rollkit) that enables ABCI-compatible applications to be used with Rollkit's execution layer.
 
 ## Overview
 
-`go-execution-abci` is a bridge between ABCI-compatible applications and Rollkit's execution layer. It implements the Rollkit execution interface and adapts it to the ABCI interface, allowing developers to use existing ABCI applications with Rollkit.
+`ev-abci` is a bridge between ABCI-compatible applications and Rollkit's execution layer. It implements the Rollkit execution interface and adapts it to the ABCI interface, allowing developers to use existing ABCI applications with Rollkit.
 
 This adapter connects various components of the Rollkit ecosystem:
 
@@ -16,7 +16,7 @@ This adapter connects various components of the Rollkit ecosystem:
 
 ```mermaid
 graph TD
-    A[Rollkit Core] --> B[go-execution-abci Adapter]
+    A[Rollkit Core] --> B[ev-abci Adapter]
     B --> C[ABCI Application]
     D[P2P Network] <--> B
     E[Mempool] <--> B
@@ -27,7 +27,7 @@ graph TD
     A
     end
 
-    subgraph "go-execution-abci"
+    subgraph "ev-abci"
     B
     D
     E
@@ -61,7 +61,7 @@ Note, that because of the nature of Rollkit (single proposer), **Vote Extensions
 ## Installation
 
 ```bash
-go get github.com/rollkit/go-execution-abci
+go get github.com/evstack/ev-abci
 ```
 
 ## Dependencies
@@ -95,7 +95,7 @@ index 310b195..19abe36 100644
  	genutilcli "github.com/cosmos/cosmos-sdk/x/genutil/client/cli"
  
 -	"gm/app"
-+	abciserver "github.com/rollkit/go-execution-abci/server"
++	abciserver "github.com/evstack/ev-abci/server"
 +	rollconf "github.com/rollkit/rollkit/pkg/config"
  )
  
@@ -263,7 +263,7 @@ make proto-gen
 ### Project Structure
 
 ```bash
-go-execution-abci/
+ev-abci/
 ├── pkg
 │   ├── adapter/      # Core adapter implementation
 │   ├── signer/       # Signers helpers functions

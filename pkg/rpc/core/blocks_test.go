@@ -20,9 +20,9 @@ import (
 	rollkitmocks "github.com/rollkit/rollkit/test/mocks"
 	"github.com/rollkit/rollkit/types"
 
-	"github.com/rollkit/go-execution-abci/pkg/adapter"
-	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
-	execstore "github.com/rollkit/go-execution-abci/pkg/store"
+	"github.com/evstack/ev-abci/pkg/adapter"
+	"github.com/evstack/ev-abci/pkg/cometcompat"
+	execstore "github.com/evstack/ev-abci/pkg/store"
 )
 
 func TestBlockSearch_Success(t *testing.T) {

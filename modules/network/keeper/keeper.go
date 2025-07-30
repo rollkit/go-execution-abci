@@ -11,7 +11,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	"github.com/rollkit/go-execution-abci/modules/network/types"
+	"github.com/evstack/ev-abci/modules/network/types"
 )
 
 // Keeper of the network store
@@ -44,7 +44,6 @@ func NewKeeper(
 	bk types.BankKeeper,
 	authority string,
 ) Keeper {
-
 	sb := collections.NewSchemaBuilder(storeService)
 	keeper := Keeper{
 		cdc:           cdc,

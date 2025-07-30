@@ -105,7 +105,7 @@ jobs:
 
       - name: Replace ABCI Module with Current Branch And Prepare Chain
         run: |
-          # get the path to the current checkout of go-execution-abci
+          # get the path to the current checkout of ev-abci
           CURRENT_DIR=$(pwd)
           GO_EXECUTION_ABCI_DIR=$CURRENT_DIR
 
@@ -115,8 +115,8 @@ jobs:
           # replace the github.com/rollkit/rollkit module with tagged version
           go mod edit -replace github.com/rollkit/rollkit=github.com/rollkit/rollkit@$ROLLKIT_VERSION
 
-          # replace the github.com/rollkit/go-execution-abci module with the local version
-          go mod edit -replace github.com/rollkit/go-execution-abci=$GO_EXECUTION_ABCI_DIR
+          # replace the github.com/evstack/ev-abci module with the local version
+          go mod edit -replace github.com/evstack/ev-abci=$GO_EXECUTION_ABCI_DIR
 
           # download dependencies and update go.mod/go.sum
           go mod tidy
@@ -396,7 +396,7 @@ jobs:
           BALANCE=$(celestia-appd query bank balances $CELESTIA_ADDR --output json --node http://localhost:26654 | jq '.balances')
           echo "Celestia balance after IBC transfer: $BALANCE"
           # TODO: check that the balance is correct
-          # ref: https://github.com/rollkit/go-execution-abci/pull/138#discussion_r2156332760
+          # ref: https://github.com/evstack/ev-abci/pull/138#discussion_r2156332760
 
       - name: ICS20 Transfer Celestia -> Rollkit
         run: |

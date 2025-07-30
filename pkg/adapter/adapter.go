@@ -31,9 +31,9 @@ import (
 	rstore "github.com/rollkit/rollkit/pkg/store"
 	"github.com/rollkit/rollkit/types"
 
-	"github.com/rollkit/go-execution-abci/pkg/cometcompat"
-	"github.com/rollkit/go-execution-abci/pkg/p2p"
-	execstore "github.com/rollkit/go-execution-abci/pkg/store"
+	"github.com/evstack/ev-abci/pkg/cometcompat"
+	"github.com/evstack/ev-abci/pkg/p2p"
+	execstore "github.com/evstack/ev-abci/pkg/store"
 )
 
 var _ execution.Executor = &Adapter{}

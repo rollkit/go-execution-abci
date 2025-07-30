@@ -11,7 +11,7 @@ import (
 	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/rollkit/go-execution-abci/pkg/adapter"
+	"github.com/evstack/ev-abci/pkg/adapter"
 )
 
 func TestABCIQuery(t *testing.T) {

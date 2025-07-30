@@ -16,7 +16,7 @@ import (
 	rollkitmocks "github.com/rollkit/rollkit/test/mocks"
 	rktypes "github.com/rollkit/rollkit/types"
 
-	"github.com/rollkit/go-execution-abci/pkg/adapter"
+	"github.com/evstack/ev-abci/pkg/adapter"
 )
 
 // TestTx tests the Tx function
